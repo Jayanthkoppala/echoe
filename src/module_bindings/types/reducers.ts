@@ -6,6 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AdminUnverifyReducer from "../admin_unverify_reducer";
 import CorrectReducer from "../correct_reducer";
 import CreateEchoReducer from "../create_echo_reducer";
 import EndRunReducer from "../end_run_reducer";
@@ -20,7 +21,9 @@ import SetSecretReducer from "../set_secret_reducer";
 import StartRunReducer from "../start_run_reducer";
 import TravelReducer from "../travel_reducer";
 import UnlinkOpenRouterReducer from "../unlink_open_router_reducer";
+import UnverifyReducer from "../unverify_reducer";
 
+export type AdminUnverifyParams = __Infer<typeof AdminUnverifyReducer>;
 export type CorrectParams = __Infer<typeof CorrectReducer>;
 export type CreateEchoParams = __Infer<typeof CreateEchoReducer>;
 export type EndRunParams = __Infer<typeof EndRunReducer>;
@@ -35,4 +38,5 @@ export type SetSecretParams = __Infer<typeof SetSecretReducer>;
 export type StartRunParams = __Infer<typeof StartRunReducer>;
 export type TravelParams = __Infer<typeof TravelReducer>;
 export type UnlinkOpenRouterParams = __Infer<typeof UnlinkOpenRouterReducer>;
+export type UnverifyParams = __Infer<typeof UnverifyReducer>;
 

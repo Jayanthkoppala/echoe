@@ -34,6 +34,7 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AdminUnverifyReducer from "./admin_unverify_reducer";
 import CorrectReducer from "./correct_reducer";
 import CreateEchoReducer from "./create_echo_reducer";
 import EndRunReducer from "./end_run_reducer";
@@ -48,6 +49,7 @@ import SetSecretReducer from "./set_secret_reducer";
 import StartRunReducer from "./start_run_reducer";
 import TravelReducer from "./travel_reducer";
 import UnlinkOpenRouterReducer from "./unlink_open_router_reducer";
+import UnverifyReducer from "./unverify_reducer";
 
 // Import all procedure arg schemas
 import * as LinkOpenRouterProcedure from "./link_open_router_procedure";
@@ -257,6 +259,7 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("admin_unverify", AdminUnverifyReducer),
   __reducerSchema("correct", CorrectReducer),
   __reducerSchema("create_echo", CreateEchoReducer),
   __reducerSchema("end_run", EndRunReducer),
@@ -271,6 +274,7 @@ const reducersSchema = __reducers(
   __reducerSchema("start_run", StartRunReducer),
   __reducerSchema("travel", TravelReducer),
   __reducerSchema("unlink_open_router", UnlinkOpenRouterReducer),
+  __reducerSchema("unverify", UnverifyReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

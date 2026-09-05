@@ -1069,6 +1069,28 @@ export const unlinkOpenRouter = spacetimedb.reducer(ctx => {
   ctx.db.player.identity.update({ ...playerRow, openrouterLinked: false });
 });
 
+/** Remove your own company badge. Keeps the used email row so it cannot be reused elsewhere. */
+export const unverify = spacetimedb.reducer(ctx => {
+  const playerRow = requirePlayer(ctx);
+  if (playerRow.companyId === 0 && playerRow.verifiedDomain === '') fail('not_verified');
+  ctx.db.player.identity.update({ ...playerRow, companyId: 0, verifiedDomain: '' });
+});
+
+/** Admin only: clear a badge that was set by mistake, e.g. during a test run. */
+export const adminUnverify = spacetimedb.reducer(
+  { identityHex: t.string() },
+  (ctx, { identityHex }) => {
+    const admin = ctx.db.secret.key.find('admin_identity');
+    if (!admin || admin.value !== ctx.sender.toHexString()) fail('not_admin');
+    for (const row of [...ctx.db.player.iter()]) {
+      if (row.identity.toHexString() !== identityHex.trim().toLowerCase()) continue;
+      ctx.db.player.identity.update({ ...row, companyId: 0, verifiedDomain: '' });
+      return;
+    }
+    fail('player_not_found');
+  }
+);
+
 export const setMission = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
   requireAdmin(ctx);
   const clean = trimmed(text, 200, 'mission');
