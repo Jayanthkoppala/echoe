@@ -534,6 +534,8 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
 
     const map = new maplibregl.Map({
       container: containerRef.current,
+      // Attribution must stay (ODbL), but the compact toggle keeps it out of the sheet.
+      attributionControl: { compact: true },
       style: STYLE_URL,
       center: CENTER,
       zoom: CITY_ZOOM,
