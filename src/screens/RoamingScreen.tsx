@@ -14,6 +14,9 @@ export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingS
   const paused = run?.status === 'paused';
   const spent = usd(run?.spentUsd ?? 0);
 
+  const met = run?.peopleMet ?? 0;
+  const places = run?.placesVisited ?? 0;
+
   const headline = run?.hasHost
     ? run.hostMet
       ? 'Your Echoes have met'
@@ -37,7 +40,11 @@ export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingS
             <div>
               <span className="live-dot">{paused ? 'Paused' : 'World running'}</span>
               <h2>{headline}</h2>
-              <p>{run?.goal ?? 'Waiting for the first move'}</p>
+              {/* Fix 6: the goal was printed twice. Live counts go here instead. */}
+              <p>
+                {places} {places === 1 ? 'place' : 'places'} · {met}{' '}
+                {met === 1 ? 'Echoe' : 'Echoes'} met
+              </p>
             </div>
             <span className="credit-pill">{spent}</span>
           </div>

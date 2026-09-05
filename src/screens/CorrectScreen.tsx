@@ -11,7 +11,7 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
     return (
       <div className="screen">
         <TopBar title="Correct your Echoe" onBack={() => go('review')} />
-        <div className="content">
+        <div className="content content--close">
           <p className="lede">Pick one of your Echoe's lines first.</p>
         </div>
         <div className="footer">
@@ -28,7 +28,7 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
   return (
     <div className="screen">
       <TopBar title="Correct your Echoe" onBack={() => go('review')} />
-      <div className="content">
+      <div className="content content--close">
         <div className="eyebrow">One correction at a time</div>
         <h2>What should it learn?</h2>
         <p className="lede">Change the behaviour, not the historical receipt.</p>

@@ -6,6 +6,7 @@ import type { Match, Receipt, Run, ScreenProps } from '../state/types';
 
 interface ReturnScreenProps extends ScreenProps {
   run?: Run;
+  freeLeft: number;
   matches: Match[];
   receipts: Receipt[];
   intent: string;
@@ -17,6 +18,7 @@ interface ReturnScreenProps extends ScreenProps {
 export function ReturnScreen({
   go,
   run,
+  freeLeft,
   matches,
   receipts,
   intent,
@@ -52,6 +54,10 @@ export function ReturnScreen({
             <strong>{usd(run?.spentUsd ?? 0)}</strong>
             <span>OpenRouter spend</span>
           </div>
+          <div className="stat-card glass">
+            <strong>{freeLeft}</strong>
+            <span>free talks left</span>
+          </div>
         </div>
 
         {matches.length > 0 ? (
@@ -78,7 +84,10 @@ export function ReturnScreen({
                       </strong>
                       <small>{match.placeName}</small>
                     </div>
-                    <b className="match-score tabular">{match.score}</b>
+                    <b className="match-score tabular">
+                      {match.score}
+                      <small> / 100</small>
+                    </b>
                   </div>
                   <div className="score-bar" aria-label={`Match score ${match.score} of 100`}>
                     <i

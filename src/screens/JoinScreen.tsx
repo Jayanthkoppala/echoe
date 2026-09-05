@@ -16,7 +16,7 @@ export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: Jo
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
-    actions.onJoin(name.trim());
+    actions.onJoin(name.trim(), '');
   };
 
   return (
@@ -34,21 +34,28 @@ export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: Jo
           <p className="expired-note">This link has expired. You can still come in.</p>
         ) : null}
 
-        <h2 className="join-title">
-          {hostCard ? 'Send your Echoe to meet theirs.' : 'Send an Echoe into Bengaluru.'}
-        </h2>
-        <label className="label" htmlFor="playerName">
-          Your name
-        </label>
-        <input
-          className="input"
-          id="playerName"
-          value={name}
-          onChange={event => setName(event.target.value)}
-          placeholder="Type your name"
-          autoComplete="name"
-          maxLength={40}
-        />
+        {/* Fix 3: one card in the lower third carries the pitch and the field,
+            so a stranger has something to read instead of bare video. */}
+        <div className="join-card glass">
+          <h2 className="join-title">
+            {hostCard ? 'Send your Echoe to meet theirs.' : 'Send an Echoe into Bengaluru.'}
+          </h2>
+          <p className="join-pitch">
+            It walks the city, talks to other Echoes, comes back with names.
+          </p>
+          <label className="label" htmlFor="playerName">
+            Your name
+          </label>
+          <input
+            className="input"
+            id="playerName"
+            value={name}
+            onChange={event => setName(event.target.value)}
+            placeholder="Type your name"
+            autoComplete="name"
+            maxLength={40}
+          />
+        </div>
       </div>
 
       <div className="footer">

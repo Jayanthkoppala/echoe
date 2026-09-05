@@ -3,7 +3,7 @@ import type { ScreenProps } from '../state/types';
 
 const LOOP = [
   'Join and play live',
-  'Set limits and hand over control',
+  'Your Echoe walks with the limits you set',
   'Echoe acts while you are away',
   'Return, inspect and correct',
 ];
@@ -12,7 +12,7 @@ export function DoneScreen({ go }: ScreenProps) {
   return (
     <div className="screen">
       <TopBar title="Echoe" step="Loop complete" showMark />
-      <div className="content">
+      <div className="content content--close">
         <div className="complete-mark" aria-hidden="true">
           ✓
         </div>

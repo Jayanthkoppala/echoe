@@ -52,17 +52,25 @@ export function ShareCard({ intent, shareId, mission, variant = 'inline' }: Shar
 
   return (
     <div className={`share-card glass share-card--${variant}${open ? '' : ' share-card--folded'}`}>
-      <button
-        className="share-head"
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-      >
-        <span className="share-intent">
-          Your Echoe is carrying: <strong>{intent}</strong>
-        </span>
-        <span className="share-chevron" aria-hidden="true">{open ? '▴' : '▾'}</span>
-      </button>
+      <div className="share-head">
+        <button
+          className="share-toggle"
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+        >
+          <span className="share-intent">
+            Your Echoe is carrying: <strong>{intent}</strong>
+          </span>
+          <span className="share-chevron" aria-hidden="true">{open ? '▴' : '▾'}</span>
+        </button>
+        {/* Folded, the link is still one tap. Open, the full row owns it. */}
+        {open ? null : (
+          <button className="copy-btn" type="button" onClick={copy}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        )}
+      </div>
       {open ? (
         <>
           {mission ? <small className="share-mission">{mission}</small> : null}

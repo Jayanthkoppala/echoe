@@ -34,6 +34,8 @@ export function ReviewScreen({
           </div>
         </div>
 
+        <p className="review-hint">Tap any line your Echoe said</p>
+
         {transcript.length === 0 ? (
           <p className="lede">No lines were spoken in this conversation.</p>
         ) : (
@@ -56,37 +58,34 @@ export function ReviewScreen({
           </div>
         )}
 
-        {focused ? (
-          <div className="review-card glass">
-            <div className="review-line">“{focused.text}”</div>
-            <div className="review-question">Does this feel like you?</div>
-            <div className="review-actions">
-              <button
-                className={focused.feedback === 'like' ? 'sounds selected' : 'sounds'}
-                onClick={() => actions.onRateLine(focused.id, true)}
-              >
-                ✓ Sounds like me
-              </button>
-              <button
-                className={focused.feedback === 'not_me' ? 'not-me selected' : 'not-me'}
-                onClick={() => {
-                  actions.onRateLine(focused.id, false);
-                  go('correct');
-                }}
-              >
-                × Not me
-              </button>
-            </div>
-          </div>
-        ) : (
-          <p className="helper">Tap one of your Echoe's lines to rate it.</p>
-        )}
-
         <p className="helper">
           Corrections change future behaviour. They never rewrite what already happened.
         </p>
       </div>
       <div className="footer">
+        {focused ? (
+          <div className="review-card glass">
+              <div className="review-line">“{focused.text}”</div>
+              <div className="review-question">Does this feel like you?</div>
+              <div className="review-actions">
+                <button
+                  className={focused.feedback === 'like' ? 'sounds selected' : 'sounds'}
+                  onClick={() => actions.onRateLine(focused.id, true)}
+                >
+                  ✓ Sounds like me
+                </button>
+                <button
+                  className={focused.feedback === 'not_me' ? 'not-me selected' : 'not-me'}
+                  onClick={() => {
+                    actions.onRateLine(focused.id, false);
+                    go('correct');
+                  }}
+                >
+                  × Not me
+                </button>
+              </div>
+          </div>
+        ) : null}
         <button className="secondary" onClick={() => go('return')}>
           Back to the recap
         </button>
