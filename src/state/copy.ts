@@ -93,7 +93,7 @@ export const AGENT_MCP_WHY =
   'persona and what you are building, then keep your Echoe updated.';
 
 /** Hosted MCP: api/mcp/[token].js speaks the same JSON-RPC as `npx echoe-connect mcp`, nothing to install. */
-export const MCP_BASE = 'https://echoe.world/mcp';
+export const MCP_BASE = 'https://www.echoe.world/mcp'; // the apex 308s to www, and MCP clients do not follow redirects on POST
 
 export const claudeMcpCommand = (token: string): string =>
   `claude mcp add --transport http echoe ${MCP_BASE}/${token}`;

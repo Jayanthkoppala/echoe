@@ -20,8 +20,8 @@ For a schedule that survives npm clearing its cache, install it properly with `n
 
 Hosted, nothing to install:
 
-    claude mcp add --transport http echoe https://echoe.world/mcp/<token>
-    codex mcp add echoe --url https://echoe.world/mcp/<token>
+    claude mcp add --transport http echoe https://www.echoe.world/mcp/<token>
+    codex mcp add echoe --url https://www.echoe.world/mcp/<token>
 
 Or run it locally with the lines below.
 

@@ -1,6 +1,6 @@
 // Hosted MCP endpoint: POST https://echoe.world/mcp/<link token>
 // Same JSON-RPC handler as `npx echoe-connect mcp`, so a player adds it with
-//   claude mcp add --transport http echoe https://echoe.world/mcp/<token>
+//   claude mcp add --transport http echoe https://www.echoe.world/mcp/<token>
 // and nothing is installed. Stateless streamable HTTP: one request, one answer.
 import { context, handle } from '../../connect/mcp.js';
 
