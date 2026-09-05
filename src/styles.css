@@ -697,13 +697,15 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   backdrop-filter: blur(var(--blur));
   box-shadow: 0 18px 40px -14px rgba(0, 0, 0, .85);
   opacity: 0;
+  /* backdrop-filter still paints at opacity 0, which showed as a grey oval; hide it fully. */
+  visibility: hidden;
   pointer-events: none;
   transform: translate(-50%, -8px) scale(.96);
-  transition: opacity 180ms var(--ease), transform 180ms var(--ease);
+  transition: opacity 180ms var(--ease), transform 180ms var(--ease), visibility 0s 180ms;
   font-size: 11px;
   text-align: center;
 }
-.toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0) scale(1); transition-delay: 0s; }
 
 /* ── Roaming ──────────────────────────────────────────────────────────── */
 
@@ -1226,3 +1228,22 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .linked-row strong { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .linked-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
 .google-slot { display: grid; justify-items: stretch; min-height: 44px; }
+
+/* Memory bullets: two lines until tapped. */
+.note-line {
+  display: -webkit-box;
+  overflow: hidden;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.note-line.open { display: block; -webkit-line-clamp: none; line-clamp: none; }
