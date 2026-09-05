@@ -18,6 +18,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
   const [copied, setCopied] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
 
   const copyPrompt = async () => {
     try {
@@ -76,15 +77,14 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
           <label className="label" htmlFor="persona">
             Who is your Echoe?
           </label>
-          <div className="prompt-card">
-            <p className="prompt-text">{PERSONA_PROMPT}</p>
-            <button className="copy-btn" type="button" onClick={copyPrompt}>
-              {copied ? 'Copied' : 'Copy prompt'}
-            </button>
-          </div>
-          <p className="helper helper--tight">
-            Paste this into ChatGPT or Claude and bring the answer back, or type two lines yourself.
-          </p>
+          {showPrompt ? (
+            <div className="prompt-card">
+              <p className="prompt-text">{PERSONA_PROMPT}</p>
+              <button className="copy-btn" type="button" onClick={copyPrompt}>
+                {copied ? 'Copied' : 'Copy prompt'}
+              </button>
+            </div>
+          ) : null}
           <textarea
             className="textarea"
             id="persona"
@@ -92,7 +92,18 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
             onChange={event => setPersona(event.target.value)}
             placeholder="Fintech founder, blunt, curious, buys coffee for anyone who has shipped payments…"
             aria-label="Your persona"
+            autoFocus
           />
+          <p className="helper helper--tight">
+            Two lines in your own words is enough.{' '}
+            {showPrompt ? (
+              'Paste this into ChatGPT or Claude and bring the answer back.'
+            ) : (
+              <button className="link-btn" type="button" onClick={() => setShowPrompt(true)}>
+                Prefer to generate one?
+              </button>
+            )}
+          </p>
         </div>
 
         <div className="section-block">
