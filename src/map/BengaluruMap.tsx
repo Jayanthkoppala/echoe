@@ -280,7 +280,9 @@ function spreadCoords(rows: CompanyRow[]): [number, number][] {
     if (g) g.push(i);
     else groups.set(key, [i]);
   });
-  const radius = 0.0035;
+  // ~660m. Smaller than the 1.1km error the two-decimal rounding already
+  // carries, and enough to keep six logos apart at city zoom.
+  const radius = 0.006;
   for (const members of groups.values()) {
     if (members.length < 2) continue;
     members.forEach((i, n) => {
@@ -472,7 +474,7 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
       // is what a marker looks like in the window before styles.css hot-reloads.
       // These are the same values as .map-pin, written where CSS cannot be late.
       el.style.cssText =
-        'display:grid;position:relative;place-items:center;width:44px;height:44px;padding:0;border:0;background:none;cursor:pointer';
+        'display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;background:none;cursor:pointer';
       // Staggered so ten markers do not breathe in lockstep. Read by the
       // keyframe in styles.css; the animation is transform-only.
       el.style.setProperty('--map-pin-delay', `${(i % 5) * 0.44}s`);
@@ -651,15 +653,17 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
 
       map.addSource('companies', { type: 'geojson', data: COMPANIES_GEOJSON });
 
+      // 0.45 at 12.5 and 0.8 at 15 as specified; the low end reaches down to
+      // CITY_ZOOM because the city view is 11.95, not the 12.5 the spec assumed.
       const companyIconSize = [
-        'interpolate', ['linear'], ['zoom'], 12.5, 0.45, 15, 0.8,
+        'interpolate', ['linear'], ['zoom'], CITY_ZOOM, 0.4, 12.5, 0.45, 15, 0.8,
       ];
 
       map.addLayer({
         id: 'company-pins-featured',
         type: 'symbol',
         source: 'companies',
-        minzoom: 12.5,
+        minzoom: CITY_ZOOM - 0.05,
         maxzoom: 13.5,
         filter: ['==', ['get', 'featured'], true],
         layout: {
