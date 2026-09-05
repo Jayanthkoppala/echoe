@@ -20,6 +20,20 @@ export const AgentTravel = __t.object("AgentTravel", {
 });
 export type AgentTravel = __Infer<typeof AgentTravel>;
 
+export const Company = __t.object("Company", {
+  id: __t.u32(),
+  slug: __t.string(),
+  name: __t.string(),
+  domain: __t.string(),
+  hqArea: __t.string(),
+  lng: __t.f64(),
+  lat: __t.f64(),
+  category: __t.string(),
+  logo: __t.string(),
+  featured: __t.bool(),
+});
+export type Company = __Infer<typeof Company>;
+
 export const Contact = __t.object("Contact", {
   identity: __t.identity(),
   email: __t.string(),
@@ -35,6 +49,8 @@ export const Conversation = __t.object("Conversation", {
   replies: __t.u8(),
   score: __t.u8(),
   why: __t.string(),
+  fundingA: __t.string(),
+  fundingB: __t.string(),
   createdAt: __t.timestamp(),
 });
 export type Conversation = __Infer<typeof Conversation>;
@@ -55,6 +71,7 @@ export const Echo = __t.object("Echo", {
   owner: __t.identity(),
   persona: __t.string(),
   behaviourNotes: __t.string(),
+  freeUsed: __t.u32(),
   updatedAt: __t.timestamp(),
 });
 export type Echo = __Infer<typeof Echo>;
@@ -100,9 +117,20 @@ export const Player = __t.object("Player", {
   avatar: __t.string(),
   online: __t.bool(),
   currentPlace: __t.u8(),
+  openrouterLinked: __t.bool(),
+  companyId: __t.u32(),
+  verifiedDomain: __t.string(),
   joinedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const PlayerKey = __t.object("PlayerKey", {
+  identity: __t.identity(),
+  apiKey: __t.string(),
+  model: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type PlayerKey = __Infer<typeof PlayerKey>;
 
 export const Receipt = __t.object("Receipt", {
   id: __t.u64(),
@@ -154,6 +182,18 @@ export const TranscriptLine = __t.object("TranscriptLine", {
   createdAt: __t.timestamp(),
 });
 export type TranscriptLine = __Infer<typeof TranscriptLine>;
+
+export const Verification = __t.object("Verification", {
+  identity: __t.identity(),
+  email: __t.string(),
+  domain: __t.string(),
+  code: __t.string(),
+  expiresAt: __t.timestamp(),
+  attempts: __t.u8(),
+  sendsThisHour: __t.u8(),
+  windowStart: __t.timestamp(),
+});
+export type Verification = __Infer<typeof Verification>;
 
 export const WorldTick = __t.object("WorldTick", {
   scheduledId: __t.u64(),

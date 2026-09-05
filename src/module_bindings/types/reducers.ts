@@ -13,11 +13,13 @@ import JoinReducer from "../join_reducer";
 import PauseRunReducer from "../pause_run_reducer";
 import RateLineReducer from "../rate_line_reducer";
 import ResumeRunReducer from "../resume_run_reducer";
+import SeedCompaniesReducer from "../seed_companies_reducer";
 import SetLlmConfigReducer from "../set_llm_config_reducer";
 import SetMissionReducer from "../set_mission_reducer";
 import SetSecretReducer from "../set_secret_reducer";
 import StartRunReducer from "../start_run_reducer";
 import TravelReducer from "../travel_reducer";
+import UnlinkOpenRouterReducer from "../unlink_open_router_reducer";
 
 export type CorrectParams = __Infer<typeof CorrectReducer>;
 export type CreateEchoParams = __Infer<typeof CreateEchoReducer>;
@@ -26,9 +28,11 @@ export type JoinParams = __Infer<typeof JoinReducer>;
 export type PauseRunParams = __Infer<typeof PauseRunReducer>;
 export type RateLineParams = __Infer<typeof RateLineReducer>;
 export type ResumeRunParams = __Infer<typeof ResumeRunReducer>;
+export type SeedCompaniesParams = __Infer<typeof SeedCompaniesReducer>;
 export type SetLlmConfigParams = __Infer<typeof SetLlmConfigReducer>;
 export type SetMissionParams = __Infer<typeof SetMissionReducer>;
 export type SetSecretParams = __Infer<typeof SetSecretReducer>;
 export type StartRunParams = __Infer<typeof StartRunReducer>;
 export type TravelParams = __Infer<typeof TravelReducer>;
+export type UnlinkOpenRouterParams = __Infer<typeof UnlinkOpenRouterReducer>;
 

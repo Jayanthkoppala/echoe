@@ -41,17 +41,23 @@ import JoinReducer from "./join_reducer";
 import PauseRunReducer from "./pause_run_reducer";
 import RateLineReducer from "./rate_line_reducer";
 import ResumeRunReducer from "./resume_run_reducer";
+import SeedCompaniesReducer from "./seed_companies_reducer";
 import SetLlmConfigReducer from "./set_llm_config_reducer";
 import SetMissionReducer from "./set_mission_reducer";
 import SetSecretReducer from "./set_secret_reducer";
 import StartRunReducer from "./start_run_reducer";
 import TravelReducer from "./travel_reducer";
+import UnlinkOpenRouterReducer from "./unlink_open_router_reducer";
 
 // Import all procedure arg schemas
+import * as LinkOpenRouterProcedure from "./link_open_router_procedure";
+import * as RequestVerificationProcedure from "./request_verification_procedure";
 import * as SuggestIntentsProcedure from "./suggest_intents_procedure";
+import * as VerifyCodeProcedure from "./verify_code_procedure";
 
 // Import all table schema definitions
 import AgentTravelRow from "./agent_travel_table";
+import CompanyRow from "./company_table";
 import ConversationRow from "./conversation_table";
 import CorrectionRow from "./correction_table";
 import EchoRow from "./echo_table";
@@ -81,6 +87,25 @@ const tablesSchema = __schema({
       { name: 'agent_travel_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, AgentTravelRow),
+  company: __table({
+    name: 'company',
+    indexes: [
+      { accessor: 'domain', name: 'company_domain_idx_btree', algorithm: 'btree', columns: [
+        'domain',
+      ] },
+      { accessor: 'id', name: 'company_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'slug', name: 'company_slug_idx_btree', algorithm: 'btree', columns: [
+        'slug',
+      ] },
+    ],
+    constraints: [
+      { name: 'company_domain_key', constraint: 'unique', columns: ['domain'] },
+      { name: 'company_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'company_slug_key', constraint: 'unique', columns: ['slug'] },
+    ],
+  }, CompanyRow),
   conversation: __table({
     name: 'conversation',
     indexes: [
@@ -239,16 +264,21 @@ const reducersSchema = __reducers(
   __reducerSchema("pause_run", PauseRunReducer),
   __reducerSchema("rate_line", RateLineReducer),
   __reducerSchema("resume_run", ResumeRunReducer),
+  __reducerSchema("seed_companies", SeedCompaniesReducer),
   __reducerSchema("set_llm_config", SetLlmConfigReducer),
   __reducerSchema("set_mission", SetMissionReducer),
   __reducerSchema("set_secret", SetSecretReducer),
   __reducerSchema("start_run", StartRunReducer),
   __reducerSchema("travel", TravelReducer),
+  __reducerSchema("unlink_open_router", UnlinkOpenRouterReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("link_open_router", LinkOpenRouterProcedure.params, LinkOpenRouterProcedure.returnType),
+  __procedureSchema("request_verification", RequestVerificationProcedure.params, RequestVerificationProcedure.returnType),
   __procedureSchema("suggest_intents", SuggestIntentsProcedure.params, SuggestIntentsProcedure.returnType),
+  __procedureSchema("verify_code", VerifyCodeProcedure.params, VerifyCodeProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

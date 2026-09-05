@@ -14,7 +14,8 @@ import {
   type ReducerCtx,
 } from 'spacetimedb/server';
 import { ScheduleAt, TimeDuration, Timestamp } from 'spacetimedb';
-import { chat, splitLines, type ChatMessage } from './llm';
+import { chat, exchangeCode, sendEmail, splitLines, type ChatMessage, type ChatResult } from './llm';
+import { COMPANIES } from './companies';
 
 // ─── Tuning ──────────────────────────────────────────────────────────────────
 // A "24 hour" roam is compressed to RUN_DURATION so a judge can watch one end
@@ -31,6 +32,50 @@ const MAX_INTENT_LENGTH = 120;
 const INTENT_TTL_MICROS = 7n * 24n * 3_600_000_000n; // intents expire after 7 days
 const SHARE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const NO_HOST = 0n;
+
+// ─── Work-email verification ─────────────────────────────────────────────────
+
+const CODE_TTL_MICROS = 600_000_000n; // 10 minutes to type six digits
+const SEND_WINDOW_MICROS = 3_600_000_000n; // 1 hour
+const MAX_SENDS_PER_WINDOW = 3;
+const MAX_CODE_ATTEMPTS = 5;
+const NO_COMPANY = 0; // player.companyId when the domain is verified but unseeded
+const VERIFIED_BONUS = 10; // added to a complement match when both sides are verified
+const COMPLEMENT_FLOOR = 50; // matchIntents adds 50 the moment a complement fires
+const SECRET_ADMIN = 'admin_identity';
+const SECRET_RESEND_KEY = 'resend_api_key';
+
+/**
+ * A badge is only worth something if it means a workplace. Free and personal
+ * mail hosts are rejected before a code is ever generated, which also keeps the
+ * send quota away from throwaway inboxes. Union of docs/VERIFIED-ECHOE.md and
+ * docs/STARTUP-MAP-RESEARCH.md section 5; `zoho.com` counts as personal mail
+ * because a Zoho-hosted company address sits on the company's own domain.
+ */
+const FREE_MAIL = new Set([
+  'gmail.com', 'googlemail.com',
+  'yahoo.com', 'yahoo.in', 'yahoo.co.in', 'ymail.com',
+  'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  'icloud.com', 'me.com', 'mac.com',
+  'proton.me', 'protonmail.com', 'pm.me',
+  'yandex.com', 'yandex.ru',
+  'rediffmail.com', 'aol.com', 'mail.com',
+  'gmx.com', 'gmx.net',
+  'zoho.com', 'zohomail.com',
+  'tutanota.com', 'fastmail.com', 'hey.com',
+]);
+
+/**
+ * Historical and product domains that belong to a seeded company. Kept small on
+ * purpose: an unlisted domain still verifies, it just shows the domain instead
+ * of the company. Add a row only when a real signup hits the mismatch.
+ */
+const DOMAIN_ALIASES = new Map([
+  ['razorpay.in', 'razorpay.com'],
+  ['cure.fit', 'cult.fit'],
+  ['yulu.com', 'yulu.bike'],
+  ['slice.com', 'sliceit.com'],
+]);
 
 
 const AVATARS = ['circle', 'square', 'triangle', 'diamond', 'hex'];
@@ -52,6 +97,16 @@ const MISSION_ID = 0;
  * Echoe so the night is spent meeting people rather than one person.
  */
 const MAX_EXCHANGES = 4;
+
+/**
+ * Conversations the house pays for, per Echoe, for life. Counted when the Echoe
+ * first speaks in one, not per line. After that its lines are billed to the
+ * player's own OpenRouter key, and with no key the Echoe comes home.
+ */
+const FREE_CONVERSATIONS = 5;
+
+/** Model for a player's own key when the house has not configured one. */
+const DEFAULT_MODEL = 'openrouter/auto';
 
 const DEFAULT_MISSION =
   "Tonight's mission: find someone who has changed their mind about Bengaluru.";
@@ -81,6 +136,12 @@ const player = table(
     avatar: t.string(),
     online: t.bool(),
     currentPlace: t.u8().index('btree'),
+    openrouterLinked: t.bool(), // true once linkOpenRouter stored a key for them
+    // Public proof of a work address, never the address itself. companyId is 0
+    // until a code is verified and stays 0 for a domain outside the seed list,
+    // where verifiedDomain is what the badge falls back to.
+    companyId: t.u32(),
+    verifiedDomain: t.string(),
     joinedAt: t.timestamp(),
   }
 );
@@ -93,6 +154,7 @@ const echo = table(
     owner: t.identity().unique(),
     persona: t.string(),
     behaviourNotes: t.string(),
+    freeUsed: t.u32(), // house-funded conversations spent, out of FREE_CONVERSATIONS
     updatedAt: t.timestamp(),
   }
 );
@@ -123,6 +185,28 @@ const place = table(
     name: t.string(),
     lng: t.f64(),
     lat: t.f64(),
+  }
+);
+
+/**
+ * The Bengaluru companies a work address can be verified against. Public and
+ * seeded in `init` from `companies.ts`, exactly like `place`, so the client
+ * renders a badge from a join instead of shipping its own copy of the list.
+ * `seedCompanies` refreshes an already-published database.
+ */
+const company = table(
+  { name: 'company', public: true },
+  {
+    id: t.u32().primaryKey(),
+    slug: t.string().unique(),
+    name: t.string(),
+    domain: t.string().unique(),
+    hqArea: t.string(),
+    lng: t.f64(),
+    lat: t.f64(),
+    category: t.string(),
+    logo: t.string(),
+    featured: t.bool(),
   }
 );
 
@@ -190,6 +274,8 @@ const conversation = table(
     replies: t.u8(),
     score: t.u8(), // 0..100 deterministic intent match, set once at creation
     why: t.string(), // one line a human can read: why these two should meet
+    fundingA: t.string(), // '' | 'house' | 'own': who pays for A's exchanges
+    fundingB: t.string(),
     createdAt: t.timestamp(),
   }
 );
@@ -255,6 +341,17 @@ const secret = table(
   }
 );
 
+/** Private. A player's own OpenRouter key, used once their free conversations are spent. */
+const playerKey = table(
+  { name: 'player_key' },
+  {
+    identity: t.identity().primaryKey(),
+    apiKey: t.string(),
+    model: t.string(),
+    updatedAt: t.timestamp(),
+  }
+);
+
 /** Private. Email a player left at join, never broadcast to other clients. */
 const contact = table(
   { name: 'contact' },
@@ -262,6 +359,27 @@ const contact = table(
     identity: t.identity().primaryKey(),
     email: t.string(),
     welcomed: t.bool(),
+  }
+);
+
+/**
+ * PRIVATE. Work email, live code and both counters. The email address never
+ * reaches a client: only `player.companyId` and `player.verifiedDomain` do. The
+ * row outlives a successful verification with `code` blanked, because
+ * `email` being unique is the only thing stopping one inbox from badging two
+ * identities.
+ */
+const verification = table(
+  { name: 'verification' },
+  {
+    identity: t.identity().primaryKey(),
+    email: t.string().unique(),
+    domain: t.string(),
+    code: t.string(), // '' once verified, so a used code cannot be replayed
+    expiresAt: t.timestamp(),
+    attempts: t.u8(),
+    sendsThisHour: t.u8(),
+    windowStart: t.timestamp(),
   }
 );
 
@@ -294,6 +412,7 @@ const spacetimedb = schema({
   echo,
   intent,
   place,
+  company,
   agentTravel,
   run,
   receipt,
@@ -302,8 +421,10 @@ const spacetimedb = schema({
   correction,
   mission,
   llmConfig,
+  playerKey,
   secret,
   contact,
+  verification,
   worldTickTimer,
   talkJob,
 });
@@ -346,6 +467,27 @@ function micros(ts: Timestamp): bigint {
 
 function plus(ts: Timestamp, delta: bigint): Timestamp {
   return new Timestamp(micros(ts) + delta);
+}
+
+/** Reducers and `withTx` bodies both hand out one of these. */
+type Db = Ctx['db'];
+
+/**
+ * The work domain behind an address, or a `SenderError` naming what is wrong
+ * with it. Free and personal mail is refused here, before a code exists.
+ */
+function workDomain(email: string): string {
+  const clean = email.trim().toLowerCase();
+  if (clean.length > 120) fail('email_too_long:120');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) fail('email_invalid');
+  const domain = clean.slice(clean.indexOf('@') + 1);
+  if (FREE_MAIL.has(domain)) fail('free_mail_domain');
+  return DOMAIN_ALIASES.get(domain) ?? domain;
+}
+
+/** The seeded company for a domain, or null: an unseeded domain still verifies. */
+function companyByDomain(db: Db, domain: string) {
+  return db.company.domain.find(domain) ?? null;
 }
 
 
@@ -443,7 +585,18 @@ function matchPair(
   // Persona-driven: who I am and what I want, against who they are and what
   // they want. Whole profiles on both sides, so a rich persona is what makes
   // two Echoes find each other.
-  return matchIntents(profileOf(ctx, me), profileOf(ctx, them));
+  const base = matchIntents(profileOf(ctx, me), profileOf(ctx, them));
+  // The badge rides on a complement, never on its own: two verified people
+  // with nothing in common still score nothing. A complement is what pushes
+  // matchIntents to COMPLEMENT_FLOOR, so the score is the test.
+  const bothVerified =
+    !!ctx.db.player.identity.find(me)?.verifiedDomain &&
+    !!ctx.db.player.identity.find(them)?.verifiedDomain;
+  if (!bothVerified || base.score < COMPLEMENT_FLOOR) return base;
+  return {
+    score: Math.min(100, base.score + VERIFIED_BONUS),
+    why: `${base.why}; both verified`,
+  };
 }
 
 function requireRun(ctx: Ctx) {
@@ -459,6 +612,34 @@ function latestLeg(ctx: Ctx, echoId: bigint) {
     if (!newest || leg.id > newest.id) newest = leg;
   }
   return newest;
+}
+
+/**
+ * How this side's next exchange gets paid: 'house' while free conversations
+ * remain, 'own' once the player has added a key, '' when neither.
+ */
+function fundingFor(
+  ctx: Ctx,
+  echoRow: { freeUsed: number; owner: ReturnType<typeof requirePlayer>['identity'] }
+): string {
+  if (echoRow.freeUsed < FREE_CONVERSATIONS) return 'house';
+  if (ctx.db.playerKey.identity.find(echoRow.owner)) return 'own';
+  return '';
+}
+
+/** True when the Echoe can neither start nor continue a conversation on any budget. */
+function outOfBudget(ctx: Ctx, runRow: ReturnType<typeof requireRun>): boolean {
+  const echoRow = ctx.db.echo.id.find(runRow.echoId);
+  if (!echoRow || fundingFor(ctx, echoRow)) return false;
+  // A conversation this side already funded may still have exchanges left.
+  // ponytail: full scan per broke run per tick; index conversation by echoB if it shows up.
+  for (const c of ctx.db.conversation.iter()) {
+    if (c.echoA !== runRow.echoId && c.echoB !== runRow.echoId) continue;
+    if (micros(c.createdAt) < micros(runRow.startedAt)) continue;
+    if (c.replies >= MAX_EXCHANGES) continue;
+    if (c.echoA === runRow.echoId ? c.fundingA : c.fundingB) return false;
+  }
+  return true;
 }
 
 /** True when this run already finished a conversation with `otherEchoId`. */
@@ -527,6 +708,8 @@ export const init = spacetimedb.init(ctx => {
     ctx.db.place.insert({ id, name, lng, lat });
   });
 
+  for (const c of COMPANIES) ctx.db.company.insert(c);
+
   ctx.db.mission.insert({
     id: MISSION_ID,
     text: DEFAULT_MISSION,
@@ -578,6 +761,9 @@ export const join = spacetimedb.reducer(
       avatar: AVATARS[0],
       online: true,
       currentPlace: 0,
+      openrouterLinked: false,
+      companyId: NO_COMPANY,
+      verifiedDomain: '',
       joinedAt: ctx.timestamp,
     });
   }
@@ -609,6 +795,7 @@ export const createEcho = spacetimedb.reducer(
         owner: ctx.sender,
         persona: cleanPersona,
         behaviourNotes: '',
+        freeUsed: 0,
         updatedAt: ctx.timestamp,
       }).id;
     }
@@ -844,6 +1031,18 @@ export const setLlmConfig = spacetimedb.reducer(
 );
 
 /**
+ * The `secret` table's own admin, separate from the llmConfig owner: the first
+ * identity to write a secret claims `admin_identity`, and only that identity
+ * writes afterwards. `seedCompanies` shares the gate.
+ */
+function requireSecretAdmin(ctx: Ctx): void {
+  const admin = ctx.db.secret.key.find(SECRET_ADMIN);
+  const me = ctx.sender.toHexString();
+  if (admin && admin.value !== me) fail('not_admin');
+  if (!admin) ctx.db.secret.insert({ key: SECRET_ADMIN, value: me });
+}
+
+/**
  * Store a third-party secret (resend_api_key, public_origin, ...) in the
  * private `secret` table. The first caller becomes admin; after that only the
  * admin identity may write, so a hostile second tab cannot swap keys mid-demo.
@@ -853,15 +1052,22 @@ export const setSecret = spacetimedb.reducer(
   (ctx, { key, value }) => {
     const cleanKey = trimmed(key, 64, 'key');
     const cleanValue = trimmed(value, 512, 'value');
-    const admin = ctx.db.secret.key.find('admin_identity');
-    const me = ctx.sender.toHexString();
-    if (admin && admin.value !== me) fail('not_admin');
-    if (!admin) ctx.db.secret.insert({ key: 'admin_identity', value: me });
+    requireSecretAdmin(ctx);
     const existing = ctx.db.secret.key.find(cleanKey);
     if (existing) ctx.db.secret.key.update({ ...existing, value: cleanValue });
     else ctx.db.secret.insert({ key: cleanKey, value: cleanValue });
   }
 );
+
+/**
+ * Adjust limits: forget the player's own OpenRouter key. The key row is private
+ * and the flag on `player` is what the client renders.
+ */
+export const unlinkOpenRouter = spacetimedb.reducer(ctx => {
+  const playerRow = requirePlayer(ctx);
+  if (ctx.db.playerKey.identity.find(ctx.sender)) ctx.db.playerKey.identity.delete(ctx.sender);
+  ctx.db.player.identity.update({ ...playerRow, openrouterLinked: false });
+});
 
 export const setMission = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
   requireAdmin(ctx);
@@ -911,6 +1117,10 @@ export const tick = spacetimedb.reducer(
 
       if (now - micros(runRow.startedAt) >= RUN_DURATION_MICROS) {
         finishRun(ctx, runRow, 'the 24 hours ran out');
+        continue;
+      }
+      if (outOfBudget(ctx, runRow)) {
+        finishRun(ctx, runRow, `all ${FREE_CONVERSATIONS} free conversations used`);
         continue;
       }
 
@@ -991,6 +1201,8 @@ function tryConverse(
 ): boolean {
   const playerRow = ctx.db.player.identity.find(runRow.owner);
   if (!playerRow) return false;
+  const myEcho = ctx.db.echo.id.find(runRow.echoId);
+  if (!myEcho) return false;
 
   // The host of a shared link is talked to first; everyone else in arrival order.
   const here = [...ctx.db.player.currentPlace.filter(placeId)].sort((x, y) => {
@@ -1021,7 +1233,7 @@ function tryConverse(
     // Reuse a conversation only if it belongs to the current pair of runs. A
     // conversation older than either run is a memory of a previous night, and
     // continuing it would leave peopleMet at zero while a transcript grew.
-    let existing: { id: bigint; replies: number } | null = null;
+    let existing: { id: bigint; replies: number; fundingA: string; fundingB: string } | null = null;
     for (const c of ctx.db.conversation.echoA.filter(a)) {
       if (c.echoB !== b) continue;
       const started = micros(c.createdAt);
@@ -1032,12 +1244,21 @@ function tryConverse(
     // Said enough to each other tonight. Move on to the next person.
     if (existing && existing.replies >= MAX_EXCHANGES) continue;
 
+    // Who pays for my side. Settled the first time I speak in this conversation
+    // and then fixed, so a free conversation stays free to its end.
+    const mySide = runRow.echoId === a ? 'A' : 'B';
+    const settled = existing ? (mySide === 'A' ? existing.fundingA : existing.fundingB) : '';
+    const funding = settled || fundingFor(ctx, myEcho);
+    if (!funding) return false; // nothing to pay with; the tick brings the run home
+    const myFunding = mySide === 'A' ? { fundingA: funding } : { fundingB: funding };
+
     let conversationId: bigint;
     if (existing) {
       conversationId = existing.id;
       ctx.db.conversation.id.update({
         ...ctx.db.conversation.id.find(existing.id)!,
         replies: existing.replies + 1,
+        ...myFunding,
       });
     } else {
       const match = matchPair(ctx, runRow.owner, otherPlayer.identity);
@@ -1049,6 +1270,9 @@ function tryConverse(
         replies: 1,
         score: match.score,
         why: match.why,
+        fundingA: '',
+        fundingB: '',
+        ...myFunding,
         createdAt: ctx.timestamp,
       });
       conversationId = created.id;
@@ -1065,6 +1289,21 @@ function tryConverse(
       }
     }
 
+    if (!settled && funding === 'house') {
+      const fresh = ctx.db.echo.id.find(runRow.echoId)!;
+      ctx.db.echo.id.update({ ...fresh, freeUsed: fresh.freeUsed + 1 });
+      if (fresh.freeUsed + 1 === FREE_CONVERSATIONS) {
+        writeReceipt(
+          ctx,
+          runRow.owner,
+          'free_used',
+          placeId,
+          `That was your last free conversation. Add your OpenRouter key under Adjust limits to keep talking.`,
+          0
+        );
+      }
+    }
+
     writeReceipt(
       ctx,
       runRow.owner,
@@ -1074,7 +1313,7 @@ function tryConverse(
       0
     );
 
-    if (hasKey) {
+    if (hasKey || funding === 'own') {
       // The reducer has already paid for and counted this exchange. The
       // procedure only fills in the words.
       ctx.db.talkJob.insert({
@@ -1156,11 +1395,16 @@ export const echoTalk = spacetimedb.procedure(
     const setup = ctx.withTx(tx => {
       const config = tx.db.llmConfig.id.find(LLM_CONFIG_ID);
       const convo = tx.db.conversation.id.find(job.conversationId);
-      if (!config || !convo) return null;
+      if (!convo) return null;
 
       const echoA = tx.db.echo.id.find(convo.echoA);
       const echoB = tx.db.echo.id.find(convo.echoB);
       if (!echoA || !echoB) return null;
+
+      // The payer's side decides whose key pays: the house while free
+      // conversations last, the player's own afterwards.
+      const funding = echoA.owner.isEqual(job.payer) ? convo.fundingA : convo.fundingB;
+      const own = funding === 'own' ? tx.db.playerKey.identity.find(job.payer) : undefined;
 
       const history = [...tx.db.transcriptLine.conversationId.filter(convo.id)]
         .sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
@@ -1170,8 +1414,9 @@ export const echoTalk = spacetimedb.procedure(
       const goalB = tx.db.run.echoId.filter(echoB.id);
 
       return {
-        apiKey: config.apiKey,
-        model: config.model,
+        apiKey: own?.apiKey ?? config?.apiKey ?? '',
+        model: own?.model || config?.model || '',
+        funding,
         echoAId: echoA.id,
         echoBId: echoB.id,
         placeId: convo.placeId,
@@ -1223,7 +1468,10 @@ export const echoTalk = spacetimedb.procedure(
       },
     ];
 
-    const result = chat(ctx.http, setup.apiKey, setup.model, messages);
+    const result: ChatResult =
+      setup.apiKey && setup.model
+        ? chat(ctx.http, setup.apiKey, setup.model, messages)
+        : { ok: false, reason: 'no key available for this exchange' };
 
     ctx.withTx(tx => {
       const now = tx.timestamp;
@@ -1263,12 +1511,50 @@ export const echoTalk = spacetimedb.procedure(
         runOwner: job.payer,
         kind: 'llm',
         placeId: setup.placeId,
-        text: `OpenRouter: ${lines.length} lines`,
+        text: `OpenRouter, ${setup.funding === 'own' ? 'your key' : 'on us'}: ${lines.length} lines`,
         costUsd: result.costUsd,
         createdAt: now,
       });
     });
 
+    return {};
+  }
+);
+
+// ─── OpenRouter sign-in (client-callable) ─────────────────────────────────────
+
+/**
+ * Second half of OpenRouter's PKCE flow. The browser sent the player to
+ * openrouter.ai/auth with a code challenge and got a one-time `code` back; it
+ * hands the code and its verifier here. The exchange happens on the server, so
+ * the resulting key is written straight into the private table and never
+ * reaches the browser. The flag on `player` is all a client ever sees.
+ */
+export const linkOpenRouter = spacetimedb.procedure(
+  { code: t.string(), codeVerifier: t.string() },
+  t.unit(),
+  (ctx, { code, codeVerifier }) => {
+    if (code.trim().length === 0 || codeVerifier.trim().length === 0) {
+      throw new SenderError('code_required');
+    }
+    const sender = ctx.withTx(tx => (tx.db.player.identity.find(tx.sender) ? tx.sender : null));
+    if (!sender) throw new SenderError('join_first');
+
+    const got = exchangeCode(ctx.http, code.trim(), codeVerifier.trim());
+    if (!got.ok) throw new SenderError(`openrouter_auth_failed: ${got.reason}`);
+
+    ctx.withTx(tx => {
+      const row = {
+        identity: sender,
+        apiKey: got.key,
+        model: tx.db.llmConfig.id.find(LLM_CONFIG_ID)?.model || DEFAULT_MODEL,
+        updatedAt: tx.timestamp,
+      };
+      if (tx.db.playerKey.identity.find(sender)) tx.db.playerKey.identity.update(row);
+      else tx.db.playerKey.insert(row);
+      const playerRow = tx.db.player.identity.find(sender);
+      if (playerRow) tx.db.player.identity.update({ ...playerRow, openrouterLinked: true });
+    });
     return {};
   }
 );
@@ -1332,3 +1618,165 @@ function firstGoal(rows: Iterable<{ goal: string }>): string {
   for (const r of rows) return r.goal;
   return '';
 }
+
+// ─── Verified company Echoe ──────────────────────────────────────────────────
+
+/**
+ * Refresh the seeded company list on a database that was published before a
+ * company was added. `init` runs once per database, so without this a new row
+ * in `companies.ts` would need a data wipe. Same admin gate as `setSecret`.
+ */
+export const seedCompanies = spacetimedb.reducer(ctx => {
+  requireSecretAdmin(ctx);
+  for (const c of COMPANIES) {
+    const existing = ctx.db.company.id.find(c.id);
+    if (existing) ctx.db.company.id.update(c);
+    else ctx.db.company.insert(c);
+  }
+});
+
+/** Plain text, so it reads the same in every client. 47 words and a code. */
+function verifyEmailText(name: string, company: string, code: string, link: string): string {
+  return [
+    `${name},`,
+    '',
+    `Your code is ${code}. It works for the next ten minutes.`,
+    `Type it in and your Echoe walks Bengaluru wearing ${company}.`,
+    link ? `Your line is still live at ${link}. Send it to one more person.` : '',
+    '',
+    'Echoe',
+  ]
+    .filter(l => l.length > 0)
+    .join('\n');
+}
+
+/**
+ * Send a six-digit code to a work address. A procedure because Resend is an
+ * HTTP call: everything the send depends on is read and written in one
+ * transaction, then the network runs with no transaction open, so a slow or
+ * dead Resend cannot hold a lock while the world ticks.
+ *
+ * Returns 'sent' when Resend accepted it and 'logged' when the code only
+ * reached the module log, which is the demo path when no key is configured.
+ */
+export const requestVerification = spacetimedb.procedure(
+  { email: t.string() },
+  t.string(),
+  (ctx, { email }) => {
+    const clean = email.trim().toLowerCase();
+    const domain = workDomain(clean);
+
+    // Drawn before withTx on purpose. A transaction body may be replayed, and a
+    // code that changes on replay is a code nobody can type.
+    let code = '';
+    for (let i = 0; i < 6; i++) code += String(ctx.random.integerInRange(0, 9));
+
+    const ready = ctx.withTx(tx => {
+      const now = tx.timestamp;
+      const me = tx.db.player.identity.find(tx.sender);
+      if (!me) fail('not_joined');
+
+      // `email` is unique. A verified row keeps the address for good; an
+      // unverified one is fair game and the old code dies with it.
+      const holder = tx.db.verification.email.find(clean);
+      if (holder && !holder.identity.isEqual(tx.sender)) {
+        if (holder.code.length === 0) fail('email_taken');
+        tx.db.verification.identity.delete(holder.identity);
+      }
+
+      const prior = tx.db.verification.identity.find(tx.sender);
+      const freshWindow =
+        !prior || micros(now) - micros(prior.windowStart) >= SEND_WINDOW_MICROS;
+      const sendsThisHour = freshWindow ? 1 : prior.sendsThisHour + 1;
+      if (sendsThisHour > MAX_SENDS_PER_WINDOW) fail('too_many_sends');
+
+      const row = {
+        identity: tx.sender,
+        email: clean,
+        domain,
+        code,
+        expiresAt: plus(now, CODE_TTL_MICROS),
+        attempts: 0,
+        sendsThisHour,
+        windowStart: freshWindow ? now : prior!.windowStart,
+      };
+      if (prior) tx.db.verification.identity.update(row);
+      else tx.db.verification.insert(row);
+
+      return {
+        apiKey: tx.db.secret.key.find(SECRET_RESEND_KEY)?.value ?? '',
+        // 'email_from' is the documented key; 'resend_from' is what an earlier
+        // draft of the runbook used, so both are honoured.
+        from:
+          tx.db.secret.key.find('email_from')?.value ??
+          tx.db.secret.key.find('resend_from')?.value ??
+          'Echoe <onboarding@resend.dev>',
+        origin: tx.db.secret.key.find('public_origin')?.value ?? '',
+        name: me.name,
+        company: companyByDomain(tx.db, domain)?.name ?? domain,
+        shareId: tx.db.intent.owner.find(tx.sender)?.shareId ?? '',
+      };
+    });
+
+    const link = ready.shareId && ready.origin ? `${ready.origin}/i/${ready.shareId}` : '';
+    const body = verifyEmailText(ready.name, ready.company, code, link);
+    const sent = ready.apiKey
+      ? sendEmail(ctx.http, ready.apiKey, ready.from, clean, `${code} is your Echoe code`, body)
+      : { ok: false as const, reason: `no ${SECRET_RESEND_KEY} configured` };
+
+    if (!sent.ok) {
+      // DEV ONLY. The row is already committed, so the flow still completes with
+      // the code read out of `spacetime logs`. Unreachable once Resend works.
+      console.warn(`requestVerification: ${sent.reason}`);
+      console.warn(`DEV ONLY verification code for ${clean}: ${code}`);
+      return 'logged';
+    }
+    return 'sent';
+  }
+);
+
+/**
+ * Check a code and badge the player. A procedure rather than a reducer because
+ * a reducer that throws rolls its own transaction back, so a reducer could
+ * never count a failed attempt. This commits the increment inside `withTx` and
+ * reports the outcome as a return value instead.
+ *
+ * Returns one of: ok | wrong_code | expired | too_many_attempts | no_request.
+ */
+export const verifyCode = spacetimedb.procedure(
+  { code: t.string() },
+  t.string(),
+  (ctx, { code }) =>
+    ctx.withTx(tx => {
+      const row = tx.db.verification.identity.find(tx.sender);
+      const me = tx.db.player.identity.find(tx.sender);
+      if (!row || !me || row.code.length === 0) return 'no_request';
+      if (micros(tx.timestamp) > micros(row.expiresAt)) return 'expired';
+      if (row.attempts >= MAX_CODE_ATTEMPTS) return 'too_many_attempts';
+
+      if (code.trim() !== row.code) {
+        tx.db.verification.identity.update({ ...row, attempts: row.attempts + 1 });
+        return 'wrong_code';
+      }
+
+      const named = companyByDomain(tx.db, row.domain);
+      tx.db.player.identity.update({
+        ...me,
+        companyId: named?.id ?? NO_COMPANY,
+        verifiedDomain: row.domain,
+      });
+      // The row stays, with the code blanked: `email` being unique is what stops
+      // one inbox badging a second identity, and a blank code cannot be replayed.
+      tx.db.verification.identity.update({ ...row, code: '', attempts: 0 });
+      tx.db.receipt.insert({
+        id: 0n,
+        runOwner: tx.sender,
+        kind: 'verified',
+        placeId: me.currentPlace,
+        text: `Verified as ${named?.name ?? row.domain}`,
+        costUsd: 0,
+        createdAt: tx.timestamp,
+      });
+      return 'ok';
+    })
+);

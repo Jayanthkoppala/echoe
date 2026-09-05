@@ -11,14 +11,14 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
-  echoA: __t.u64().name("echo_a"),
-  echoB: __t.u64().name("echo_b"),
-  placeId: __t.u8().name("place_id"),
-  replies: __t.u8(),
-  score: __t.u8(),
-  why: __t.string(),
-  fundingA: __t.string().name("funding_a"),
-  fundingB: __t.string().name("funding_b"),
-  createdAt: __t.timestamp().name("created_at"),
+  id: __t.u32().primaryKey(),
+  slug: __t.string(),
+  name: __t.string(),
+  domain: __t.string(),
+  hqArea: __t.string().name("hq_area"),
+  lng: __t.f64(),
+  lat: __t.f64(),
+  category: __t.string(),
+  logo: __t.string(),
+  featured: __t.bool(),
 });

@@ -6,8 +6,17 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as LinkOpenRouterProcedure from "../link_open_router_procedure";
+import * as RequestVerificationProcedure from "../request_verification_procedure";
 import * as SuggestIntentsProcedure from "../suggest_intents_procedure";
+import * as VerifyCodeProcedure from "../verify_code_procedure";
 
+export type LinkOpenRouterArgs = __Infer<typeof LinkOpenRouterProcedure.params>;
+export type LinkOpenRouterResult = __Infer<typeof LinkOpenRouterProcedure.returnType>;
+export type RequestVerificationArgs = __Infer<typeof RequestVerificationProcedure.params>;
+export type RequestVerificationResult = __Infer<typeof RequestVerificationProcedure.returnType>;
 export type SuggestIntentsArgs = __Infer<typeof SuggestIntentsProcedure.params>;
 export type SuggestIntentsResult = __Infer<typeof SuggestIntentsProcedure.returnType>;
+export type VerifyCodeArgs = __Infer<typeof VerifyCodeProcedure.params>;
+export type VerifyCodeResult = __Infer<typeof VerifyCodeProcedure.returnType>;
 

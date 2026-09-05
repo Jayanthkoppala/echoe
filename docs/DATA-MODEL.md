@@ -34,6 +34,7 @@ bindings. Private tables do not, and are excluded from codegen.
 | `correction` | public | One row per correction on screen 8. Keeps the original text alongside the replacement, so the record of what was actually said survives. |
 | `mission` | public | Single row, id 0. The shared "tonight's mission" line on screen 3. |
 | `llm_config` | **private** | Single row, id 0. Holds the OpenRouter key and model. No `public: true`, so it is invisible to every client and absent from codegen. The key goes in through a reducer argument and never comes back out. |
+| `player_key` | **private** | One row per player who signed in with OpenRouter. Written only by the `linkOpenRouter` procedure, read only by `echoTalk` for exchanges whose funding is `own`. The client sees just `player.openrouter_linked`. |
 | `world_tick` | **private** | Drives the `tick` reducer on a 5 second interval. |
 | `talk_job` | **private** | One-shot jobs carrying a conversation and its `payer` into the `echoTalk` procedure. Rows are deleted automatically once the procedure returns. |
 
@@ -72,6 +73,7 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | `rateLine` | `lineId`, `soundsLikeMe` | Caller has an Echoe. The line exists and was spoken by the caller's own Echoe. Sets feedback to `like` or `not_me`. |
 | `correct` | `lineId`, `shouldHaveSaid`, `behaviourChange` | Caller has an Echoe. The line exists and is the caller's own. Both texts non-empty, at most 500 characters. Appends a correction row, appends a note to `behaviour_notes`, and marks the line `not_me`. Touches no receipt. |
 | `setLlmConfig` | `apiKey`, `model` | Both non-empty. Writes the single private config row. |
+| `unlinkOpenRouter` | none | Caller has joined. Deletes the caller's private `player_key` row and clears `player.openrouter_linked`. |
 | `setMission` | `text` | Non-empty, at most 200 characters. |
 | `tick` | scheduled | Not callable by clients. See below. |
 
@@ -113,8 +115,9 @@ conversation older than either run is treated as a memory of a previous night
 and a new one is started, otherwise `people_met` would stay at zero while a
 transcript kept growing.
 
-Once a conversation exists, each side may add one more exchange per tick for as
-long as both stand there. Each exchange is billed to its initiator in real
+Once a conversation exists, each side may add one more exchange per tick until
+it reaches `MAX_EXCHANGES` (4, a module constant, not a setting). Then it is
+closed, and the find step stops chasing that Echoe for the rest of the run. Each exchange is billed to its initiator in real
 OpenRouter credits, taken from `usage.cost` on the response.
 
 ### Where they walk
@@ -128,7 +131,14 @@ landmark.
 
 ## Credits
 
-There are no app credits. Every LLM exchange is billed in OpenRouter credits
+Each Echoe gets `FREE_CONVERSATIONS` (5) conversations on the house key, for
+life, counted the first time it speaks in one and then fixed for that
+conversation. After that its lines are billed to the player's own key from
+`player_key`, obtained through OpenRouter's PKCE sign-in: the browser sends the
+player to `openrouter.ai/auth` with a code challenge, gets a one-time code back,
+and the `linkOpenRouter` procedure exchanges it at `/api/v1/auth/keys` and
+stores the key server-side. With no key the tick brings the run home. There are no app
+credits otherwise. Every LLM exchange is billed in OpenRouter credits
 (USD). `echoTalk` reads `usage.cost` from the response, adds it to the paying
 run's `spent_usd`, and writes an `llm` receipt carrying the exact amount. The
 deterministic fallback costs nothing and writes no `llm` receipt. Travel, find
@@ -325,3 +335,225 @@ The scheduled procedure ran, reached OpenRouter through `ctx.http.fetch`, got a
 real HTTP 401, and wrote the deterministic exchange instead. Transcript lines
 appeared for all three conversations. With a valid key the same path writes
 model output instead, and nothing else about the simulation changes.
+
+## Verified company Echoe
+
+A work address earns a public badge and nothing else crosses the wire. The
+email lives in a private table; other clients only ever see `player.companyId`
+and `player.verifiedDomain`.
+
+### Tables
+
+`company` (public, seeded in `init` from `spacetimedb/src/companies.ts`, which
+is generated from `src/data/companies.json`):
+
+| Column | Type | Note |
+| --- | --- | --- |
+| `id` | `u32` primary key | the row's position in the JSON, `0` means "no company" on a player |
+| `slug` | `string` unique | lower-cased name, every non-alphanumeric run replaced by `-` |
+| `name` | `string` | |
+| `domain` | `string` unique | the lookup key for verification |
+| `hqArea` | `string` | |
+| `lng`, `lat` | `f64` | |
+| `category` | `string` | |
+| `logo` | `string` | `https://www.google.com/s2/favicons?domain=<domain>&sz=128` |
+| `featured` | `bool` | the first twelve rows |
+
+39 rows. `seedCompanies` upserts the same list into an already-published
+database, behind the same admin gate as `setSecret`, so a new company does not
+need a data wipe.
+
+`player` gains two public columns: `companyId: u32` (`0` until a code is
+verified, and still `0` for a domain outside the seed list) and
+`verifiedDomain: string` (`''` until verified). The email is never on `player`.
+
+`verification` (PRIVATE, confirmed skipped by codegen):
+
+| Column | Type | Note |
+| --- | --- | --- |
+| `identity` | `Identity` primary key | |
+| `email` | `string` unique | the only thing stopping one inbox badging two identities |
+| `domain` | `string` | after the alias table, so `razorpay.in` is stored as `razorpay.com` |
+| `code` | `string` | six digits, blanked on success so it cannot be replayed |
+| `expiresAt` | `Timestamp` | ten minutes |
+| `attempts` | `u8` | locks at 5 |
+| `sendsThisHour` | `u8` | caps at 3 |
+| `windowStart` | `Timestamp` | start of the current send hour |
+
+The row survives a successful verification with `code` blanked. A second
+identity typing the same address gets `email_taken`; an unverified row is taken
+over and its code dies.
+
+### The two procedures
+
+Both are procedures, not reducers, and neither choice is cosmetic.
+
+`requestVerification({ email }) -> string`. Lower-cases and validates the
+address, refuses free and personal mail with `free_mail_domain`, applies the
+alias table (`razorpay.in`, `cure.fit`, `yulu.com`, `slice.com`), then in one
+transaction rate-limits the send, generates a six-digit code with `ctx.random`
+and upserts the row with a ten-minute expiry. The Resend POST runs after that
+transaction commits, so a slow or dead Resend never holds a lock while the world
+ticks. The code is drawn before `withTx` because a transaction body may be
+replayed and a code that changes on replay is a code nobody can type. Returns
+`sent` or `logged`. Raises `not_joined`, `email_invalid`, `email_too_long:120`,
+`free_mail_domain`, `email_taken`, `too_many_sends`.
+
+`verifyCode({ code }) -> string`. Returns one of `ok`, `wrong_code`, `expired`,
+`too_many_attempts`, `no_request`. A reducer that throws rolls its own
+transaction back, so a reducer could never count a failed attempt; this commits
+the increment inside `withTx` and reports the outcome as a return value. On a
+match it sets `companyId` and `verifiedDomain`, writes a receipt of kind
+`verified` reading `Verified as <company name or domain>`, and blanks the code.
+
+### Fallback behaviour
+
+With no `resend_api_key` in the private `secret` table, or when Resend refuses
+the send, the row is already committed and the code goes to the module log
+prefixed `DEV ONLY verification code for <email>: <code>`, and the procedure
+returns `logged`. The whole flow is therefore testable with no key and no
+network, the way the LLM path already falls back. The sender is the `email_from`
+secret, or `resend_from`, or `Echoe <onboarding@resend.dev>`. The timeout is 8s.
+
+### Matching bonus
+
+`matchPair` adds 10 to the score, capped at 100, and appends `both verified` to
+the reason, but only when both players carry a `verifiedDomain` and the base
+score already reached the complement floor of 50. The badge rides on a
+complement and never on its own: two verified people with nothing in common
+still score nothing. `matchIntents` stays a pure function of two strings.
+
+### Regenerating the seed file
+
+```bash
+cd /Users/jay/Documents/echo
+/usr/bin/python3 - <<'PY'
+import json, re
+rows = json.load(open('src/data/companies.json'))
+# id = index, slug = re.sub(r'[^a-z0-9]', '-', name.lower()), featured = id < 12
+PY
+```
+
+The generator that produced `spacetimedb/src/companies.ts` is that rule applied
+to every row, in JSON order. Edit the JSON, never the generated file.
+
+### Smoke test, verbatim
+
+Published with `--delete-data=always` because two new columns on `player` is not
+an automatic migration. Every call carries `--no-config -s local3001`, and the
+script is bash because zsh does not word-split the CLI path variable. The
+`WARNING: This command is UNSTABLE` line the CLI prints before every call is
+stripped below.
+
+```
+$ spacetime publish echo --module-path spacetimedb --server local3001 --delete-data=always -y
+Build finished successfully.
+Uploading to local3001 => http://127.0.0.1:3001
+This will DESTROY the current echo module, and ALL corresponding data.
+Skipping confirmation due to --yes
+Publishing module...
+Updated database with name: echo, identity: c200f6728b1b94e21450a06fcabbf5ff0fe47c5d3acf6df950ad41ac2fc0f69f
+
+$ spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb -y
+Skipping private tables during codegen: contact, llm_config, player_key, secret, talk_job, verification, world_tick.
+Writing file src/module_bindings/company_table.ts
+Writing file src/module_bindings/player_table.ts
+Writing file src/module_bindings/seed_companies_reducer.ts
+Writing file src/module_bindings/request_verification_procedure.ts
+Writing file src/module_bindings/verify_code_procedure.ts
+Generate finished successfully.
+
+### 1. join
+### 2. request_verification with a free-mail address (expect free_mail_domain)
+Error: Response text: The module instance encountered a fatal error: free_mail_domain
+
+### 3. request_verification with someone@razorpay.com (expect logged)
+"logged"
+
+### 4. the DEV ONLY code from the module log
+code=385485
+
+### 5. five wrong codes, then a sixth (expect wrong_code x5 then too_many_attempts)
+attempt 1 (999991): "wrong_code"
+attempt 2 (999992): "wrong_code"
+attempt 3 (999993): "wrong_code"
+attempt 4 (999994): "wrong_code"
+attempt 5 (999995): "wrong_code"
+attempt 6 (999996): "too_many_attempts"
+
+### 6. verification row after the lock (attempts should be 5)
+ domain         | attempts | sends_this_hour
+----------------+----------+-----------------
+ "razorpay.com" | 5        | 1
+
+### 7. request_verification again (new code, attempts reset)
+"logged"
+code2=213501
+
+### 8. verify_code with the right code (expect ok)
+"ok"
+
+### 9. player row: company_id and verified_domain
+ name           | company_id | verified_domain
+----------------+------------+-----------------
+ "Smoke Tester" | 4          | "razorpay.com"
+
+### 10. the verified receipt
+ kind       | text
+------------+------------------------
+ "verified" | "Verified as Razorpay"
+
+### 11. the verification row is spent (code blank)
+ domain         | code | attempts
+----------------+------+----------
+ "razorpay.com" | ""   | 0
+
+### 13. company row count and featured count
+ companies
+-----------
+ 39
+
+ featured
+----------
+ 12
+
+### 14. seed_companies is idempotent (still 39 rows after a re-seed)
+ companies
+-----------
+ 39
+
+### 15. alias table: razorpay.in is stored as razorpay.com
+"logged"
+ email                 | domain         | sends_this_hour
+-----------------------+----------------+-----------------
+ "founder@razorpay.in" | "razorpay.com" | 3
+
+### 16. fourth send in the hour (expect too_many_sends)
+Error: Response text: The module instance encountered a fatal error: too_many_sends
+
+### 17. verify the alias code (expect ok, company_id still 4)
+code=377421
+"ok"
+ name           | company_id | verified_domain
+----------------+------------+-----------------
+ "Smoke Tester" | 4          | "razorpay.com"
+
+### 20. verify an unseeded work domain, on a throwaway database
+"logged"
+code=719498
+"ok"
+ name              | company_id | verified_domain
+-------------------+------------+-----------------
+ "Unseeded Tester" | 0          | "bosshq.in"
+
+ kind       | text
+------------+-------------------------
+ "verified" | "Verified as bosshq.in"
+```
+
+Step 12 is missing on purpose: `SELECT COUNT(*) FROM company` is rejected with
+`Aggregate expressions must have column aliases`, so step 13 re-runs it as
+`SELECT COUNT(*) AS companies`. Steps 19 to 21 published a throwaway database
+`echosmoke`, ran the unseeded-domain case there and deleted it, because the send
+cap is per identity per hour and the CLI's `--anonymous` flag mints a fresh
+identity on every call, so a multi-step flow cannot run under it.

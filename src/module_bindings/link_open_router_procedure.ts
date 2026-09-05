@@ -10,11 +10,8 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  id: __t.u64().primaryKey(),
-  owner: __t.identity(),
-  persona: __t.string(),
-  behaviourNotes: __t.string().name("behaviour_notes"),
-  freeUsed: __t.u32().name("free_used"),
-  updatedAt: __t.timestamp().name("updated_at"),
-});
+export const params = {
+  code: __t.string(),
+  codeVerifier: __t.string(),
+};
+export const returnType = __t.unit()

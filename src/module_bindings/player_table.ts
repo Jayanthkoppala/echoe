@@ -16,5 +16,8 @@ export default __t.row({
   avatar: __t.string(),
   online: __t.bool(),
   currentPlace: __t.u8().name("current_place"),
+  openrouterLinked: __t.bool().name("openrouter_linked"),
+  companyId: __t.u32().name("company_id"),
+  verifiedDomain: __t.string().name("verified_domain"),
   joinedAt: __t.timestamp().name("joined_at"),
 });
