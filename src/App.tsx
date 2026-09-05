@@ -12,6 +12,7 @@ import { JoinScreen } from './screens/JoinScreen';
 import { LimitsScreen } from './screens/LimitsScreen';
 import { ReturnScreen } from './screens/ReturnScreen';
 import { ReviewScreen } from './screens/ReviewScreen';
+import { TalksScreen } from './screens/TalksScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
 
@@ -47,6 +48,7 @@ function App() {
   // Limits is an edit of a live run now, so it returns to whoever opened it.
   const [limitsFrom, setLimitsFrom] = useState<ScreenName>('world');
   const [profileFrom, setProfileFrom] = useState<ScreenName>('world');
+  const [reviewFrom, setReviewFrom] = useState<ScreenName>('return');
 
   const [players, playersReady] = useTable(tables.player);
   const [echoes] = useTable(tables.echo);
@@ -221,8 +223,17 @@ function App() {
   );
 
   const matches = useMemo(
-    () => rankedMatches(conversations, myEchoId, hostEchoId, echoes, players, companies),
-    [conversations, myEchoId, hostEchoId, echoes, players, companies],
+    () =>
+      rankedMatches(
+        conversations,
+        myEchoId,
+        hostEchoId,
+        echoes,
+        players,
+        companies,
+        myPlayerRow?.currentPlace ?? 0,
+      ),
+    [conversations, myEchoId, hostEchoId, echoes, players, companies, myPlayerRow?.currentPlace],
   );
 
   const transcript = useMemo(
@@ -257,7 +268,8 @@ function App() {
     transcript.find(line => line.id === lineId) ??
     [...transcript].reverse().find(line => line.mine);
 
-  const openReview = (id: string) => {
+  const openReview = (id: string, from: ScreenName = 'return') => {
+    setReviewFrom(from);
     setConversationId(id);
     setLineId(null);
     setScreen('review');
@@ -284,6 +296,7 @@ function App() {
           actions={actions}
           go={go}
           onAdjustLimits={() => { setLimitsFrom('world'); setScreen('limits'); }}
+          onTalks={() => setScreen('talks')}
           hostCard={hostCard}
           player={player}
           run={runView}
@@ -343,6 +356,7 @@ function App() {
           player={player}
           onProfile={() => openProfile('review')}
           onFocus={setLineId}
+          backTo={reviewFrom}
         />
       )}
       {screen === 'correct' && (
@@ -366,6 +380,16 @@ function App() {
           onUnlinkGoogle={() => run('Unlink', unlinkGoogle())}
           onReview={openReview}
           onLogout={logout}
+        />
+      )}
+      {screen === 'talks' && (
+        <TalksScreen
+          actions={actions}
+          go={go}
+          people={matches}
+          player={player}
+          onProfile={() => openProfile('talks')}
+          onReview={id => openReview(id, 'talks')}
         />
       )}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}

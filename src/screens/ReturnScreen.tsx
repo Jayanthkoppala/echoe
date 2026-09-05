@@ -2,7 +2,7 @@ import { ShareCard } from '../components/ShareCard';
 import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { TopBar } from '../components/TopBar';
-import { AVATAR_COLOUR, AVATAR_GLYPH, RECEIPT_ICON, usd } from '../state/copy';
+import { avatarColour, avatarGlyph, RECEIPT_ICON, usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
 import type { Badge, Match, Player, Receipt, Run, ScreenProps } from '../state/types';
 
@@ -91,10 +91,10 @@ export function ReturnScreen({
                   <div className="match-top">
                     <span
                       className="host-avatar"
-                      style={{ background: AVATAR_COLOUR[match.avatar] ?? '#d7f06c' }}
+                      style={{ background: avatarColour(match.avatar) }}
                       aria-hidden="true"
                     >
-                      {AVATAR_GLYPH[match.avatar] ?? '●'}
+                      {avatarGlyph(match.avatar)}
                     </span>
                     <div className="match-name">
                       <strong>
@@ -116,6 +116,14 @@ export function ReturnScreen({
                     />
                   </div>
                   <p className="match-why">{match.why}</p>
+                  {match.meetAt ? (
+                    <p className="meet-at">
+                      <span aria-hidden="true">{match.meetAt.glyph}</span>
+                      <span>
+                        Meet at <strong>{match.meetAt.name}</strong>, {match.meetAt.area}
+                      </span>
+                    </p>
+                  ) : null}
                   <button className="match-review" onClick={() => onReview(match.conversationId)}>
                     Review the conversation →
                   </button>

@@ -1258,3 +1258,6 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .ghost-btn--icon { min-width: 50px; padding: 0; font-size: 18px; line-height: 1; }
 /* Talks list rows are whole-row buttons. */
 .person-row--tap { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+
+.meet-at { display: flex; gap: 6px; align-items: baseline; margin: 0 0 10px; color: var(--fg2); font-size: 11.5px; }
+.meet-at strong { color: var(--fg); font-weight: 600; }

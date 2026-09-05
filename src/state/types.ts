@@ -11,6 +11,7 @@ export type ScreenName =
   | 'review'
   | 'correct'
   | 'profile'
+  | 'talks'
   | 'done';
 
 export type RunStatus = 'running' | 'paused' | 'ended';
@@ -82,6 +83,14 @@ export interface Match {
   placeName: string;
   isHost: boolean;
   badge?: Badge;
+  meetAt?: MeetAt;
+}
+
+/** A third place halfway between two players, suggested on the recap. */
+export interface MeetAt {
+  name: string;
+  area: string;
+  glyph: string;
 }
 
 export interface PlaceVisit {
@@ -95,6 +104,8 @@ export interface Correction {
   originalText: string;
   shouldHaveSaid: string;
   behaviourChange: string;
+  /** False when the rule was generated from shouldHaveSaid rather than typed. */
+  typedRule: boolean;
   at: number;
 }
 

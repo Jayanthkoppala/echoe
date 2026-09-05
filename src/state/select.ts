@@ -4,6 +4,7 @@
 import type { Infer } from 'spacetimedb';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { LANDMARKS } from '../data/landmarks';
+import spotsJson from '../data/spots.json';
 
 import AgentTravelSchema from '../module_bindings/agent_travel_table';
 import CompanySchema from '../module_bindings/company_table';
@@ -19,6 +20,7 @@ import TranscriptLineSchema from '../module_bindings/transcript_line_table';
 import { AVATAR_COLOUR, behaviourFrom } from './copy';
 import type {
   Badge,
+  MeetAt,
   Correction,
   HostCard,
   Match,
@@ -40,6 +42,73 @@ export type PlayerRow = Infer<typeof PlayerSchema>;
 export type ReceiptRow = Infer<typeof ReceiptSchema>;
 export type RunRow = Infer<typeof RunSchema>;
 export type TranscriptLineRow = Infer<typeof TranscriptLineSchema>;
+
+interface Spot {
+  name: string;
+  category: string;
+  hq_area: string;
+  lat: number;
+  lng: number;
+  featured: boolean;
+}
+
+const SPOTS = spotsJson as Spot[];
+
+const GLYPH: Record<string, string> = { cafe: '\u2615', pub: '\ud83c\udf7a', bar: '\ud83c\udf7a', brewery: '\ud83c\udf7a' };
+
+/** Great-circle distance in kilometres. */
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function nearest(list: readonly Spot[], lat: number, lng: number) {
+  let best: { spot: Spot; km: number } | undefined;
+  for (const spot of list) {
+    const km = haversineKm(lat, lng, spot.lat, spot.lng);
+    if (!best || km < best.km) best = { spot, km };
+  }
+  return best;
+}
+
+/**
+ * A spot near the midpoint of two players' current places. Featured first,
+ * any category as the fallback, nothing beyond 4 km.
+ */
+export function meetAtFor(placeA: number, placeB: number): MeetAt | undefined {
+  const a = landmarkOf(placeA);
+  const b = landmarkOf(placeB);
+  const lat = (a.lat + b.lat) / 2;
+  const lng = (a.lng + b.lng) / 2;
+
+  const pick =
+    nearest(SPOTS.filter(s => s.featured), lat, lng) ?? nearest(SPOTS, lat, lng);
+  const fallback = pick && pick.km > 4 ? nearest(SPOTS, lat, lng) : pick;
+  if (!fallback || fallback.km > 4) return undefined;
+
+  const { spot } = fallback;
+  return {
+    name: spot.name,
+    // Most rows have no hq_area, so name the closest landmark instead.
+    area: spot.hq_area.trim() || nearestLandmarkName(spot.lat, spot.lng),
+    glyph: GLYPH[spot.category] ?? '\u2615',
+  };
+}
+
+function nearestLandmarkName(lat: number, lng: number): string {
+  let best = LANDMARKS[0];
+  let bestKm = Infinity;
+  for (const mark of LANDMARKS) {
+    const km = haversineKm(lat, lng, mark.lat, mark.lng);
+    if (km < bestKm) { bestKm = km; best = mark; }
+  }
+  return best.name;
+}
 
 /** Timestamps arrive as microseconds since the epoch, in a bigint. */
 export const msOf = (ts: { microsSinceUnixEpoch: bigint }): number =>
@@ -163,6 +232,7 @@ export function rankedMatches(
   echoes: readonly EchoRow[],
   players: readonly PlayerRow[],
   companies: readonly CompanyRow[] = [],
+  myPlace = 0,
 ): Match[] {
   if (myEchoId === undefined) return [];
   const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
@@ -182,6 +252,7 @@ export function rankedMatches(
         placeName: landmarkOf(row.placeId).name,
         isHost: hostEchoId !== undefined && otherEchoId === hostEchoId,
         badge: badgeOf(other, companies),
+        meetAt: meetAtFor(myPlace, other?.currentPlace ?? 0),
       };
     })
     .sort((a, b) => b.score - a.score);
