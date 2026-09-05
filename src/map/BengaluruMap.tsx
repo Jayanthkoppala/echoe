@@ -71,6 +71,42 @@ interface BengaluruMapProps {
 
 const AGENTS_SOURCE_ID = 'agents';
 
+const RECOLOUR: [string, string, unknown][] = [
+  ['background', 'background-color', '#0b120e'],
+  ['water', 'fill-color', '#1c4b6b'],
+  ['waterway', 'line-color', '#2a6a92'],
+  ['water_name', 'text-color', '#8fc3e6'],
+  ['water_name', 'text-halo-color', '#0b120e'],
+  ['landcover_wood', 'fill-color', '#1f4a2c'],
+  ['landcover_wood', 'fill-opacity', 0.85],
+  ['landuse_park', 'fill-color', '#22522f'],
+  ['landuse_park', 'fill-opacity', 0.85],
+  ['landuse_residential', 'fill-color', '#121a15'],
+  ['building', 'fill-color', '#1a241e'],
+  ['building', 'fill-outline-color', '#2a3830'],
+  ['highway_path', 'line-color', '#3b463f'],
+  ['highway_minor', 'line-color', '#3d4842'],
+  ['highway_major_subtle', 'line-color', '#6a776f'],
+  ['highway_major_casing', 'line-color', 'rgba(0,0,0,0.6)'],
+  ['highway_major_inner', 'line-color', '#aeb9b1'],
+  ['highway_motorway_casing', 'line-color', 'rgba(0,0,0,0.6)'],
+  ['highway_motorway_inner', 'line-color', '#d5dcd7'],
+  ['highway_motorway_subtle', 'line-color', '#6a776f'],
+  ['railway', 'line-color', '#4a5750'],
+  ['railway_transit', 'line-color', '#4a5750'],
+  ['railway_minor', 'line-color', '#4a5750'],
+  ['highway_name_other', 'text-color', 'rgba(220,228,222,0.85)'],
+  ['highway_name_other', 'text-halo-color', 'rgba(0,0,0,0.9)'],
+  ['highway_name_motorway', 'text-color', '#e8ede9'],
+  ['place_other', 'text-color', 'rgba(230,236,232,0.8)'],
+  ['place_suburb', 'text-color', 'rgba(230,236,232,0.85)'],
+  ['place_village', 'text-color', 'rgba(230,236,232,0.85)'],
+  ['place_town', 'text-color', '#f2f6f3'],
+  ['place_city', 'text-color', '#f2f6f3'],
+  ['place_city_large', 'text-color', '#f2f6f3'],
+  ['boundary_state', 'line-color', '#3b463f'],
+];
+
 export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -111,6 +147,51 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
     }
 
     map.on('load', () => {
+      // Recolour OpenFreeMap's monochrome dark style so the city reads:
+      // greenery green, water blue, roads light, ground a deep green-black.
+      // Layer ids come from the style itself; unknown ids are skipped.
+      for (const [layerId, prop, value] of RECOLOUR) {
+        if (map.getLayer(layerId)) map.setPaintProperty(layerId, prop as never, value as never);
+      }
+      // The wood layer paints with a sprite pattern the style never ships
+      // ("wood-pattern" warning); a pattern also overrides fill-color. Drop it.
+      if (map.getLayer('landcover_wood')) {
+        map.setPaintProperty('landcover_wood', 'fill-pattern', undefined as never);
+      }
+      // Bengaluru's parks live in OpenMapTiles' `park` source layer and its
+      // grass and scrub in `landcover`; the dark style only paints `landuse`
+      // class=park, which is why Cubbon Park and Lalbagh stayed black.
+      const vectorSource = (map.getStyle().layers ?? []).find(
+        l => (l as { 'source-layer'?: string })['source-layer'] === 'water'
+      ) as { source?: string } | undefined;
+      const src = vectorSource?.source ?? 'openmaptiles';
+      const beforeGreen = map.getLayer('waterway') ? 'waterway' : undefined;
+      if (!map.getLayer('echoe-landcover')) {
+        map.addLayer(
+          {
+            id: 'echoe-landcover',
+            type: 'fill',
+            source: src,
+            'source-layer': 'landcover',
+            filter: ['match', ['get', 'class'], ['grass', 'wood', 'farmland', 'scrub', 'wetland'], true, false],
+            paint: { 'fill-color': '#1d452a', 'fill-opacity': 0.7 },
+          },
+          beforeGreen
+        );
+      }
+      if (!map.getLayer('echoe-park')) {
+        map.addLayer(
+          {
+            id: 'echoe-park',
+            type: 'fill',
+            source: src,
+            'source-layer': 'park',
+            paint: { 'fill-color': '#245a33', 'fill-opacity': 0.8 },
+          },
+          beforeGreen
+        );
+      }
+
       // The dark style has no 3D layer, so add our own from the style's own
       // building source. Verified against maplibre display-buildings-in-3d.
       const styleLayers = map.getStyle().layers ?? [];
