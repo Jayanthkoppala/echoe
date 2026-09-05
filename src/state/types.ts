@@ -168,6 +168,14 @@ export interface RunLimits {
 }
 
 /** One line a connected coding agent wrote about the day, from `agent_memory`. */
+/** What the coding agent has written so far, read live from the tables. */
+export interface AgentStages {
+  persona: boolean;
+  building: boolean;
+  memory: boolean;
+  joined: boolean;
+}
+
 export interface AgentNote {
   id: string;
   /** YYYY-MM-DD, as the sending machine saw it. */

@@ -122,7 +122,7 @@ STEP 4 OF 5: MEMORY
 Send three to eight one-line facts about what I have worked on recently, from your memory of me and from the repository: what I built, what I decided, what I prefer, what I avoid. One fact per line, no secrets, no file paths, no code. Save with echoe_add_memory, the lines joined by newlines as "notes".
 
 STEP 5 OF 5: CONFIRM
-Call echoe_read again and check that persona, building and memory are all there. Then tell me my Echoe is ready and that I should open echoe.world.
+Call echoe_read again and check that persona, building and memory are all there. Then tell me my Echoe is ready, and that the only thing left is mine: on echoe.world, one line on what I want from ${eventTitle} and a LinkedIn or X link on the event screen.
 
 RULES
 Do not save anything I have not seen. Do not invent facts about me or the project. If the persona instructions tell you to ask me three questions first, ask them and wait for my answers.`;

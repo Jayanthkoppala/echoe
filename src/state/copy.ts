@@ -82,6 +82,9 @@ export const AGENT_MCP_WHY =
 /** Hosted MCP: api/mcp/[token].js speaks the same JSON-RPC as `npx echoe-connect mcp`, nothing to install. */
 export const MCP_BASE = 'https://www.echoe.world/mcp'; // the apex 308s to www, and MCP clients do not follow redirects on POST
 
+/** The event the Connect screen stages towards. ponytail: one event; pick from events.json when there are two. */
+export const FEATURED_EVENT = { id: 'spacetimedb-midnight-moonshot', title: 'Midnight Moonshot' };
+
 /** The one thing a player pastes into their agent. The document at that URL carries every step. */
 export const agentOnboardPaste = (token: string): string =>
   `Fetch ${MCP_BASE}/${token}/onboard and follow it exactly, step by step. Show me each text before you save it.`;

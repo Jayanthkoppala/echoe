@@ -21,7 +21,7 @@ import { TalksScreen } from './screens/TalksScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
 
-import { FREE_CONVERSATIONS, behaviourFrom } from './state/copy';
+import { FREE_CONVERSATIONS, behaviourFrom, FEATURED_EVENT } from './state/copy';
 import { startOpenRouterLink, takeOpenRouterCode } from './state/openrouter';
 import { logout } from './state/session';
 import type { DbConnection } from './module_bindings';
@@ -155,7 +155,8 @@ function App() {
   const hadEcho = useRef(Boolean(myEchoRow));
   useEffect(() => {
     const has = Boolean(myEchoRow);
-    const agentWroteIt = has && !hadEcho.current && (screen === 'create' || screen === 'connect');
+    // Connect stays put on purpose: it shows the stages landing one by one.
+    const agentWroteIt = has && !hadEcho.current && screen === 'create';
     if ((screen === 'join' && has) || agentWroteIt) setScreen('world');
     hadEcho.current = has;
   }, [screen, myEchoRow]);
@@ -527,6 +528,14 @@ function App() {
           agentNotes={agentNotes}
           onToast={setToast}
           backTo={connectFrom}
+          stages={{
+            persona: Boolean(myEchoRow?.persona),
+            building: myEventBuildByEvent.has(FEATURED_EVENT.id),
+            memory: agentNotes.length > 0,
+            joined: myEvents.has(FEATURED_EVENT.id),
+          }}
+          hasEcho={Boolean(myEchoRow)}
+          onJoinEvent={() => openJoinEvent(FEATURED_EVENT.id, FEATURED_EVENT.title, 'connect')}
         />
       )}
       {screen === 'talks' && (

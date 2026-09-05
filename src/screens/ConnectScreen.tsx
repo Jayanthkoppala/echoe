@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { TopBar } from '../components/TopBar';
 import { AGENT_MCP_WHY, AGENT_TOKEN_KEY, agentOnboardPaste, dayChip } from '../state/copy';
-import type { AgentNote, ScreenName, ScreenProps } from '../state/types';
+import { FEATURED_EVENT } from '../state/copy';
+import type { AgentNote, AgentStages, ScreenName, ScreenProps } from '../state/types';
 
 interface ConnectScreenProps extends ScreenProps {
   agentNotes: AgentNote[];
   onToast: (message: string) => void;
   backTo: ScreenName;
+  stages: AgentStages;
+  hasEcho: boolean;
+  onJoinEvent: () => void;
 }
 
 const newToken = (): string => crypto.randomUUID().replace(/-/g, '');
@@ -26,14 +30,17 @@ function selectAll(el: HTMLElement | null) {
  * carries every step (read, persona, building, memory, confirm), so nothing is
  * installed and nothing is restarted.
  */
-export function ConnectScreen({ actions, go, agentNotes, onToast, backTo }: ConnectScreenProps) {
+export function ConnectScreen({ actions, go, agentNotes, onToast, backTo, stages, hasEcho, onJoinEvent }: ConnectScreenProps) {
   const [token, setToken] = useState('');
   const pasteRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(AGENT_TOKEN_KEY);
     if (saved) {
+      // Re-register every visit: the link row may be gone (a reset, a new
+      // database) while the token lives on in this browser. The reducer upserts.
       setToken(saved);
+      actions.onSetAgentLink(saved);
       return;
     }
     const fresh = newToken();
@@ -87,11 +94,29 @@ export function ConnectScreen({ actions, go, agentNotes, onToast, backTo }: Conn
           </button>
         </div>
 
+        <div className="label">What lands, as it lands</div>
+        <ol className="stages">
+          <li className={stages.persona ? 'done' : ''}>Your Echoe, in your voice</li>
+          <li className={stages.building ? 'done' : ''}>What you are building, for {FEATURED_EVENT.title}</li>
+          <li className={stages.memory ? 'done' : ''}>What you have been working on lately</li>
+          <li className={stages.joined ? 'done' : ''}>
+            {stages.joined ? (
+              `In the room at ${FEATURED_EVENT.title}`
+            ) : (
+              <>
+                You: one line on what you want from {FEATURED_EVENT.title}, and a link.{' '}
+                <button className="link-btn" onClick={onJoinEvent} disabled={!stages.building}>
+                  Join {FEATURED_EVENT.title}
+                </button>
+              </>
+            )}
+          </li>
+        </ol>
         <p className="connect-status">{status}</p>
       </div>
       <div className="footer">
-        <button className="primary" onClick={() => go(backTo)}>
-          Done
+        <button className="primary" onClick={() => go(hasEcho ? 'world' : backTo)}>
+          {hasEcho ? 'To the map' : 'Done'}
         </button>
       </div>
     </div>
