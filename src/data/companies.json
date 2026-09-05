@@ -1,0 +1,353 @@
+[
+  {
+    "name": "Flipkart",
+    "domain": "flipkart.com",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.69,
+    "category": "ecommerce",
+    "logo": "https://www.google.com/s2/favicons?domain=flipkart.com&sz=128"
+  },
+  {
+    "name": "Myntra",
+    "domain": "myntra.com",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.69,
+    "category": "ecommerce",
+    "logo": "https://www.google.com/s2/favicons?domain=myntra.com&sz=128"
+  },
+  {
+    "name": "Swiggy",
+    "domain": "swiggy.com",
+    "hq_area": "Kadubeesanahalli",
+    "lat": 12.94,
+    "lng": 77.7,
+    "category": "foodtech",
+    "logo": "https://www.google.com/s2/favicons?domain=swiggy.com&sz=128"
+  },
+  {
+    "name": "Ola",
+    "domain": "olacabs.com",
+    "hq_area": "Koramangala",
+    "lat": 12.93,
+    "lng": 77.62,
+    "category": "mobility",
+    "logo": "https://www.google.com/s2/favicons?domain=olacabs.com&sz=128"
+  },
+  {
+    "name": "Razorpay",
+    "domain": "razorpay.com",
+    "hq_area": "Koramangala",
+    "lat": 12.93,
+    "lng": 77.62,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=razorpay.com&sz=128"
+  },
+  {
+    "name": "PhonePe",
+    "domain": "phonepe.com",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.68,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=phonepe.com&sz=128"
+  },
+  {
+    "name": "Freshworks",
+    "domain": "freshworks.com",
+    "hq_area": "Kadubeesanahalli",
+    "lat": 12.94,
+    "lng": 77.7,
+    "category": "saas",
+    "logo": "https://www.google.com/s2/favicons?domain=freshworks.com&sz=128"
+  },
+  {
+    "name": "Zerodha",
+    "domain": "zerodha.com",
+    "hq_area": "JP Nagar",
+    "lat": 12.9,
+    "lng": 77.59,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=zerodha.com&sz=128"
+  },
+  {
+    "name": "CRED",
+    "domain": "cred.club",
+    "hq_area": "Koramangala",
+    "lat": 12.93,
+    "lng": 77.62,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=cred.club&sz=128"
+  },
+  {
+    "name": "Meesho",
+    "domain": "meesho.com",
+    "hq_area": "Koramangala",
+    "lat": 12.93,
+    "lng": 77.62,
+    "category": "ecommerce",
+    "logo": "https://www.google.com/s2/favicons?domain=meesho.com&sz=128"
+  },
+  {
+    "name": "BYJU'S",
+    "domain": "byjus.com",
+    "hq_area": "Bannerghatta Road",
+    "lat": 12.9,
+    "lng": 77.6,
+    "category": "edtech",
+    "logo": "https://www.google.com/s2/favicons?domain=byjus.com&sz=128"
+  },
+  {
+    "name": "Unacademy",
+    "domain": "unacademy.com",
+    "hq_area": "Indiranagar",
+    "lat": 12.97,
+    "lng": 77.64,
+    "category": "edtech",
+    "logo": "https://www.google.com/s2/favicons?domain=unacademy.com&sz=128"
+  },
+  {
+    "name": "Vedantu",
+    "domain": "vedantu.com",
+    "hq_area": "HSR Layout",
+    "lat": 12.91,
+    "lng": 77.64,
+    "category": "edtech",
+    "logo": "https://www.google.com/s2/favicons?domain=vedantu.com&sz=128"
+  },
+  {
+    "name": "Dunzo",
+    "domain": "dunzo.com",
+    "hq_area": "Koramangala",
+    "lat": 12.93,
+    "lng": 77.62,
+    "category": "quick-commerce",
+    "logo": "https://www.google.com/s2/favicons?domain=dunzo.com&sz=128"
+  },
+  {
+    "name": "InMobi",
+    "domain": "inmobi.com",
+    "hq_area": "CV Raman Nagar",
+    "lat": 12.98,
+    "lng": 77.66,
+    "category": "adtech",
+    "logo": "https://www.google.com/s2/favicons?domain=inmobi.com&sz=128"
+  },
+  {
+    "name": "Practo",
+    "domain": "practo.com",
+    "hq_area": "Koramangala",
+    "lat": 12.94,
+    "lng": 77.61,
+    "category": "healthtech",
+    "logo": "https://www.google.com/s2/favicons?domain=practo.com&sz=128"
+  },
+  {
+    "name": "ShareChat",
+    "domain": "sharechat.com",
+    "hq_area": "Domlur",
+    "lat": 12.96,
+    "lng": 77.64,
+    "category": "social",
+    "logo": "https://www.google.com/s2/favicons?domain=sharechat.com&sz=128"
+  },
+  {
+    "name": "Slice",
+    "domain": "sliceit.com",
+    "hq_area": "Domlur",
+    "lat": 12.96,
+    "lng": 77.64,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=sliceit.com&sz=128"
+  },
+  {
+    "name": "Groww",
+    "domain": "groww.in",
+    "hq_area": "Koramangala",
+    "lat": 12.93,
+    "lng": 77.62,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=groww.in&sz=128"
+  },
+  {
+    "name": "Ather Energy",
+    "domain": "atherenergy.com",
+    "hq_area": "Bellandur",
+    "lat": 12.92,
+    "lng": 77.65,
+    "category": "ev-mobility",
+    "logo": "https://www.google.com/s2/favicons?domain=atherenergy.com&sz=128"
+  },
+  {
+    "name": "Yulu",
+    "domain": "yulu.bike",
+    "hq_area": "HSR Layout",
+    "lat": 12.92,
+    "lng": 77.65,
+    "category": "mobility",
+    "logo": "https://www.google.com/s2/favicons?domain=yulu.bike&sz=128"
+  },
+  {
+    "name": "Licious",
+    "domain": "licious.in",
+    "hq_area": "HSR Layout",
+    "lat": 12.91,
+    "lng": 77.64,
+    "category": "d2c-foodtech",
+    "logo": "https://www.google.com/s2/favicons?domain=licious.in&sz=128"
+  },
+  {
+    "name": "BigBasket",
+    "domain": "bigbasket.com",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.68,
+    "category": "ecommerce",
+    "logo": "https://www.google.com/s2/favicons?domain=bigbasket.com&sz=128"
+  },
+  {
+    "name": "Wipro",
+    "domain": "wipro.com",
+    "hq_area": "Sarjapur Road",
+    "lat": 12.9,
+    "lng": 77.69,
+    "category": "it-services",
+    "logo": "https://www.google.com/s2/favicons?domain=wipro.com&sz=128"
+  },
+  {
+    "name": "MyGate",
+    "domain": "mygate.in",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.68,
+    "category": "proptech",
+    "logo": "https://www.google.com/s2/favicons?domain=mygate.in&sz=128"
+  },
+  {
+    "name": "LeadSquared",
+    "domain": "leadsquared.com",
+    "hq_area": "Domlur",
+    "lat": 12.96,
+    "lng": 77.64,
+    "category": "saas",
+    "logo": "https://www.google.com/s2/favicons?domain=leadsquared.com&sz=128"
+  },
+  {
+    "name": "MoEngage",
+    "domain": "moengage.com",
+    "hq_area": "Domlur",
+    "lat": 12.96,
+    "lng": 77.64,
+    "category": "martech",
+    "logo": "https://www.google.com/s2/favicons?domain=moengage.com&sz=128"
+  },
+  {
+    "name": "Whatfix",
+    "domain": "whatfix.com",
+    "hq_area": "HSR Layout",
+    "lat": 12.91,
+    "lng": 77.64,
+    "category": "saas",
+    "logo": "https://www.google.com/s2/favicons?domain=whatfix.com&sz=128"
+  },
+  {
+    "name": "Netradyne",
+    "domain": "netradyne.com",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.68,
+    "category": "ai-mobility",
+    "logo": "https://www.google.com/s2/favicons?domain=netradyne.com&sz=128"
+  },
+  {
+    "name": "cult.fit",
+    "domain": "cult.fit",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.68,
+    "category": "healthtech",
+    "logo": "https://www.google.com/s2/favicons?domain=cult.fit&sz=128"
+  },
+  {
+    "name": "Ninjacart",
+    "domain": "ninjacart.com",
+    "hq_area": "Sarjapur Road",
+    "lat": 12.9,
+    "lng": 77.69,
+    "category": "agritech",
+    "logo": "https://www.google.com/s2/favicons?domain=ninjacart.com&sz=128"
+  },
+  {
+    "name": "NoBroker",
+    "domain": "nobroker.in",
+    "hq_area": "Bellandur",
+    "lat": 12.92,
+    "lng": 77.68,
+    "category": "proptech",
+    "logo": "https://www.google.com/s2/favicons?domain=nobroker.in&sz=128"
+  },
+  {
+    "name": "Infosys",
+    "domain": "infosys.com",
+    "hq_area": "Electronic City",
+    "lat": 12.84,
+    "lng": 77.66,
+    "category": "it-services",
+    "logo": "https://www.google.com/s2/favicons?domain=infosys.com&sz=128"
+  },
+  {
+    "name": "Observe.AI",
+    "domain": "observe.ai",
+    "hq_area": "Indiranagar",
+    "lat": 12.97,
+    "lng": 77.64,
+    "category": "ai-voicetech",
+    "logo": "https://www.google.com/s2/favicons?domain=observe.ai&sz=128"
+  },
+  {
+    "name": "Increff",
+    "domain": "increff.com",
+    "hq_area": "HSR Layout",
+    "lat": 12.91,
+    "lng": 77.64,
+    "category": "retail-saas",
+    "logo": "https://www.google.com/s2/favicons?domain=increff.com&sz=128"
+  },
+  {
+    "name": "FinBox",
+    "domain": "finbox.in",
+    "hq_area": "Indiranagar",
+    "lat": 12.97,
+    "lng": 77.64,
+    "category": "fintech-infra",
+    "logo": "https://www.google.com/s2/favicons?domain=finbox.in&sz=128"
+  },
+  {
+    "name": "KreditBee",
+    "domain": "kreditbee.in",
+    "hq_area": "HSR Layout",
+    "lat": 12.91,
+    "lng": 77.64,
+    "category": "fintech",
+    "logo": "https://www.google.com/s2/favicons?domain=kreditbee.in&sz=128"
+  },
+  {
+    "name": "Cuemath",
+    "domain": "cuemath.com",
+    "hq_area": "Bellandur",
+    "lat": 12.93,
+    "lng": 77.68,
+    "category": "edtech",
+    "logo": "https://www.google.com/s2/favicons?domain=cuemath.com&sz=128"
+  },
+  {
+    "name": "Zetwerk",
+    "domain": "zetwerk.com",
+    "hq_area": "HSR Layout",
+    "lat": 12.91,
+    "lng": 77.64,
+    "category": "manufacturing-marketplace",
+    "logo": "https://www.google.com/s2/favicons?domain=zetwerk.com&sz=128"
+  }
+]
