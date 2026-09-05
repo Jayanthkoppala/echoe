@@ -1,0 +1,156 @@
+// Verified against MapLibre GL JS docs via Context7 (/maplibre/maplibre-gl-js):
+//  - map init with center/zoom/pitch/bearing (set-pitch-and-bearing.html)
+//  - GeoJSON source + circle/symbol layer (draw-a-circle.html, draw-geojson-points.html)
+//  - updating a GeoJSON source every frame with setData (animate-a-point.html)
+//  - Marker with custom HTML element (add-custom-icons-with-markers.html)
+//  - fill-extrusion 3D buildings: OpenFreeMap's "liberty" style already ships
+//    a "building-3d" fill-extrusion layer (source-layer "building", minzoom 14)
+//    confirmed by fetching the style JSON directly, so no extra layer is added
+//  - style JSON / OpenFreeMap tiles: liberty/dark style URLs confirmed live
+//    with `curl -sI` (both return HTTP 200)
+import { useEffect, useRef } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { LANDMARKS } from '../data/landmarks';
+import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
+
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+const CENTER: LngLat = [77.6, 12.97];
+
+export interface AgentSpec {
+  id: string;
+  label: string;
+  colour: string;
+  fromPlace: string;
+  toPlace: string;
+  departMs: number;
+  arriveMs: number;
+  isMine?: boolean;
+}
+
+interface BengaluruMapProps {
+  agents: AgentSpec[];
+  onPlaceTap?: (placeId: string) => void;
+}
+
+const AGENTS_SOURCE_ID = 'agents';
+
+export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const agentsRef = useRef<AgentSpec[]>(agents);
+  const legsRef = useRef<Record<string, Leg>>({});
+  const rafRef = useRef<number>(0);
+
+  agentsRef.current = agents;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: STYLE_URL,
+      center: CENTER,
+      zoom: 12.5,
+      pitch: 55,
+      bearing: -15,
+    });
+    mapRef.current = map;
+
+    const markerEls: HTMLElement[] = [];
+    for (const place of LANDMARKS) {
+      const el = document.createElement('div');
+      el.className = 'landmark-marker';
+      el.style.cssText =
+        'display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:22px;text-shadow:0 1px 3px rgba(0,0,0,0.6);';
+      el.innerHTML = `<span>${place.icon}</span><span style="font-size:10px;color:#fff;background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;white-space:nowrap;">${place.name}</span>`;
+      el.addEventListener('click', () => onPlaceTap?.(place.id));
+      markerEls.push(el);
+      new maplibregl.Marker({ element: el })
+        .setLngLat([place.lng, place.lat])
+        .addTo(map);
+    }
+
+    map.on('load', () => {
+      map.addSource(AGENTS_SOURCE_ID, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+
+      map.addLayer({
+        id: 'agents-circle',
+        type: 'circle',
+        source: AGENTS_SOURCE_ID,
+        paint: {
+          'circle-radius': ['case', ['get', 'isMine'], 9, 6],
+          'circle-color': ['get', 'colour'],
+          'circle-stroke-width': ['case', ['get', 'isMine'], 3, 1.5],
+          'circle-stroke-color': '#ffffff',
+        },
+      });
+
+      map.addLayer({
+        id: 'agents-label',
+        type: 'symbol',
+        source: AGENTS_SOURCE_ID,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-font': ['Noto Sans Regular'],
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-size': 12,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#000000',
+          'text-halo-width': 1,
+        },
+      });
+
+      const tick = () => {
+        const now = Date.now();
+        const source = map.getSource(AGENTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+        if (source) {
+          const features = agentsRef.current.map((agent) => {
+            let leg = legsRef.current[agent.id];
+            if (!leg) {
+              const from = LANDMARKS.find((l) => l.id === agent.fromPlace);
+              const to = LANDMARKS.find((l) => l.id === agent.toPlace);
+              const fromCoord: LngLat = from ? [from.lng, from.lat] : [0, 0];
+              const toCoord: LngLat = to ? [to.lng, to.lat] : [0, 0];
+              leg = {
+                polyline: routeFor(agent.fromPlace, agent.toPlace, fromCoord, toCoord),
+                departMs: agent.departMs,
+                arriveMs: agent.arriveMs,
+              };
+              legsRef.current[agent.id] = leg;
+            }
+            const [lng, lat] = agentPosition(leg, now);
+            return {
+              type: 'Feature' as const,
+              geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+              properties: {
+                colour: agent.colour,
+                label: agent.label,
+                isMine: !!agent.isMine,
+              },
+            };
+          });
+          source.setData({ type: 'FeatureCollection', features });
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+    });
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      markerEls.length = 0;
+      map.remove();
+      mapRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+}

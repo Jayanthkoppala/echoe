@@ -3,11 +3,32 @@
 
 /* eslint-disable */
 /* tslint:disable */
-import { type Infer as __Infer } from 'spacetimedb';
+import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import AddReducer from '../add_reducer';
-import SayHelloReducer from '../say_hello_reducer';
+import ActReducer from "../act_reducer";
+import CorrectReducer from "../correct_reducer";
+import CreateEchoReducer from "../create_echo_reducer";
+import EndRunReducer from "../end_run_reducer";
+import JoinReducer from "../join_reducer";
+import PauseRunReducer from "../pause_run_reducer";
+import RateLineReducer from "../rate_line_reducer";
+import ResumeRunReducer from "../resume_run_reducer";
+import SetLlmConfigReducer from "../set_llm_config_reducer";
+import SetMissionReducer from "../set_mission_reducer";
+import StartRunReducer from "../start_run_reducer";
+import TravelReducer from "../travel_reducer";
 
-export type AddParams = __Infer<typeof AddReducer>;
-export type SayHelloParams = __Infer<typeof SayHelloReducer>;
+export type ActParams = __Infer<typeof ActReducer>;
+export type CorrectParams = __Infer<typeof CorrectReducer>;
+export type CreateEchoParams = __Infer<typeof CreateEchoReducer>;
+export type EndRunParams = __Infer<typeof EndRunReducer>;
+export type JoinParams = __Infer<typeof JoinReducer>;
+export type PauseRunParams = __Infer<typeof PauseRunReducer>;
+export type RateLineParams = __Infer<typeof RateLineReducer>;
+export type ResumeRunParams = __Infer<typeof ResumeRunReducer>;
+export type SetLlmConfigParams = __Infer<typeof SetLlmConfigReducer>;
+export type SetMissionParams = __Infer<typeof SetMissionReducer>;
+export type StartRunParams = __Infer<typeof StartRunReducer>;
+export type TravelParams = __Infer<typeof TravelReducer>;
+

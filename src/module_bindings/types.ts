@@ -8,9 +8,132 @@ import {
   t as __t,
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
-} from 'spacetimedb';
+} from "spacetimedb";
 
-export const Person = __t.object('Person', {
-  name: __t.string(),
+export const AgentTravel = __t.object("AgentTravel", {
+  id: __t.u64(),
+  echoId: __t.u64(),
+  fromPlace: __t.u8(),
+  toPlace: __t.u8(),
+  departTs: __t.timestamp(),
+  arriveTs: __t.timestamp(),
 });
-export type Person = __Infer<typeof Person>;
+export type AgentTravel = __Infer<typeof AgentTravel>;
+
+export const Conversation = __t.object("Conversation", {
+  id: __t.u64(),
+  echoA: __t.u64(),
+  echoB: __t.u64(),
+  placeId: __t.u8(),
+  replies: __t.u8(),
+  createdAt: __t.timestamp(),
+});
+export type Conversation = __Infer<typeof Conversation>;
+
+export const Correction = __t.object("Correction", {
+  id: __t.u64(),
+  lineId: __t.u64(),
+  owner: __t.identity(),
+  originalText: __t.string(),
+  shouldHaveSaid: __t.string(),
+  behaviourChange: __t.string(),
+  appliedAt: __t.timestamp(),
+});
+export type Correction = __Infer<typeof Correction>;
+
+export const Echo = __t.object("Echo", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  persona: __t.string(),
+  behaviourNotes: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type Echo = __Infer<typeof Echo>;
+
+export const LlmConfig = __t.object("LlmConfig", {
+  id: __t.u8(),
+  apiKey: __t.string(),
+  model: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type LlmConfig = __Infer<typeof LlmConfig>;
+
+export const Mission = __t.object("Mission", {
+  id: __t.u8(),
+  text: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type Mission = __Infer<typeof Mission>;
+
+export const Place = __t.object("Place", {
+  id: __t.u8(),
+  name: __t.string(),
+  lng: __t.f64(),
+  lat: __t.f64(),
+});
+export type Place = __Infer<typeof Place>;
+
+export const Player = __t.object("Player", {
+  identity: __t.identity(),
+  name: __t.string(),
+  avatar: __t.string(),
+  online: __t.bool(),
+  currentPlace: __t.u8(),
+  credits: __t.u32(),
+  joinedAt: __t.timestamp(),
+});
+export type Player = __Infer<typeof Player>;
+
+export const Receipt = __t.object("Receipt", {
+  id: __t.u64(),
+  runOwner: __t.identity(),
+  kind: __t.string(),
+  placeId: __t.u8(),
+  text: __t.string(),
+  creditCost: __t.u32(),
+  createdAt: __t.timestamp(),
+});
+export type Receipt = __Infer<typeof Receipt>;
+
+export const Run = __t.object("Run", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  echoId: __t.u64(),
+  goal: __t.string(),
+  maxPeople: __t.u8(),
+  repliesPerPerson: __t.u8(),
+  creditCap: __t.u32(),
+  allowedActions: __t.string(),
+  status: __t.string(),
+  startedAt: __t.timestamp(),
+  peopleMet: __t.u32(),
+  placesVisited: __t.u32(),
+  built: __t.u32(),
+  creditsSpent: __t.u32(),
+});
+export type Run = __Infer<typeof Run>;
+
+export const TalkJob = __t.object("TalkJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  conversationId: __t.u64(),
+});
+export type TalkJob = __Infer<typeof TalkJob>;
+
+export const TranscriptLine = __t.object("TranscriptLine", {
+  id: __t.u64(),
+  conversationId: __t.u64(),
+  speakerEchoId: __t.u64(),
+  text: __t.string(),
+  isAi: __t.bool(),
+  feedback: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type TranscriptLine = __Infer<typeof TranscriptLine>;
+
+export const WorldTick = __t.object("WorldTick", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type WorldTick = __Infer<typeof WorldTick>;
+
