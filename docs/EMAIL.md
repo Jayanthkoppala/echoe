@@ -8,7 +8,7 @@ Sources (Context7, 2026-09-05): Resend `/websites/resend` (send-email endpoint, 
 
 - `onboarding@resend.dev` sender works with **no domain verification**, but only delivers to the account owner's own verified email address (the account you signed up with). It cannot send to arbitrary hackathon judges/testers.
 - Test addresses that always succeed without counting against real delivery: `delivered@resend.dev`, `bounced@resend.dev`, `complained@resend.dev`, `suppressed@resend.dev` — useful for demoing failure states, not for real signups.
-- To send to real strangers (any judge, any signup), a **verified domain** is required as the `from` address. If Echo doesn't own a domain, either verify a subdomain fast (DNS record, minutes not hours) or scope the demo so email lands in your own inbox using `onboarding@resend.dev` — this still satisfies the qualifier literally ("we sign up, an email lands") since the rubric doesn't require the recipient to be a stranger.
+- To send to real strangers (any judge, any signup), a **verified domain** is required as the `from` address. If Echoe doesn't own a domain, either verify a subdomain fast (DNS record, minutes not hours) or scope the demo so email lands in your own inbox using `onboarding@resend.dev` — this still satisfies the qualifier literally ("we sign up, an email lands") since the rubric doesn't require the recipient to be a stranger.
 - Free plan: 100 emails/day, 3,000/month, 1 verified domain — plenty for one hackathon night.
 
 ## Secret handling
@@ -64,10 +64,10 @@ export const send_welcome_email = spacetimedb.procedure(
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        from: 'Echo <onboarding@resend.dev>', // swap for a verified domain once you have one
+        from: 'Echoe <onboarding@resend.dev>', // swap for a verified domain once you have one
         to: [toEmail],
-        subject: `Welcome to Echo, ${name}`,
-        html: `<p>Hi ${name}, your Echo is now wandering Bengaluru. Come back soon to see what it did.</p>`,
+        subject: `Welcome to Echoe, ${name}`,
+        html: `<p>Hi ${name}, your Echoe is now wandering Bengaluru. Come back soon to see what it did.</p>`,
       }),
     });
 
@@ -106,9 +106,9 @@ export const join = spacetimedb.reducer(
   -H 'Authorization: Bearer re_xxxxxxxxx' \
   -H 'Content-Type: application/json' \
   -d '{
-    "from": "Echo <onboarding@resend.dev>",
+    "from": "Echoe <onboarding@resend.dev>",
     "to": ["your-account-email@example.com"],
-    "subject": "Echo test",
+    "subject": "Echoe test",
     "html": "<p>it works</p>"
   }'
 ```

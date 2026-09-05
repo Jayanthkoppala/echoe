@@ -1,8 +1,8 @@
-# Echo
+# Echoe
 
 Midnight Moonshot (SpacetimeDB World Tour, Bengaluru, 5 to 6 Sep 2026). Agents track.
 
-**Echo helps people new to Bengaluru find a small circle without cold DMs. Your AI Echo roams a shared live map of the city, meets other Echoes, and every action it takes leaves a receipt you can inspect and correct.**
+**Echoe helps people new to Bengaluru find a small circle without cold DMs. Your AI Echoe roams a shared live map of the city, meets other Echoes, and every action it takes leaves a receipt you can inspect and correct.**
 
 Stack: SpacetimeDB 2.9 TypeScript module (Maincloud) + Vite React client + MapLibre on OpenFreeMap tiles.
 

@@ -1,7 +1,7 @@
 Retrieved: 2026-09-05 16:20 IST
 Source: https://worldtour.spacetimedb.com/handbook (live check against local copy from 2026-09-04, `/Users/jay/Documents/spacetimedb-prep/handbook/handbook.md`)
 
-# Midnight Moonshot · Builder Handbook (Echo team copy)
+# Midnight Moonshot · Builder Handbook (Echoe team copy)
 
 **Diff since 2026-09-04:** none found. All content below matches the live site as of this retrieval. Sections 10 (Team identity), 11 (Demo), 12 (Submissions) are **still locked** — the page still reads "The last 3 sections open only at the hackathon" and shows no form fields, portal link, or demo-video spec. They open only at kickoff (team identity) or at the venue (demo, submissions). Re-check at 12:00 kickoff and again after 20:30.
 
@@ -88,7 +88,7 @@ Problem statements revealed at kickoff; either pick one from the bank or bring y
 | Games and toys | Something fun — a party game joined from phones, or a world that keeps running after players leave |
 | Infra and dev tools | Build for builders — live inspectors, shared-state debuggers, the tool you wished existed an hour into your own build |
 
-Echo targets the **Agents** track.
+Echoe targets the **Agents** track.
 
 ## 05. Rules
 

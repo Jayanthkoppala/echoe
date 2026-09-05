@@ -1,8 +1,8 @@
-# SpacetimeDB 2.9 Field Manual — Echo
+# SpacetimeDB 2.9 Field Manual — Echoe
 
 Written for the Midnight Moonshot hackathon build (SpacetimeDB 2.9.0, TypeScript server module + React/Vite client, official `react-ts` template). Every API claim below was checked against Context7's `/websites/spacetimedb` index (current for 2.9) with `mcp__context7__query-docs`. Source URL is cited under each block. Cross-referenced against the local prep file `/Users/jay/Documents/spacetimedb-prep/RESEARCH.md` (CLI-verified locally at 2.9.0); disagreements are in the final section.
 
-Product shape: players join a shared Bengaluru world, each spins up an AI "Echo" persona that roams landmarks, talks to other Echoes via an LLM procedure, and leaves inspectable action receipts for the player to review and correct.
+Product shape: players join a shared Bengaluru world, each spins up an AI "Echoe" persona that roams landmarks, talks to other Echoes via an LLM procedure, and leaves inspectable action receipts for the player to review and correct.
 
 ---
 
@@ -205,7 +205,7 @@ Source: https://spacetimedb.com/docs/functions/procedures
 
 Signature is `spacetimedb.procedure(argsSchema, returnSchema, callback)`. A single-type-arg overload also appears in the docs (`spacetimedb.procedure(t.unit(), ctx => {...})`, return type implicit) — prefer the explicit 3-arg form for clarity. Callbacks are synchronous — never `async`/`await`. Return value goes only to the caller, never broadcast.
 
-### Outbound HTTP — this is Echo's LLM call path
+### Outbound HTTP — this is Echoe's LLM call path
 
 ```typescript
 export const ask_ai = spacetimedb.procedure(
@@ -254,7 +254,7 @@ export const privateNoteFilter = spacetimedb.clientVisibilityFilter.sql(
 ```
 Source: https://spacetimedb.com/docs/how-to/rls (TS form cross-checked against Rust/C# equivalents on the same page, all use `:sender`)
 
-Per-user view (own Echo's private reasoning/receipts, for example) — shape confirmed via the Rust example, same idea applies to the TS `spacetimedb.view(options, returnSchema, callback)` form:
+Per-user view (own Echoe's private reasoning/receipts, for example) — shape confirmed via the Rust example, same idea applies to the TS `spacetimedb.view(options, returnSchema, callback)` form:
 ```rust
 #[spacetimedb::view(accessor = my_colleagues, public)]
 fn my_colleagues(ctx: &ViewContext) -> Vec<Colleague> {
@@ -266,7 +266,7 @@ fn my_colleagues(ctx: &ViewContext) -> Vec<Colleague> {
 ```
 Source: https://spacetimedb.com/docs/tables/access-permissions
 
-Use this pattern for "each player only sees their own Echo's raw reasoning trace, everyone sees the public action receipts."
+Use this pattern for "each player only sees their own Echoe's raw reasoning trace, everyone sees the public action receipts."
 
 ---
 
@@ -289,7 +289,7 @@ conn.subscriptionBuilder().subscribe([tables.user, tables.message]);
 ```
 Source: https://spacetimedb.com/docs/clients/typescript
 
-Subscription SQL subset: single table only, whole row only (`SELECT *`), joins capped at 2 tables with both join columns indexed, no `ORDER BY`/`GROUP BY`/`LIMIT`/aggregates, no arithmetic in `WHERE`. Scope every subscription (e.g. `WHERE zone = 'mg-road'`) — fanout is per-client per-transaction, an unscoped `SELECT * FROM echo` pushes every Echo's move to every player.
+Subscription SQL subset: single table only, whole row only (`SELECT *`), joins capped at 2 tables with both join columns indexed, no `ORDER BY`/`GROUP BY`/`LIMIT`/aggregates, no arithmetic in `WHERE`. Scope every subscription (e.g. `WHERE zone = 'mg-road'`) — fanout is per-client per-transaction, an unscoped `SELECT * FROM echo` pushes every Echoe's move to every player.
 
 ---
 

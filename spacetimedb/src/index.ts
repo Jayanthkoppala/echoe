@@ -1,4 +1,4 @@
-// Echo — autonomous Echoes roaming a Bengaluru map.
+// Echoe — autonomous Echoes roaming a Bengaluru map.
 //
 // Design rule that everything below follows: the database owns every state
 // transition. Reducers validate and mutate; the LLM only ever produces text
@@ -33,7 +33,7 @@ const INTENT_TTL_MICROS = 7n * 24n * 3_600_000_000n; // intents expire after 7 d
 const SHARE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const NO_HOST = 0n;
 
-/** Actions a player or an Echo may take, and what each costs in AI credits. */
+/** Actions a player or an Echoe may take, and what each costs in AI credits. */
 const ACTION_COST: Record<string, number> = {
   travel: 0,
   find: 0,
@@ -134,7 +134,7 @@ const place = table(
 
 /**
  * One row per completed or in-flight leg. Written only at leg boundaries, so a
- * roaming Echo costs the network two rows per landmark rather than a position
+ * roaming Echoe costs the network two rows per landmark rather than a position
  * update per frame. Clients interpolate between departTs and arriveTs.
  */
 const agentTravel = table(
@@ -149,7 +149,7 @@ const agentTravel = table(
   }
 );
 
-/** The limits a player set before letting their Echo roam, plus live counters. */
+/** The limits a player set before letting their Echoe roam, plus live counters. */
 const run = table(
   { name: 'run', public: true },
   {
@@ -218,7 +218,7 @@ const transcriptLine = table(
   }
 );
 
-/** One correction folded into the Echo's behaviourNotes and into future prompts. */
+/** One correction folded into the Echoe's behaviourNotes and into future prompts. */
 const correction = table(
   { name: 'correction', public: true },
   {
@@ -448,7 +448,7 @@ function requireRun(ctx: Ctx) {
   return row;
 }
 
-/** The most recent leg for an Echo, or null before its first departure. */
+/** The most recent leg for an Echoe, or null before its first departure. */
 function latestLeg(ctx: Ctx, echoId: bigint) {
   let newest: { id: bigint; toPlace: number; arriveTs: Timestamp } | null = null;
   for (const leg of ctx.db.agentTravel.echoId.filter(echoId)) {
@@ -458,8 +458,8 @@ function latestLeg(ctx: Ctx, echoId: bigint) {
 }
 
 /**
- * Where to walk next. An Echo allowed to `find` heads for a landmark that
- * already holds another running Echo about half the time. Without that bias ten
+ * Where to walk next. An Echoe allowed to `find` heads for a landmark that
+ * already holds another running Echoe about half the time. Without that bias ten
  * landmarks scatter a handful of agents and they effectively never meet again
  * after their first parting, which is the wrong simulation and a dead demo.
  */
@@ -478,7 +478,7 @@ function pickNextPlace(ctx: Ctx, runRow: ReturnType<typeof requireRun>, current:
     }
   }
   if (isAllowed(runRow.allowedActions, 'find')) {
-    // Only the lower-numbered Echo of any pair gives chase. If both chased,
+    // Only the lower-numbered Echoe of any pair gives chase. If both chased,
     // two Echoes would swap landmarks every tick and never actually arrive
     // together, which is exactly what the first version of this did.
     const targets: number[] = [];
@@ -532,7 +532,7 @@ export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
   if (row) ctx.db.player.identity.update({ ...row, online: false });
 });
 
-// ─── Screens 1 and 2: join, create Echo ──────────────────────────────────────
+// ─── Screens 1 and 2: join, create Echoe ──────────────────────────────────────
 
 export const join = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
   const clean = trimmed(name, 40, 'name');
@@ -795,8 +795,8 @@ export const rateLine = spacetimedb.reducer(
 
 /**
  * A correction never rewrites the receipt or the transcript. It appends a note
- * to the Echo's behaviourNotes, which the next prompt carries, so the change is
- * visible in what the Echo says from here on and nowhere in the record of what
+ * to the Echoe's behaviourNotes, which the next prompt carries, so the change is
+ * visible in what the Echoe says from here on and nowhere in the record of what
  * it already said.
  */
 export const correct = spacetimedb.reducer(
@@ -873,11 +873,11 @@ export const setMission = spacetimedb.reducer({ text: t.string() }, (ctx, { text
 // ─── The world tick ──────────────────────────────────────────────────────────
 
 /**
- * Every 5 seconds, advance each running Echo by at most one state change:
+ * Every 5 seconds, advance each running Echoe by at most one state change:
  *
  *   in transit                     -> nothing
  *   arrived but not recorded       -> land it, bank a receipt, count the place
- *   standing inside its dwell      -> try to meet a co-located Echo, else build
+ *   standing inside its dwell      -> try to meet a co-located Echoe, else build
  *   dwell elapsed                  -> depart for a random other landmark
  *
  * Conversations are created, paid for and counted here. Only the *words* are
@@ -898,7 +898,7 @@ export const tick = spacetimedb.reducer(
     }
 
     // Iterate over a snapshot, but re-read each row before acting on it. One
-    // Echo's turn can write to another Echo's run (a conversation bumps
+    // Echoe's turn can write to another Echoe's run (a conversation bumps
     // peopleMet on both sides), and acting on the snapshot would silently
     // roll that write back.
     for (const stale of [...ctx.db.run.iter()]) {
@@ -945,7 +945,7 @@ export const tick = spacetimedb.reducer(
 
       // Standing at a landmark: socialise, or build, or leave. Before the first
       // departure there is no leg, so the run's own start time anchors the dwell
-      // and every Echo gets one chance to talk where it began.
+      // and every Echoe gets one chance to talk where it began.
       const here = leg ? leg.toPlace : playerRow.currentPlace;
       const standingSince = leg ? micros(leg.arriveTs) : micros(runRow.startedAt);
 
@@ -1010,7 +1010,7 @@ function tryConverse(
     if (!otherEcho) continue;
     const isHost = runRow.hostEchoId !== NO_HOST && otherEcho.id === runRow.hostEchoId;
 
-    // A host is reachable even when their own run is over: their Echo stands
+    // A host is reachable even when their own run is over: their Echoe stands
     // at its last place and receives visitors. Anyone else needs a live run.
     const otherRunRow = ctx.db.run.owner.find(otherPlayer.identity);
     const otherRun = otherRunRow && otherRunRow.status === RUN_RUNNING ? otherRunRow : null;

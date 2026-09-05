@@ -1,6 +1,6 @@
-# Echo data model
+# Echoe data model
 
-The SpacetimeDB module for Echo. Everything lives in `spacetimedb/src/index.ts`,
+The SpacetimeDB module for Echoe. Everything lives in `spacetimedb/src/index.ts`,
 with the OpenRouter client split into `spacetimedb/src/llm.ts` because that file
 does network I/O and may only ever be reached from a procedure.
 
@@ -26,7 +26,7 @@ bindings. Private tables do not, and are excluded from codegen.
 | `player` | public | One row per human. `identity` is the primary key and always comes from `ctx.sender`, never from an argument. Holds name, avatar, online flag, `current_place`, and the credit wallet. |
 | `echo` | public | The player's agent. `owner` is unique per identity. `persona` is authored on screen 2; `behaviour_notes` accumulates from corrections and is fed into every later prompt. |
 | `place` | public | The ten Bengaluru landmarks, seeded once in `init`. Read-only afterwards. Array index is the place id. |
-| `agent_travel` | public | One row per leg, written only at leg boundaries. A roaming Echo costs two rows per landmark rather than a position update per frame; the client interpolates between `depart_ts` and `arrive_ts`. |
+| `agent_travel` | public | One row per leg, written only at leg boundaries. A roaming Echoe costs two rows per landmark rather than a position update per frame; the client interpolates between `depart_ts` and `arrive_ts`. |
 | `run` | public | The limits set on screen 4 plus live counters. `owner` is unique, so a player has exactly one run row that is reused across nights. |
 | `receipt` | public | Append-only. Nothing in the module ever updates or deletes a receipt. This is what screen 6 renders and what makes a correction honest. |
 | `conversation` | public | One row per talking pair. `echo_a` is always the numerically smaller id, which makes the pair a stable key. `replies` counts exchanges against the run's `replies_per_person`. |
@@ -64,14 +64,14 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | --- | --- | --- |
 | `join` | `name` | Name is non-empty after trimming and at most 40 characters. Called again by an existing player, it renames and marks them online rather than failing. |
 | `createEcho` | `avatar`, `persona` | Caller has joined. Avatar is one of circle, square, triangle, diamond, hex. Persona is non-empty and at most 2000 characters. Called again, it replaces the persona and keeps the accumulated behaviour notes. |
-| `travel` | `placeId` | Caller has joined and has an Echo. The place exists. The player is not already there. Writes a leg and a zero-cost receipt. |
-| `act` | `kind` | Caller has joined and has an Echo. `kind` is one of travel, find, talk, dance, build, bluff. If a run is live, the action must be in its allowed set and the run's cap must have room. Talk and bluff cost one credit; the rest cost nothing. |
-| `startRun` | `goal`, `maxPeople`, `repliesPerPerson`, `creditCap`, `allowedActions` | Caller has joined and has an Echo. Goal non-empty, at most 280 characters. `maxPeople` is 1, 3 or 5. `repliesPerPerson` is 1, 2 or 3. `creditCap` is between 1 and 8. Every entry in the comma-separated `allowedActions` is a known action and the list is non-empty. Refills the wallet to 8 so a second night is possible. |
+| `travel` | `placeId` | Caller has joined and has an Echoe. The place exists. The player is not already there. Writes a leg and a zero-cost receipt. |
+| `act` | `kind` | Caller has joined and has an Echoe. `kind` is one of travel, find, talk, dance, build, bluff. If a run is live, the action must be in its allowed set and the run's cap must have room. Talk and bluff cost one credit; the rest cost nothing. |
+| `startRun` | `goal`, `maxPeople`, `repliesPerPerson`, `creditCap`, `allowedActions` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `maxPeople` is 1, 3 or 5. `repliesPerPerson` is 1, 2 or 3. `creditCap` is between 1 and 8. Every entry in the comma-separated `allowedActions` is a known action and the list is non-empty. Refills the wallet to 8 so a second night is possible. |
 | `pauseRun` | none | A run exists and is running. |
 | `resumeRun` | none | A run exists and is paused. |
 | `endRun` | none | A run exists and is not already ended. Writes a `run_end` receipt. |
-| `rateLine` | `lineId`, `soundsLikeMe` | Caller has an Echo. The line exists and was spoken by the caller's own Echo. Sets feedback to `like` or `not_me`. |
-| `correct` | `lineId`, `shouldHaveSaid`, `behaviourChange` | Caller has an Echo. The line exists and is the caller's own. Both texts non-empty, at most 500 characters. Appends a correction row, appends a note to `behaviour_notes`, and marks the line `not_me`. Touches no receipt. |
+| `rateLine` | `lineId`, `soundsLikeMe` | Caller has an Echoe. The line exists and was spoken by the caller's own Echoe. Sets feedback to `like` or `not_me`. |
+| `correct` | `lineId`, `shouldHaveSaid`, `behaviourChange` | Caller has an Echoe. The line exists and is the caller's own. Both texts non-empty, at most 500 characters. Appends a correction row, appends a note to `behaviour_notes`, and marks the line `not_me`. Touches no receipt. |
 | `setLlmConfig` | `apiKey`, `model` | Both non-empty. Writes the single private config row. |
 | `setMission` | `text` | Non-empty, at most 200 characters. |
 | `tick` | scheduled | Not callable by clients. See below. |
@@ -83,10 +83,10 @@ Presence is handled by `clientConnected` and `clientDisconnected`, which flip
 
 `world_tick` fires the `tick` reducer every 5 seconds. A "24 hour" roam is
 compressed to 3 minutes so a judge can watch one end to end. Travel takes 4
-seconds, and an Echo dwells at a landmark for 6 seconds before departing.
+seconds, and an Echoe dwells at a landmark for 6 seconds before departing.
 
 The tick iterates a snapshot of `run` but re-reads each row before acting on it.
-This is not incidental: one Echo's turn writes to another Echo's run when a
+This is not incidental: one Echoe's turn writes to another Echoe's run when a
 conversation bumps `people_met` on both sides, and acting on the stale snapshot
 silently rolled that write back. The first version of this had exactly that bug.
 
@@ -99,9 +99,9 @@ For every run whose status is `running`:
    this tick.
 3. **Arrived but unbanked?** Move `current_place` to the leg destination,
    increment `places_visited`, write an `arrive` receipt, and stop for this tick.
-4. **Standing at a landmark.** Try to converse with a co-located Echo. If no
+4. **Standing at a landmark.** Try to converse with a co-located Echoe. If no
    conversation happened, maybe build. Before the first departure there is no
-   leg at all, so the run's own `started_at` anchors the dwell and every Echo
+   leg at all, so the run's own `started_at` anchors the dwell and every Echoe
    gets one chance to talk where it began.
 5. **Dwell elapsed?** Depart for another landmark.
 
@@ -120,9 +120,9 @@ initiator one credit.
 
 ### Where they walk
 
-An Echo allowed to `find` heads for a landmark holding another running Echo,
-aiming at where that Echo will be rather than where it was. Only the
-lower-numbered Echo of any pair gives chase. If both chased, two Echoes would
+An Echoe allowed to `find` heads for a landmark holding another running Echoe,
+aiming at where that Echoe will be rather than where it was. Only the
+lower-numbered Echoe of any pair gives chase. If both chased, two Echoes would
 swap landmarks every tick and never actually arrive together, which is what the
 first version did. Otherwise the destination is a uniformly random other
 landmark.
@@ -154,7 +154,7 @@ The `echoTalk` procedure picks it up and:
 
 The system prompt carries both personas and, critically, both sets of behaviour
 notes, described as the strongest instruction present. That is what makes a
-correction on screen 8 visibly change what the Echo says afterwards.
+correction on screen 8 visibly change what the Echoe says afterwards.
 
 On any failure at all, transport, non-2xx, or unparseable body, the procedure
 writes the deterministic exchange instead and logs the reason. The reducer has
@@ -289,7 +289,7 @@ The receipt count is unchanged by the correction.
 Every one of these is refused:
 
 ```
--- rate a line spoken by the other Echo:   not_your_line
+-- rate a line spoken by the other Echoe:   not_your_line
 -- unknown action:                         unknown_action:teleport
 -- max_people outside 1/3/5:               bad_max_people:4
 -- credit cap above the default wallet:    bad_credit_cap:99
