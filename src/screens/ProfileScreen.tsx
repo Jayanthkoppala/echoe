@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSpacetimeDB } from 'spacetimedb/react';
 import type { DbConnection } from '../module_bindings';
 import { GOOGLE_CLIENT_ID, loadGoogle, renderGoogleButton } from '../state/google';
+import { notesFrom } from '../state/select';
 import { TopBar } from '../components/TopBar';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { VerifySheet } from '../components/VerifySheet';
@@ -81,10 +82,8 @@ export function ProfileScreen({
   const [name, setName] = useState(player?.name ?? '');
   const [verifying, setVerifying] = useState(false);
 
-  const notes = behaviourNotes
-    .split('\n')
-    .map(line => line.replace(/^-\s*/, '').trim())
-    .filter(Boolean);
+  const [openNotes, setOpenNotes] = useState<string[]>([]);
+  const notes = notesFrom(behaviourNotes, corrections);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || google) return;
@@ -177,7 +176,18 @@ export function ProfileScreen({
               {notes.length > 0 ? (
                 <ul className="profile-notes">
                   {notes.map(note => (
-                    <li key={note}>{note}</li>
+                    <li key={note}>
+                      <button
+                        className={openNotes.includes(note) ? 'note-line open' : 'note-line'}
+                        onClick={() =>
+                          setOpenNotes(open =>
+                            open.includes(note) ? open.filter(n => n !== note) : [...open, note],
+                          )
+                        }
+                      >
+                        {note}
+                      </button>
+                    </li>
                   ))}
                 </ul>
               ) : null}
@@ -186,7 +196,9 @@ export function ProfileScreen({
                   <small>{ago(correction.at)}</small>
                   <p className="was">“{correction.originalText}”</p>
                   <p className="now">“{correction.shouldHaveSaid}”</p>
-                  <p className="rule">{correction.behaviourChange}</p>
+                  {correction.typedRule ? (
+                    <p className="rule">{correction.behaviourChange}</p>
+                  ) : null}
                 </div>
               ))}
             </>

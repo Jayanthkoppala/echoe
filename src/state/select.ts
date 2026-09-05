@@ -16,7 +16,7 @@ import ReceiptSchema from '../module_bindings/receipt_table';
 import RunSchema from '../module_bindings/run_table';
 import TranscriptLineSchema from '../module_bindings/transcript_line_table';
 
-import { AVATAR_COLOUR } from './copy';
+import { AVATAR_COLOUR, behaviourFrom } from './copy';
 import type {
   Badge,
   Correction,
@@ -245,6 +245,22 @@ export function correctionsFor(
       originalText: row.originalText,
       shouldHaveSaid: row.shouldHaveSaid,
       behaviourChange: row.behaviourChange,
+      typedRule: row.behaviourChange.trim() !== behaviourFrom(row.shouldHaveSaid),
       at: msOf(row.appliedAt),
     }));
+}
+
+/**
+ * Behaviour notes minus the ones that just restate a correction's rule, which
+ * is what the server writes for every correction.
+ */
+export function notesFrom(
+  behaviourNotes: string,
+  corrections: readonly Correction[],
+): string[] {
+  const rules = new Set(corrections.map(c => c.behaviourChange.trim()));
+  return behaviourNotes
+    .split('\n')
+    .map(line => line.replace(/^-\s*/, '').trim())
+    .filter(line => line.length > 0 && !rules.has(line) && ![...rules].some(r => line.startsWith(r)));
 }
