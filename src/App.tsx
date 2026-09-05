@@ -17,6 +17,7 @@ import { WorldScreen } from './screens/WorldScreen';
 
 import { FREE_CONVERSATIONS, behaviourFrom } from './state/copy';
 import { startOpenRouterLink, takeOpenRouterCode } from './state/openrouter';
+import { logout } from './state/session';
 import type { DbConnection } from './module_bindings';
 import {
   agentsFrom,
@@ -357,6 +358,7 @@ function App() {
           onRename={name => run('Rename', join({ name, email: '' }))}
           onUnverify={() => run('Unverify', unverify())}
           onReview={openReview}
+          onLogout={logout}
         />
       )}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}
