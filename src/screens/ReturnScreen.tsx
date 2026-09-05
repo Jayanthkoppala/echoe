@@ -70,10 +70,6 @@ export function ReturnScreen({
             <span>Echoes met</span>
           </div>
           <div className="stat-card glass">
-            <strong>{usd(run?.spentUsd ?? 0)}</strong>
-            <span>OpenRouter spend</span>
-          </div>
-          <div className="stat-card glass">
             <strong>{freeLeft}</strong>
             <span>free talks left</span>
           </div>
