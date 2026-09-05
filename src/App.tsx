@@ -225,6 +225,7 @@ function App() {
 
   return (
     <main className="phone">
+      <div className="aurora" aria-hidden="true"><i /></div>
       {screen === 'join' && (
         <JoinScreen
           actions={actions}
