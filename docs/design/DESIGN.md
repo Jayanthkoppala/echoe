@@ -57,8 +57,8 @@ Per `../UX-ORDER.md`: Join (video, name) -> Create (character, persona first, in
 
 ## Known issues to fix (as of this update)
 
-- [ ] Map tiles and 3D buildings unverified in a foreground browser (automation throttles animation frames). Style is OpenFreeMap `dark` with our own `building-3d` fill-extrusion layer.
-- [ ] The map vignette (`.map-scrim`) may be too heavy or too light over the dark basemap; judge on a phone.
+- [x] Map verified drawing (2026-09-05 18:25 IST): streets, area labels, agents. Root cause was MapLibre 6's tile worker 404ing under Vite pre-bundling; fixed with `setWorkerUrl` and the `?worker&url` import in `src/map/BengaluruMap.tsx`. Style is OpenFreeMap `dark` with our own `building-3d` layer (shows from zoom 13, so on fly-to, not at city view).
+- [ ] The dark basemap reads dim at city zoom; consider lightening road colours via `setPaintProperty` on load, or lowering `.map-scrim` further. Judge on a phone.
 - [ ] Glass over the video on Join: check blur cost on a mid-range Android.
 - [ ] Create screen: after the aurora landed, re-check that the persona and intent textareas read as glass, not black.
 
