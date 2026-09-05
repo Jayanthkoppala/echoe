@@ -8,7 +8,12 @@ import type { HostCard, ScreenProps } from '../state/types';
  * Persona only: who your Echoe is, and what other Echoes match against.
  * What you are here for is asked on the Start page, right before the run.
  */
-export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard?: HostCard }) {
+export function CreateScreen({
+  actions,
+  go,
+  hostCard,
+  onConnect,
+}: ScreenProps & { hostCard?: HostCard; onConnect: () => void }) {
   const [persona, setPersona] = useState('');
   const [copied, setCopied] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -60,6 +65,11 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
                 Prefer to generate one?
               </button>
             )}
+          </p>
+          <p className="helper helper--tight">
+            <button className="link-btn" type="button" onClick={onConnect}>
+              Or let your coding agent write it
+            </button>
           </p>
         </div>
       </div>

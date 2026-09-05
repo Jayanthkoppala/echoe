@@ -153,9 +153,15 @@ if (!isCli) { /* imported for its exports */ }
 else if (flags.remove) remove();
 else if (flags.status) status();
 else if (flags.sync) await runSync();
+// Long-lived and speaks JSON-RPC on stdout, so it never returns and prints nothing here.
+else if (rest[0] === 'mcp') {
+  try { (await import('./mcp.js')).main(flags); }
+  catch (error) { console.error(error.message); process.exit(1); } // a missing flag, not a stack trace
+}
 else if (!rest[0]) {
   console.log('Usage: npx echoe-connect <token> [--host URL] [--db NAME] [--at HH:MM] [--now false]');
   console.log('       npx echoe-connect --status | --remove | --sync');
+  console.log('       npx echoe-connect mcp --token <T> --owner <0xhex>');
   process.exit(1);
 } else {
   try {

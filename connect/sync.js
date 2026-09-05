@@ -227,10 +227,24 @@ export async function distil(agent, digest) {
 /** SpacetimeDB reducers are exposed under their snake_case names, not the camelCase source name. */
 const REDUCER = 'ingest_agent_memory';
 
-async function anonIdentity(host) {
+/** A throwaway identity. The reducers here authenticate on the link token, not the caller. */
+export async function anonIdentity(host) {
   const response = await fetch(`${host}/v1/identity`, { method: 'POST' });
   if (!response.ok) throw new Error(`identity ${response.status}: ${(await response.text()).slice(0, 200)}`);
   return response.json();
+}
+
+/**
+ * One reducer call. A rejected reducer answers 530 with the plain-text reason it
+ * failed on (bad_token, no_echo_yet), which is worth more than the status code.
+ */
+export async function callReducer(host, db, identityToken, name, args) {
+  const response = await fetch(`${host}/v1/database/${db}/call/${name}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${identityToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  if (!response.ok) throw new Error(`${name} ${response.status}: ${(await response.text()).trim().slice(0, 200)}`);
 }
 
 export async function send(config, day, source, notes) {
@@ -241,12 +255,7 @@ export async function send(config, day, source, notes) {
     identity = await anonIdentity(host);
     writeConfig({ ...readConfig(), identity });
   }
-  const response = await fetch(`${host}/v1/database/${config.db}/call/${REDUCER}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${identity.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify([config.token, day, source, notes.join('\n')]),
-  });
-  if (!response.ok) throw new Error(`${REDUCER} ${response.status}: ${(await response.text()).trim().slice(0, 200)}`);
+  await callReducer(host, config.db, identity.token, REDUCER, [config.token, day, source, notes.join('\n')]);
 }
 
 // ------------------------------------------------------------------ the night

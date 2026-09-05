@@ -1,6 +1,6 @@
 {
   "name": "echoe-connect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Send a few distilled lines from your coding day to your Echoe. Transcripts never leave your machine.",
   "type": "module",
   "license": "MIT",
@@ -10,6 +10,9 @@
   "files": [
     "bin.js",
     "sync.js",
+    "mcp.js",
+    "prompts.js",
+    "prompts.d.ts",
     "README.md"
   ],
   "engines": {
@@ -23,6 +26,7 @@
     "claude-code",
     "codex",
     "memory",
-    "spacetimedb"
+    "spacetimedb",
+    "mcp"
   ]
 }

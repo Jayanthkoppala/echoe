@@ -738,8 +738,12 @@ export const joinEvent = spacetimedb.reducer(
     if (ctx.db.eventContact.key.find(key)) ctx.db.eventContact.key.update(contactRow);
     else ctx.db.eventContact.insert(contactRow);
     // What they are building: '' is allowed, the prompt line simply stays out.
-    const buildRow = { key, eventId: id, identity: ctx.sender, text: building.trim().slice(0, MAX_EVENT_BUILD), updatedAt: ctx.timestamp };
-    if (ctx.db.eventBuild.key.find(key)) ctx.db.eventBuild.key.update(buildRow);
+    // A blank one never clears what the player's own coding agent already wrote
+    // through setEventBuildByToken: the join screen prefills from that row.
+    const priorBuild = ctx.db.eventBuild.key.find(key);
+    const buildText = building.trim().slice(0, MAX_EVENT_BUILD) || priorBuild?.text || '';
+    const buildRow = { key, eventId: id, identity: ctx.sender, text: buildText, updatedAt: ctx.timestamp };
+    if (priorBuild) ctx.db.eventBuild.key.update(buildRow);
     else ctx.db.eventBuild.insert(buildRow);
     const joined = ctx.db.eventJoin.key.find(key);
     if (joined) {
@@ -1373,37 +1377,49 @@ export const join = spacetimedb.reducer(
   }
 );
 
+/**
+ * Create or re-persona `owner`'s Echoe and return its id. Shared by createEcho
+ * (the browser, ctx.sender is the owner) and setPersonaByToken (the player's own
+ * coding agent, where ctx.sender is a throwaway identity and the token names the
+ * owner). `behaviourNotes` is never touched here: it is the module's own writing.
+ */
+function upsertEcho(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity'], persona: string): bigint {
+  const cleanPersona = persona.trim().slice(0, MAX_PERSONA_LENGTH);
+  const existing = ctx.db.echo.owner.find(owner);
+  let echoId: bigint;
+  if (existing) {
+    ctx.db.echo.id.update({ ...existing, persona: cleanPersona, updatedAt: ctx.timestamp });
+    echoId = existing.id;
+  } else {
+    echoId = ctx.db.echo.insert({
+      id: 0n,
+      owner,
+      persona: cleanPersona,
+      behaviourNotes: '',
+      freeUsed: 0,
+      updatedAt: ctx.timestamp,
+    }).id;
+  }
+
+  // One live intent per player, created here so the share link exists before
+  // the first run. `text` stays empty until startRun writes the goal into it.
+  ensureIntent(ctx, owner, echoId, null);
+
+  // A link made before the Echoe existed carries echoId 0; now it can point at
+  // the real row, which is what the agent-memory reader falls back on.
+  const link = ctx.db.agentLink.owner.find(owner);
+  if (link && link.echoId === 0n) ctx.db.agentLink.owner.update({ ...link, echoId });
+
+  return echoId;
+}
+
 export const createEcho = spacetimedb.reducer(
   { persona: t.string() },
   (ctx, { persona }) => {
     requirePlayer(ctx);
     // Persona is the whole of screen 2 now. The intent line is written later,
     // by startRun, from "who do you want to meet".
-    const cleanPersona = persona.trim().slice(0, MAX_PERSONA_LENGTH);
-
-    const existing = ctx.db.echo.owner.find(ctx.sender);
-    let echoId: bigint;
-    if (existing) {
-      ctx.db.echo.id.update({
-        ...existing,
-        persona: cleanPersona,
-        updatedAt: ctx.timestamp,
-      });
-      echoId = existing.id;
-    } else {
-      echoId = ctx.db.echo.insert({
-        id: 0n,
-        owner: ctx.sender,
-        persona: cleanPersona,
-        behaviourNotes: '',
-        freeUsed: 0,
-        updatedAt: ctx.timestamp,
-      }).id;
-    }
-
-    // One live intent per player, created here so the share link exists before
-    // the first run. `text` stays empty until startRun writes the goal into it.
-    ensureIntent(ctx, echoId, null);
+    upsertEcho(ctx, ctx.sender, persona);
   }
 );
 
@@ -1412,8 +1428,8 @@ export const createEcho = spacetimedb.reducer(
  * `text` is null, which is what createEcho wants: a re-created Echoe keeps both
  * the share id already posted somewhere and whatever line the last run set.
  */
-function ensureIntent(ctx: Ctx, echoId: bigint, text: string | null): void {
-  const existing = ctx.db.intent.owner.find(ctx.sender);
+function ensureIntent(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity'], echoId: bigint, text: string | null): void {
+  const existing = ctx.db.intent.owner.find(owner);
   if (existing) {
     ctx.db.intent.id.update({
       ...existing,
@@ -1427,7 +1443,7 @@ function ensureIntent(ctx: Ctx, echoId: bigint, text: string | null): void {
   while (ctx.db.intent.shareId.find(shareId)) shareId = newShareId(ctx);
   ctx.db.intent.insert({
     id: 0n,
-    owner: ctx.sender,
+    owner,
     echoId,
     text: text ?? '',
     shareId,
@@ -1493,7 +1509,7 @@ export const startRun = spacetimedb.reducer(
 
     // The goal IS the share-link line. One box on the Start page, so there is
     // nowhere else for the intent to come from.
-    ensureIntent(ctx, echoRow.id, cleanGoal.slice(0, MAX_INTENT_LENGTH));
+    ensureIntent(ctx, ctx.sender, echoRow.id, cleanGoal.slice(0, MAX_INTENT_LENGTH));
 
     const row = {
       owner: ctx.sender,
@@ -2937,8 +2953,11 @@ function cleanAgentToken(raw: string): string {
 export const setAgentLink = spacetimedb.reducer(
   { token: t.string() },
   (ctx, { token }) => {
-    const echoRow = requireEcho(ctx);
+    requirePlayer(ctx);
     const clean = cleanAgentToken(token);
+    // The link can be made before the Echoe exists: the whole point is that the
+    // coding agent writes the persona. upsertEcho backfills echoId when it does.
+    const echoId = ctx.db.echo.owner.find(ctx.sender)?.id ?? 0n;
 
     const holder = ctx.db.agentLink.token.find(clean);
     if (holder && !holder.owner.isEqual(ctx.sender)) fail('token_taken');
@@ -2947,7 +2966,7 @@ export const setAgentLink = spacetimedb.reducer(
     const rotating = !existing || existing.token !== clean;
     const row = {
       owner: ctx.sender,
-      echoId: echoRow.id,
+      echoId,
       token: clean,
       connectedAt: rotating ? ctx.timestamp : existing.connectedAt,
       lastSyncAt: rotating ? ctx.timestamp : existing.lastSyncAt,
@@ -2955,6 +2974,46 @@ export const setAgentLink = spacetimedb.reducer(
     };
     if (existing) ctx.db.agentLink.owner.update(row);
     else ctx.db.agentLink.insert(row);
+  }
+);
+
+/** The link named by a token, or a hard fail. `ctx.sender` means nothing here. */
+function linkByToken(ctx: Ctx, token: string) {
+  const link = ctx.db.agentLink.token.find(token.trim());
+  if (!link) fail('bad_token');
+  return link;
+}
+
+/**
+ * Write the owner's persona from their own coding agent, over plain HTTP with a
+ * throwaway identity. Creates the Echoe if the player has not made one in the
+ * browser yet. Never touches `behaviourNotes`.
+ */
+export const setPersonaByToken = spacetimedb.reducer(
+  { token: t.string(), persona: t.string() },
+  (ctx, { token, persona }) => {
+    const link = linkByToken(ctx, token);
+    if (persona.trim().length === 0) fail('persona_required');
+    upsertEcho(ctx, link.owner, persona);
+  }
+);
+
+/**
+ * Write what the owner is building at an event, before or after they join it.
+ * The join screen prefills its textarea from this row, and joinEvent with a
+ * blank `building` leaves it alone.
+ */
+export const setEventBuildByToken = spacetimedb.reducer(
+  { token: t.string(), eventId: t.string(), text: t.string() },
+  (ctx, { token, eventId, text }) => {
+    const link = linkByToken(ctx, token);
+    const id = trimmed(eventId, MAX_EVENT_ID, 'event_id');
+    const clean = text.trim().slice(0, MAX_EVENT_BUILD);
+    if (clean.length === 0) fail('text_required');
+    const key = `${id}:${link.owner.toHexString()}`;
+    const row = { key, eventId: id, identity: link.owner, text: clean, updatedAt: ctx.timestamp };
+    if (ctx.db.eventBuild.key.find(key)) ctx.db.eventBuild.key.update(row);
+    else ctx.db.eventBuild.insert(row);
   }
 );
 
@@ -2967,8 +3026,11 @@ export const setAgentLink = spacetimedb.reducer(
 export const ingestAgentMemory = spacetimedb.reducer(
   { token: t.string(), day: t.string(), source: t.string(), notes: t.string() },
   (ctx, { token, day, source, notes }) => {
-    const link = ctx.db.agentLink.token.find(token.trim());
-    if (!link) fail('bad_token');
+    const link = linkByToken(ctx, token);
+    // The link may predate the Echoe, and echoId on it is only a cache.
+    const echoRow = ctx.db.echo.owner.find(link.owner);
+    if (!echoRow) fail('no_echo_yet');
+    const echoId = echoRow.id;
 
     const cleanDay = trimmed(day, 10, 'day');
     const cleanSource = source.trim().toLowerCase();
@@ -2977,7 +3039,7 @@ export const ingestAgentMemory = spacetimedb.reducer(
     // Everything this Echoe already remembers, folded once, so N incoming lines
     // cost one pass rather than N. ponytail: linear scan; fine at 40 rows/echo.
     const seen = new Set<string>();
-    for (const row of ctx.db.agentMemory.echoId.filter(link.echoId)) {
+    for (const row of ctx.db.agentMemory.echoId.filter(echoId)) {
       seen.add(row.note.toLowerCase());
     }
 
@@ -2992,7 +3054,7 @@ export const ingestAgentMemory = spacetimedb.reducer(
       seen.add(key);
       ctx.db.agentMemory.insert({
         id: 0n,
-        echoId: link.echoId,
+        echoId,
         day: cleanDay,
         source: src,
         note: line,
@@ -3002,7 +3064,7 @@ export const ingestAgentMemory = spacetimedb.reducer(
     }
 
     // Oldest first: `id` is autoInc, so ascending id is ascending age.
-    const mine = [...ctx.db.agentMemory.echoId.filter(link.echoId)]
+    const mine = [...ctx.db.agentMemory.echoId.filter(echoId)]
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     for (let i = 0; i < mine.length - AGENT_MEMORY_KEEP; i += 1) {
       ctx.db.agentMemory.id.delete(mine[i].id);

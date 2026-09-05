@@ -49,9 +49,11 @@ import RevealToReducer from "./reveal_to_reducer";
 import SeedCompaniesReducer from "./seed_companies_reducer";
 import SeedPlacesReducer from "./seed_places_reducer";
 import SetAgentLinkReducer from "./set_agent_link_reducer";
+import SetEventBuildByTokenReducer from "./set_event_build_by_token_reducer";
 import SetGoogleAuthReducer from "./set_google_auth_reducer";
 import SetLlmConfigReducer from "./set_llm_config_reducer";
 import SetMissionReducer from "./set_mission_reducer";
+import SetPersonaByTokenReducer from "./set_persona_by_token_reducer";
 import SetRevealReducer from "./set_reveal_reducer";
 import SetSecretReducer from "./set_secret_reducer";
 import StartRunReducer from "./start_run_reducer";
@@ -375,9 +377,11 @@ const reducersSchema = __reducers(
   __reducerSchema("seed_companies", SeedCompaniesReducer),
   __reducerSchema("seed_places", SeedPlacesReducer),
   __reducerSchema("set_agent_link", SetAgentLinkReducer),
+  __reducerSchema("set_event_build_by_token", SetEventBuildByTokenReducer),
   __reducerSchema("set_google_auth", SetGoogleAuthReducer),
   __reducerSchema("set_llm_config", SetLlmConfigReducer),
   __reducerSchema("set_mission", SetMissionReducer),
+  __reducerSchema("set_persona_by_token", SetPersonaByTokenReducer),
   __reducerSchema("set_reveal", SetRevealReducer),
   __reducerSchema("set_secret", SetSecretReducer),
   __reducerSchema("start_run", StartRunReducer),

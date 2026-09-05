@@ -58,6 +58,7 @@ function App() {
   // Limits is an edit of a live run now, so it returns to whoever opened it.
   const [limitsFrom, setLimitsFrom] = useState<ScreenName>('world');
   const [profileFrom, setProfileFrom] = useState<ScreenName>('world');
+  const [connectFrom, setConnectFrom] = useState<ScreenName>('profile');
   const [reviewFrom, setReviewFrom] = useState<ScreenName>('return');
   // The event being joined, and where the Join page came from.
   const [joinTarget, setJoinTarget] = useState<{ id: string; title: string; from: ScreenName } | null>(null);
@@ -81,6 +82,7 @@ function App() {
   const [reveals] = useTable(tables.reveal);
   const [summaryRows] = useTable(tables.conversationSummary);
   const [agentMemoryRows] = useTable(tables.agentMemory);
+  const [eventBuildRows] = useTable(tables.eventBuild);
 
   const join = useReducer(reducers.join);
   const unverify = useReducer(reducers.unverify);
@@ -268,6 +270,7 @@ function App() {
     [eventJoins, hex],
   );
   const openProfile = (from: ScreenName) => { setProfileFrom(from); setScreen('profile'); };
+  const openConnect = (from: ScreenName) => { setConnectFrom(from); setScreen('connect'); };
   const openJoinEvent = (id: string, title: string, from: ScreenName) => {
     setJoinTarget({ id, title, from });
     setScreen('joinEvent');
@@ -336,6 +339,14 @@ function App() {
     () => agentMemoryFrom(agentMemoryRows, myEchoId),
     [agentMemoryRows, myEchoId],
   );
+  // eventId -> my agent-written text, so JoinEventScreen can prefill it.
+  const myEventBuildByEvent = useMemo(
+    () =>
+      new Map(
+        eventBuildRows.filter(row => row.identity.toHexString() === hex).map(row => [row.eventId, row.text]),
+      ),
+    [eventBuildRows, hex],
+  );
   const history = useMemo(() => historyFrom(receipts), [receipts]);
   const myGoogle = linkedAccounts.find(
     row => row.identity.toHexString() === hex && row.provider === 'google',
@@ -374,7 +385,12 @@ function App() {
         />
       )}
       {screen === 'create' && (
-        <CreateScreen actions={actions} go={go} hostCard={hostCard} />
+        <CreateScreen
+          actions={actions}
+          go={go}
+          hostCard={hostCard}
+          onConnect={() => openConnect('create')}
+        />
       )}
       {screen === 'world' && (
         <WorldScreen
@@ -495,10 +511,17 @@ function App() {
           onLogout={logout}
           shareId={myIntentRow?.shareId ?? ''}
           onHostEvent={actions.onHostEvent}
+          onConnect={() => openConnect('profile')}
         />
       )}
       {screen === 'connect' && (
-        <ConnectScreen actions={actions} go={go} agentNotes={agentNotes} onToast={setToast} />
+        <ConnectScreen
+          actions={actions}
+          go={go}
+          agentNotes={agentNotes}
+          onToast={setToast}
+          backTo={connectFrom}
+        />
       )}
       {screen === 'talks' && (
         <TalksScreen
@@ -518,6 +541,7 @@ function App() {
           eventId={joinTarget.id}
           eventTitle={joinTarget.title}
           backTo={joinTarget.from}
+          initialBuilding={myEventBuildByEvent.get(joinTarget.id)}
         />
       )}
       {screen === 'events' && (

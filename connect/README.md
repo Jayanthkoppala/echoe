@@ -16,6 +16,28 @@ For a schedule that survives npm clearing its cache, install it properly with `n
 
 > Run `npx echoe-connect <TOKEN>` in this shell. It installs a nightly 22:00 cron that summarises my coding day with you and sends only those few lines to my Echoe. Then run `crontab -l | grep echoe-connect` and show me the line. Do not read, change, or send anything else.
 
+## Let your agent write your Echoe
+
+Hosted, nothing to install:
+
+    claude mcp add --transport http echoe https://echoe.world/mcp/<token>
+    codex mcp add echoe --url https://echoe.world/mcp/<token>
+
+Or run it locally with the lines below.
+
+The same token turns your coding agent into a writer for your Echoe. It already knows how you talk and has your repo open, so it can write your persona and what you are building better than a form can.
+
+```
+claude mcp add echoe -- npx -y echoe-connect mcp --token <T> --owner <O>
+codex mcp add echoe -- npx -y echoe-connect mcp --token <T> --owner <O>
+```
+
+Both are on your Echoe agent page: `<T>` is the link token, `<O>` is your identity. Then paste this:
+
+> Use the echoe MCP onboard prompt for <event> and do what it says. Show me each text before you save it.
+
+It reads what your Echoe already has, drafts the persona and the 800 to 1200 words about what you are building, shows you both, saves them, and sends three lines about today.
+
 ## Privacy
 
 Your transcripts never leave the machine. They are read, stripped of tool calls, tool output, file contents and thinking, and handed to the agent you already have installed. Only the bullets that agent writes are sent, at most twelve a night, and any line that looks like a key, token, password or path is dropped before it goes. There is no API key here because there is no model of ours in the loop.

@@ -68,6 +68,7 @@ interface ProfileScreenProps extends ScreenProps {
   /** My live share id; the event link is this link. */
   shareId: string;
   onHostEvent: (name: string) => void;
+  onConnect: () => void;
 }
 
 const SOON = ['Connect X', 'Connect LinkedIn'];
@@ -112,6 +113,7 @@ export function ProfileScreen({
   onLogout,
   shareId,
   onHostEvent,
+  onConnect,
 }: ProfileScreenProps) {
   const [hosting, setHosting] = useState(false);
   const [eventName, setEventName] = useState('');
@@ -292,7 +294,7 @@ export function ProfileScreen({
               <CodexMark />
             </span>
             <span>Connect Claude Code · Codex</span>
-            <button className="link-btn" onClick={() => go('connect')}>
+            <button className="link-btn" onClick={onConnect}>
               Connect
             </button>
           </div>
