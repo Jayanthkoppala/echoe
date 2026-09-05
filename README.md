@@ -39,8 +39,16 @@ Maincloud: `spacetime publish echo -y` and set `VITE_SPACETIMEDB_HOST=wss://main
 
 Smoke commands with observed output are in `docs/DATA-MODEL.md`.
 
-## Status
+## Status (2026-09-05 19:05 IST)
 
-- Module builds, publishes locally, ticks, and passes the two-identity smoke flow.
-- Client builds and every screen fits one viewport, currently on mock state.
-- Next: replace `src/state/mock.ts` with `useTable` rows and map `actions` to reducers in `src/App.tsx`; drop `BengaluruMap` into `MapSlot`.
+- Module: intents with share links and expiry, host-first pathing, deterministic match score, LLM procedure with fallback, verified company Echoe (email code via Resend, badge fields), admin-gated secrets. Runs on local3001; not yet on Maincloud.
+- Client: all screens wired to live tables, obsidian glass, real MapLibre map (worker fix, night-city recolour, glass landmark chips), share links, ranked recap, review and correct, verify-my-company sheet and badges.
+- In progress: company logo pins on the map, profile screen, social connect design.
+- Docs: `docs/HANDBOOK.md`, `docs/BUILD-PLAN.md`, `docs/DATA-MODEL.md`, `docs/UX-ORDER.md`, `docs/VERIFIED-ECHOE.md`, `docs/design/DESIGN.md` (visual source of truth), `docs/design/MAP-DESIGN.md`.
+
+## Gotchas already paid for
+
+- MapLibre 6 under Vite needs `setWorkerUrl` with the `?worker&url` import or the map stays black with zero tile requests. Fixed in `src/map/BengaluruMap.tsx`.
+- Tile fetches happen in the worker and never appear in the page's performance entries; check the network log instead.
+- A hidden Chrome tab pauses MapLibre; verify maps in a foreground tab.
+- Every test walk in a shared Chrome mutates the identity stored in that browser; test with separate CLI identities.
