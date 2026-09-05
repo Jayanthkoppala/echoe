@@ -1,17 +1,23 @@
 import { useState } from 'react';
 import { TopBar } from '../components/TopBar';
 import { ALLOWED_ACTION_OPTIONS, DEFAULT_ALLOWED } from '../state/copy';
-import type { ScreenProps } from '../state/types';
+import type { Run, ScreenName, ScreenProps } from '../state/types';
 
 const PEOPLE_CHOICES = [1, 3, 5];
 const REPLY_CHOICES = [1, 2, 3];
 
-export function LimitsScreen({ actions, go, hostName }: ScreenProps & { hostName?: string }) {
-  const [goal, setGoal] = useState(hostName ? `Meet ${hostName}` : '');
-  const [maxPeople, setMaxPeople] = useState(3);
-  const [repliesPerPerson, setRepliesPerPerson] = useState(2);
-  const [creditCap, setCreditCap] = useState(8);
-  const [allowed, setAllowed] = useState<string[]>(DEFAULT_ALLOWED);
+interface LimitsScreenProps extends ScreenProps {
+  run?: Run;
+  /** Limits edits a live run now, so it returns to whoever opened it. */
+  backTo: ScreenName;
+}
+
+export function LimitsScreen({ actions, go, run, backTo }: LimitsScreenProps) {
+  const [goal, setGoal] = useState(run?.goal ?? '');
+  const [maxPeople, setMaxPeople] = useState(run?.maxPeople ?? 3);
+  const [repliesPerPerson, setRepliesPerPerson] = useState(run?.repliesPerPerson ?? 2);
+  const [creditCap, setCreditCap] = useState(run?.creditCap ?? 8);
+  const [allowed, setAllowed] = useState<string[]>(run?.allowedActions ?? DEFAULT_ALLOWED);
 
   const toggle = (id: string) =>
     setAllowed(current =>
@@ -20,12 +26,13 @@ export function LimitsScreen({ actions, go, hostName }: ScreenProps & { hostName
 
   return (
     <div className="screen">
-      <TopBar title="Echoe limits" step="04 / 08" onBack={() => go('world')} />
+      <TopBar title="Adjust limits" onBack={() => go(backTo)} />
       <div className="content">
         <div className="eyebrow">You stay in control</div>
         <h2>What can it do without you?</h2>
         <p className="lede">
           The Echoe wakes only for a meaningful action, so a long run is not a long AI bill.
+          Saving restarts the run with these limits.
         </p>
 
         <label className="label" htmlFor="goal">
@@ -137,7 +144,10 @@ export function LimitsScreen({ actions, go, hostName }: ScreenProps & { hostName
             })
           }
         >
-          {hostName ? `Go and meet ${hostName}` : 'Start the run'} <span aria-hidden="true">→</span>
+          Save and restart the run <span aria-hidden="true">→</span>
+        </button>
+        <button className="secondary" onClick={() => go(backTo)}>
+          Leave it as it is
         </button>
       </div>
     </div>

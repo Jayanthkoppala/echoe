@@ -3,12 +3,13 @@ import type { AgentSpec } from '../map/BengaluruMap';
 import type { Run, ScreenProps } from '../state/types';
 
 interface RoamingScreenProps extends ScreenProps {
+  onAdjustLimits: () => void;
   run?: Run;
   agents: AgentSpec[];
 }
 
 /** The Echoe acts while the player is away. Every number here is a live row. */
-export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
+export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingScreenProps) {
   const paused = run?.status === 'paused';
   const creditsLeft = run ? Math.max(0, run.creditCap - run.creditsSpent) : 0;
   const spentPct = run && run.creditCap > 0 ? (run.creditsSpent / run.creditCap) * 100 : 0;
@@ -26,12 +27,12 @@ export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
 
         <header className="topbar topbar--map">
           <div className="brand">
-            <span className="brand-mark">E</span> Echoe is roaming
+            <span className="brand-mark">E</span> Roaming
           </div>
-          <span className="timer tabular">{creditsLeft} cr left</span>
+          <span className="step-count tabular">{creditsLeft} cr left</span>
         </header>
 
-        <div className="roam-overlay">
+        <div className="roam-overlay glass">
           <div className="roam-top">
             <div>
               <span className="live-dot">{paused ? 'Paused' : 'World running'}</span>
@@ -40,9 +41,11 @@ export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
             </div>
             <span className="credit-pill">{creditsLeft} left</span>
           </div>
+
           <div className="progress">
             <div className="progress-fill" style={{ width: `${Math.min(100, spentPct)}%` }} />
           </div>
+
           <div className="roam-stats">
             <div className="roam-stat">
               <strong>{run?.placesVisited ?? 0}</strong>
@@ -57,11 +60,15 @@ export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
               <span>built</span>
             </div>
           </div>
+
           <div className="roam-actions">
             <button className="pause-btn" onClick={actions.onPause}>
               {paused ? 'Resume' : 'Pause'}
             </button>
-            <button className="return-btn" onClick={actions.onEndRun}>
+            <button className="pause-btn" onClick={onAdjustLimits}>
+              Adjust limits
+            </button>
+            <button className="return-btn wide" onClick={actions.onEndRun}>
               Bring my Echoe home →
             </button>
           </div>

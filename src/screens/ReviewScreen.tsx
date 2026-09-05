@@ -20,9 +20,9 @@ export function ReviewScreen({
 
   return (
     <div className="screen">
-      <TopBar title="Review conversation" step="07 / 08" onBack={() => go('return')} />
+      <TopBar title="Review conversation" onBack={() => go('return')} />
       <div className="content">
-        <div className="chat-person">
+        <div className="chat-person glass">
           <div className="mini-avatar" aria-hidden="true">
             ☻
           </div>
@@ -57,7 +57,7 @@ export function ReviewScreen({
         )}
 
         {focused ? (
-          <div className="review-card">
+          <div className="review-card glass">
             <div className="review-line">“{focused.text}”</div>
             <div className="review-question">Does this feel like you?</div>
             <div className="review-actions">

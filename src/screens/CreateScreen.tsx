@@ -78,7 +78,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
             Who is your Echoe?
           </label>
           {showPrompt ? (
-            <div className="prompt-card">
+            <div className="prompt-card glass">
               <p className="prompt-text">{PERSONA_PROMPT}</p>
               <button className="copy-btn" type="button" onClick={copyPrompt}>
                 {copied ? 'Copied' : 'Copy prompt'}
@@ -151,7 +151,8 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
           disabled={!personaReady || !intent.trim()}
           onClick={() => actions.onCreateEcho(avatar, persona.trim(), intent.trim())}
         >
-          Send my Echoe out <span aria-hidden="true">→</span>
+          {hostCard ? `Go and meet ${hostCard.name}` : 'Send my Echoe out'}{' '}
+          <span aria-hidden="true">→</span>
         </button>
       </div>
     </div>

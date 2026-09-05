@@ -4,12 +4,16 @@ import { shareText } from '../state/copy';
 interface ShareCardProps {
   intent: string;
   shareId: string;
-  mission: string;
+  mission?: string;
+  /** Pinned over the map for a host, inline inside a sheet or list otherwise. */
+  variant?: 'pinned' | 'inline';
 }
 
 /** The link is the product. Everything here exists to get it posted. */
-export function ShareCard({ intent, shareId, mission }: ShareCardProps) {
+export function ShareCard({ intent, shareId, mission, variant = 'inline' }: ShareCardProps) {
   const [copied, setCopied] = useState(false);
+  if (!shareId) return null;
+
   const url = `${window.location.origin}/i/${shareId}`;
   const text = shareText(intent, url);
 
@@ -44,10 +48,8 @@ export function ShareCard({ intent, shareId, mission }: ShareCardProps) {
     { id: 'WA', href: `https://wa.me/?text=${encodeURIComponent(text)}` },
   ];
 
-  if (!shareId) return null;
-
   return (
-    <div className="share-card">
+    <div className={`share-card glass share-card--${variant}`}>
       {mission ? <small className="share-mission">{mission}</small> : null}
       <p className="share-intent">
         Your Echoe is carrying: <strong>{intent}</strong>

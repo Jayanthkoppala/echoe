@@ -14,8 +14,37 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { LANDMARKS } from '../data/landmarks';
 import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
 
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
 const CENTER: LngLat = [77.6, 12.97];
+
+/** City view down to one landmark. `essential` keeps it under reduced motion. */
+export function flyToLandmark(
+  map: maplibregl.Map,
+  place: { lng: number; lat: number },
+): void {
+  map.flyTo({
+    center: [place.lng, place.lat],
+    zoom: 16.5,
+    pitch: 65,
+    bearing: -35,
+    duration: 2200,
+    curve: 1.4,
+    essential: true,
+  });
+}
+
+/** Landmark back out to the whole city. */
+export function flyToCity(map: maplibregl.Map): void {
+  map.flyTo({
+    center: CENTER,
+    zoom: 12.5,
+    pitch: 55,
+    bearing: -15,
+    duration: 1800,
+    curve: 1.4,
+    essential: true,
+  });
+}
 
 export interface AgentSpec {
   id: string;
@@ -64,7 +93,10 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
       el.style.cssText =
         'display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:22px;text-shadow:0 1px 3px rgba(0,0,0,0.6);';
       el.innerHTML = `<span>${place.icon}</span><span style="font-size:10px;color:#fff;background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;white-space:nowrap;">${place.name}</span>`;
-      el.addEventListener('click', () => onPlaceTap?.(place.id));
+      el.addEventListener('click', () => {
+        flyToLandmark(map, place);
+        onPlaceTap?.(place.id);
+      });
       markerEls.push(el);
       new maplibregl.Marker({ element: el })
         .setLngLat([place.lng, place.lat])
@@ -72,6 +104,32 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
     }
 
     map.on('load', () => {
+      // The dark style has no 3D layer, so add our own from the style's own
+      // building source. Verified against maplibre display-buildings-in-3d.
+      const styleLayers = map.getStyle().layers ?? [];
+      const hasExtrusion = styleLayers.some(l => l.type === 'fill-extrusion');
+      const buildingLayer = styleLayers.find(l => (l as { 'source-layer'?: string })['source-layer'] === 'building');
+      const labelLayer = styleLayers.find(l => l.type === 'symbol' && (l.layout as Record<string, unknown> | undefined)?.['text-field']);
+      if (!hasExtrusion && buildingLayer && 'source' in buildingLayer) {
+        map.addLayer(
+          {
+            id: 'building-3d',
+            type: 'fill-extrusion',
+            source: buildingLayer.source as string,
+            'source-layer': 'building',
+            minzoom: 13,
+            filter: ['!=', ['get', 'hide_3d'], true],
+            paint: {
+              'fill-extrusion-color': '#2a3630',
+              'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, ['get', 'render_height']],
+              'fill-extrusion-base': ['case', ['>=', ['get', 'zoom'], 16], ['get', 'render_min_height'], 0],
+              'fill-extrusion-opacity': 0.9,
+            },
+          },
+          labelLayer?.id
+        );
+      }
+
       map.addSource(AGENTS_SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -82,7 +140,13 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
         type: 'circle',
         source: AGENTS_SOURCE_ID,
         paint: {
-          'circle-radius': ['case', ['get', 'isMine'], 9, 6],
+          'circle-radius': [
+            '+',
+            ['case', ['get', 'isMine'], 9, 6],
+            ['*', ['get', 'pulse'], 3],
+            ['*', ['get', 'arrived'], 10],
+          ],
+          'circle-opacity': ['-', 1, ['*', ['get', 'arrived'], ['get', 'arrived']]],
           'circle-color': ['get', 'colour'],
           'circle-stroke-width': ['case', ['get', 'isMine'], 3, 1.5],
           'circle-stroke-color': '#ffffff',
@@ -133,6 +197,10 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
                 colour: agent.colour,
                 label: agent.label,
                 isMine: !!agent.isMine,
+                // 0..1 breathing on the player's own dot.
+                pulse: agent.isMine ? (Math.sin((now / 1000) * 2.4) + 1) / 2 : 0,
+                // 900ms burst window as a leg lands.
+                arrived: now >= leg.arriveMs && now < leg.arriveMs + 900 ? 1 : 0,
               },
             };
           });
@@ -142,6 +210,8 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
       };
       tick();
     });
+
+    map.on('dblclick', () => flyToCity(map));
 
     return () => {
       cancelAnimationFrame(rafRef.current);

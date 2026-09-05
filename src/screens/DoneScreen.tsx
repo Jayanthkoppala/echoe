@@ -24,8 +24,8 @@ export function DoneScreen({ go }: ScreenProps) {
         </p>
         <div className="loop-list">
           {LOOP.map((step, position) => (
-            <div className="loop-row" key={step}>
-              <b>{position + 1}</b> {step}
+            <div className="loop-row glass" key={step}>
+              <b>{position + 1}</b> <span>{step}</span>
             </div>
           ))}
         </div>

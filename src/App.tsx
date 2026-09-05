@@ -13,7 +13,7 @@ import { ReviewScreen } from './screens/ReviewScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
 
-import { behaviourFrom } from './state/copy';
+import { DEFAULT_ALLOWED, behaviourFrom } from './state/copy';
 import {
   agentsFrom,
   hostCardFrom,
@@ -37,6 +37,8 @@ function App() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [lineId, setLineId] = useState<string | null>(null);
   const [hostShareId] = useState(hostShareIdFromUrl);
+  // Limits is an edit of a live run now, so it returns to whoever opened it.
+  const [limitsFrom, setLimitsFrom] = useState<ScreenName>('world');
 
   const [players, playersReady] = useTable(tables.player);
   const [echoes] = useTable(tables.echo);
@@ -73,6 +75,8 @@ function App() {
     ? players.find(row => row.identity.toHexString() === hostIntentRow.owner.toHexString())
     : undefined;
 
+  const hostName = hostPlayerRow?.name ?? '';
+
   /** Reducer errors are the only failure a player can act on, so surface them. */
   const run = useCallback(
     (label: string, promise: Promise<unknown>, onDone?: () => void) => {
@@ -108,7 +112,22 @@ function App() {
         run('Join', join({ name }), () => setScreen('create'));
       },
       onCreateEcho(avatar, persona, intent) {
-        run('Create Echoe', createEcho({ avatar, persona, intent }), () => setScreen('world'));
+        // Decision 2: no Limits stop on the first run. The run starts here with
+        // the defaults so World opens with the Echoe already walking.
+        run(
+          'Create Echoe',
+          createEcho({ avatar, persona, intent }).then(() =>
+            startRun({
+              goal: hostName ? `Meet ${hostName}` : intent,
+              maxPeople: 3,
+              repliesPerPerson: 2,
+              creditCap: 8,
+              allowedActions: DEFAULT_ALLOWED.join(','),
+              hostShareId,
+            }),
+          ),
+          () => setScreen('world'),
+        );
       },
       onTravel(placeId) {
         run('Travel', travel({ placeId: placeIndexOf(placeId) }));
@@ -127,7 +146,8 @@ function App() {
             allowedActions: limits.allowedActions.join(','),
             hostShareId,
           }),
-          () => setScreen('roaming'),
+          // Limits now edits a live run, so land back where it was opened from.
+          () => setScreen(limitsFrom),
         );
       },
       onPause() {
@@ -152,7 +172,7 @@ function App() {
     }),
     // The reducer handles are stable; myRunRow.status decides pause versus resume.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [run, hostShareId, myRunRow?.status],
+    [run, hostShareId, hostName, limitsFrom, myRunRow?.status],
   );
 
   const go = setScreen;
@@ -221,6 +241,8 @@ function App() {
         <WorldScreen
           actions={actions}
           go={go}
+          onAdjustLimits={() => { setLimitsFrom('world'); setScreen('limits'); }}
+          hostCard={hostCard}
           player={player}
           agents={agents}
           intent={myIntentRow?.text ?? ''}
@@ -231,10 +253,16 @@ function App() {
         />
       )}
       {screen === 'limits' && (
-        <LimitsScreen actions={actions} go={go} hostName={hostCard?.name} />
+        <LimitsScreen actions={actions} go={go} run={runView} backTo={limitsFrom} />
       )}
       {screen === 'roaming' && (
-        <RoamingScreen actions={actions} go={go} run={runView} agents={agents} />
+        <RoamingScreen
+          actions={actions}
+          go={go}
+          onAdjustLimits={() => { setLimitsFrom('roaming'); setScreen('limits'); }}
+          run={runView}
+          agents={agents}
+        />
       )}
       {screen === 'return' && (
         <ReturnScreen
@@ -243,6 +271,8 @@ function App() {
           run={runView}
           matches={matches}
           receipts={receipts}
+          intent={myIntentRow?.text ?? ''}
+          shareId={myIntentRow?.shareId ?? ''}
           onReview={openReview}
         />
       )}

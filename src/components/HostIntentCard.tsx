@@ -4,7 +4,7 @@ import type { HostCard } from '../state/types';
 /** The card a stranger sees when they open someone's /i/<shareId> link. */
 export function HostIntentCard({ host }: { host: HostCard }) {
   return (
-    <div className="host-card">
+    <div className="host-card glass">
       <div className="host-top">
         <span
           className="host-avatar"

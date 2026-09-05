@@ -4,9 +4,12 @@ import { Toast } from '../components/Toast';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { landmarkById } from '../data/landmarks';
 import { ACTIONS } from '../state/copy';
-import type { ActionKind, Player, ScreenProps } from '../state/types';
+import { useMounted } from '../state/useMounted';
+import type { ActionKind, HostCard, Player, ScreenProps } from '../state/types';
 
 interface WorldScreenProps extends ScreenProps {
+  onAdjustLimits: () => void;
+  hostCard?: HostCard;
   player?: Player;
   agents: AgentSpec[];
   intent: string;
@@ -16,10 +19,16 @@ interface WorldScreenProps extends ScreenProps {
   toast: string | null;
 }
 
-/** Live play. The map fills the screen, everything else floats over it. */
+/**
+ * The map is full bleed and every control floats over it in glass.
+ * A host sees the share card pinned on top; a visitor sees the walk status
+ * there instead and the share card drops into the sheet (UX-ORDER decision 3).
+ */
 export function WorldScreen({
   actions,
   go,
+  onAdjustLimits,
+  hostCard,
   player,
   agents,
   intent,
@@ -28,6 +37,7 @@ export function WorldScreen({
   placeCount,
   toast,
 }: WorldScreenProps) {
+  const mounted = useMounted();
   const credits = player?.credits ?? 0;
   const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
 
@@ -42,42 +52,60 @@ export function WorldScreen({
 
         <header className="topbar topbar--map">
           <div className="brand">
-            <span className="brand-mark">E</span> Bengaluru · Live
+            <span className="brand-mark">E</span> Bengaluru
           </div>
-          <span className="timer tabular">{placeCount} places</span>
+          <span className="step-count">{placeCount} places</span>
         </header>
 
-        <ShareCard intent={intent} shareId={shareId} mission={mission} />
+        {hostCard ? (
+          <div className="walk-strip glass">
+            <div>
+              <span className="k">Right now</span>
+              <div className="v">Your Echoe is walking to {hostCard.name}</div>
+            </div>
+          </div>
+        ) : (
+          <ShareCard intent={intent} shareId={shareId} mission={mission} variant="pinned" />
+        )}
 
         <Toast message={toast} />
 
-        <div className="map-sheet">
-          <div className="sheet-inner">
-            <div className="sheet-head">
-              <div>
-                <small>You are at</small>
-                <h3 className="location-name">{placeName}</h3>
-              </div>
-              <span className="credit-pill">{credits} AI credits</span>
+        <div className={mounted ? 'map-sheet glass map-sheet--in' : 'map-sheet glass'}>
+          <div className="sheet-head">
+            <div>
+              <small>You are at</small>
+              <h3 className="location-name">{placeName}</h3>
             </div>
-            <div className="actions">
-              {ACTIONS.map(action => (
-                <button
-                  key={action.kind}
-                  className="action"
-                  onClick={() => actions.onAct(action.kind as ActionKind)}
-                  disabled={action.cost > credits}
-                >
-                  <span className="glyph" aria-hidden="true">
-                    {action.icon}
-                  </span>
-                  {action.label}
-                  <span className="cost">{action.cost} cr</span>
-                </button>
-              ))}
-            </div>
-            <button className="handoff-btn" onClick={() => go('limits')}>
-              Let my Echoe keep going without me →
+            <span className="credit-pill">{credits} credits</span>
+          </div>
+
+          <div className="actions">
+            {ACTIONS.map(action => (
+              <button
+                key={action.kind}
+                className="action"
+                onClick={() => actions.onAct(action.kind as ActionKind)}
+                disabled={action.cost > credits}
+              >
+                <span className="glyph" aria-hidden="true">
+                  {action.icon}
+                </span>
+                {action.label}
+                <span className="cost">{action.cost} cr</span>
+              </button>
+            ))}
+          </div>
+
+          {hostCard ? (
+            <ShareCard intent={intent} shareId={shareId} variant="inline" />
+          ) : null}
+
+          <div className="sheet-cta">
+            <button className="handoff-btn" onClick={() => go('roaming')}>
+              {hostCard ? 'Watch them meet →' : 'Watch it roam →'}
+            </button>
+            <button className="ghost-btn" onClick={onAdjustLimits}>
+              Adjust limits
             </button>
           </div>
         </div>

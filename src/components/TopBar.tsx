@@ -18,7 +18,7 @@ export function TopBar({ title, step, onBack, showMark }: TopBarProps) {
         {showMark ? <span className="brand-mark">E</span> : null}
         {title}
       </div>
-      <span className="step-count">{step}</span>
+      {step ? <span className="step-count">{step}</span> : <span />}
     </header>
   );
 }

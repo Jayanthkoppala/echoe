@@ -9,7 +9,7 @@ interface JoinScreenProps extends ScreenProps {
   hostLinkExpired: boolean;
 }
 
-/** One field. A stranger types a name and is in the world. */
+/** One field over the live city. A stranger types a name and is in. */
 export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: JoinScreenProps) {
   const [name, setName] = useState('');
 
@@ -20,11 +20,13 @@ export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: Jo
   };
 
   return (
-    <form className={hostCard ? 'screen' : 'screen screen--cinema'} onSubmit={submit}>
-      {hostCard ? null : (
-        <video className="cinema-video" src="/echo-hero.mp4" autoPlay muted loop playsInline aria-hidden="true" />
-      )}
+    <form className="screen screen--hero" onSubmit={submit}>
+      <div className="hero-world" aria-hidden="true">
+        <video className="hero-video" src="/echo-hero.mp4" autoPlay muted loop playsInline />
+      </div>
+
       <TopBar title="Echoe" step={connected ? 'Live' : 'Connecting…'} showMark />
+
       <div className="content content--fit">
         {hostCard ? <HostIntentCard host={hostCard} /> : null}
 
@@ -48,9 +50,15 @@ export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: Jo
           maxLength={40}
         />
       </div>
+
       <div className="footer">
         <button className="primary" type="submit" disabled={!name.trim() || !connected}>
-          {connected ? 'Enter Bengaluru' : 'Connecting…'} <span aria-hidden="true">→</span>
+          {connected
+            ? hostCard
+              ? `Send my Echoe to meet ${hostCard.name}`
+              : 'Enter Bengaluru'
+            : 'Connecting…'}{' '}
+          <span aria-hidden="true">→</span>
         </button>
       </div>
     </form>

@@ -10,7 +10,7 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
   if (!line) {
     return (
       <div className="screen">
-        <TopBar title="Correct your Echoe" step="08 / 08" onBack={() => go('review')} />
+        <TopBar title="Correct your Echoe" onBack={() => go('review')} />
         <div className="content">
           <p className="lede">Pick one of your Echoe's lines first.</p>
         </div>
@@ -27,12 +27,12 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
 
   return (
     <div className="screen">
-      <TopBar title="Correct your Echoe" step="08 / 08" onBack={() => go('review')} />
+      <TopBar title="Correct your Echoe" onBack={() => go('review')} />
       <div className="content">
         <div className="eyebrow">One correction at a time</div>
         <h2>What should it learn?</h2>
         <p className="lede">Change the behaviour, not the historical receipt.</p>
-        <div className="correction-card">
+        <div className="correction-card glass">
           <blockquote className="quote">“{line.text}”</blockquote>
           <label className="label" htmlFor="correction">
             My Echoe should have said…
