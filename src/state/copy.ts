@@ -101,7 +101,6 @@ export const shareText = (intent: string, url: string): string =>
   `My Echoe is in Bengaluru carrying this: ${intent}. Send yours to meet it. ${url}`;
 
 /** OpenRouter credits are USD; show them like a bill, not a wallet. */
-export const usd = (n: number): string => `$${n.toFixed(n < 0.01 && n > 0 ? 4 : 2)}`;
 
 /** Mirrors FREE_CONVERSATIONS in the module. */
 export const FREE_CONVERSATIONS = 5;
