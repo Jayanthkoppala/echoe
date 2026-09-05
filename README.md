@@ -44,7 +44,8 @@ Smoke commands with observed output are in `docs/DATA-MODEL.md`.
 - Module: intents with share links and expiry, host-first pathing, deterministic match score, LLM procedure with fallback, verified company Echoe (email code via Resend, badge fields), admin-gated secrets. Runs on local3001; not yet on Maincloud.
 - Client: all screens wired to live tables, obsidian glass, real MapLibre map (worker fix, night-city recolour, glass landmark chips), share links, ranked recap, review and correct, verify-my-company sheet and badges.
 - Map pins: 39 seeded startups, 44 VC funds, 763 OpenStreetMap company offices (clustered), five-way filter on World. Profile screen with memory, history, people, connections. Google connect built on the module side, awaiting a client ID.
-- Pubs layer: 872 pubs, breweries, bars and cafes from OpenStreetMap (36 featured). In progress: their clustered source on the map and the "Meet at" line on the match card.
+- Pubs layer: 872 pubs, breweries, bars and cafes from OpenStreetMap (36 featured), clustered on the map; the match card names a place to meet.
+- Events screen after Create: 39 real upcoming Bengaluru events (trips, meetups, dates, company events) with links; "Send my Echoe there".
 - Docs: `docs/HANDBOOK.md`, `docs/BUILD-PLAN.md`, `docs/DATA-MODEL.md`, `docs/UX-ORDER.md`, `docs/VERIFIED-ECHOE.md`, `docs/design/DESIGN.md` (visual source of truth), `docs/design/MAP-DESIGN.md`.
 
 ## Gotchas already paid for
