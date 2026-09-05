@@ -3,7 +3,7 @@ import { useSpacetimeDB } from 'spacetimedb/react';
 import { HostIntentCard } from '../components/HostIntentCard';
 import { TopBar } from '../components/TopBar';
 import type { DbConnection } from '../module_bindings';
-import { AVATAR_GLYPH, AVATAR_OPTIONS, INTENT_PLACEHOLDER, PERSONA_PROMPT } from '../state/copy';
+import { INTENT_PLACEHOLDER, PERSONA_PROMPT } from '../state/copy';
 import type { HostCard, ScreenProps } from '../state/types';
 
 /**
@@ -12,12 +12,12 @@ import type { HostCard, ScreenProps } from '../state/types';
  */
 export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard?: HostCard }) {
   const { getConnection } = useSpacetimeDB();
-  const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0].id);
   const [persona, setPersona] = useState('');
   const [intent, setIntent] = useState('');
   const [copied, setCopied] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggesting, setSuggesting] = useState(false);
+  const [suggestNote, setSuggestNote] = useState('');
   const [showPrompt, setShowPrompt] = useState(false);
 
   const copyPrompt = async () => {
@@ -35,11 +35,14 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
     const conn = getConnection() as DbConnection | undefined;
     if (!conn || suggesting) return;
     setSuggesting(true);
+    setSuggestNote('');
     try {
       const text: string = await conn.procedures.suggestIntents({ persona: persona.trim() });
       setSuggestions(text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0));
     } catch {
+      // The module refuses rather than guessing: no model configured, or the call failed.
       setSuggestions([]);
+      setSuggestNote('Suggestions are offline right now. One line in your own words works just as well.');
     } finally {
       setSuggesting(false);
     }
@@ -50,30 +53,10 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
   return (
     <div className="screen">
       <TopBar title="Your Echoe" step="02 / 03" onBack={() => go('join')} />
-      <div className="content">
+      <div className="content content--split">
         {hostCard ? <HostIntentCard host={hostCard} /> : null}
 
-        <div className="section-block" style={{ marginTop: 0 }}>
-          <span className="label">Choose a character</span>
-          <div className="avatar-row" role="list" aria-label="Character choices">
-            {AVATAR_OPTIONS.map(option => (
-              <button
-                key={option.id}
-                className={option.id === avatar ? 'avatar selected' : 'avatar'}
-                style={{ ['--avatar' as string]: option.colour }}
-                onClick={() => setAvatar(option.id)}
-                aria-label={option.id}
-                aria-pressed={option.id === avatar}
-              >
-                <span className="avatar-glyph" aria-hidden="true">
-                  {AVATAR_GLYPH[option.id]}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="section-block">
+        <div className="section-block half">
           <label className="label" htmlFor="persona">
             Who is your Echoe?
           </label>
@@ -106,7 +89,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
           </p>
         </div>
 
-        <div className="section-block">
+        <div className="section-block half">
           <label className="label" htmlFor="intent">
             What are you here for, in one line?
           </label>
@@ -126,6 +109,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
           >
             {suggesting ? 'Reading your persona…' : 'Suggest from my persona'}
           </button>
+          {suggestNote ? <p className="helper">{suggestNote}</p> : null}
           {suggestions.length > 0 ? (
             <div className="chip-row" role="list" aria-label="Suggested intents">
               {suggestions.map(line => (
@@ -149,7 +133,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
         <button
           className="primary"
           disabled={!intent.trim()}
-          onClick={() => actions.onCreateEcho(avatar, persona.trim(), intent.trim())}
+          onClick={() => actions.onCreateEcho(persona.trim(), intent.trim())}
         >
           {hostCard ? `Go and meet ${hostCard.name}` : 'Send my Echoe out'}{' '}
           <span aria-hidden="true">→</span>

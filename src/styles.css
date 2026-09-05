@@ -192,7 +192,7 @@ p, li, button, label { text-wrap: pretty; }
   transition: background-color 140ms, scale 140ms;
 }
 .icon-btn:active, .primary:active, .secondary:active, .action:active,
-.choice:active, .avatar:active, .toggle-action:active, .share-btn:active { scale: .97; }
+.choice:active, .toggle-action:active, .share-btn:active { scale: .97; }
 .step-count {
   padding: 5px 10px;
   border: 1px solid rgba(215, 240, 108, .3);
@@ -335,6 +335,10 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   color: #101a0e;
   font-size: 20px;
 }
+.host-avatar img,
+.profile-avatar img,
+.mini-avatar img,
+.profile-btn img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .host-top small { display: block; color: var(--fg3); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .host-top strong { display: block; margin-top: 3px; font-size: 16px; }
 .host-intent { position: relative; z-index: 1; margin: 12px 0 8px; font-size: 15px; font-weight: 500; line-height: 1.4; }
@@ -353,27 +357,6 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 /* ── Create ───────────────────────────────────────────────────────────── */
 
 .section-block { margin-top: 16px; }
-.avatar-row { display: flex; gap: 9px; overflow-x: auto; padding: 3px 2px 8px; scrollbar-width: none; }
-.avatar-row::-webkit-scrollbar { display: none; }
-.avatar {
-  display: grid;
-  flex: 0 0 64px;
-  height: 68px;
-  place-items: center;
-  border: 1px solid var(--edge);
-  border-radius: var(--radius-btn);
-  background: var(--chip);
-  -webkit-backdrop-filter: blur(var(--blur-sm));
-  backdrop-filter: blur(var(--blur-sm));
-  box-shadow: inset 0 1px 0 var(--hl);
-  cursor: pointer;
-  transition: background-color 150ms, box-shadow 150ms, scale 150ms;
-}
-.avatar-glyph { font-size: 26px; color: rgba(255, 255, 255, .8); }
-.avatar.selected {
-  border-color: var(--lime);
-  box-shadow: inset 0 1px 0 var(--hl), 0 0 0 2px rgba(215, 240, 108, .35), 0 0 30px -8px rgba(215, 240, 108, .6);
-}
 .prompt-card { display: grid; gap: 8px; justify-items: end; padding: 12px; }
 .prompt-text {
   display: -webkit-box;
@@ -1049,11 +1032,10 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   place-items: center;
   border: 1px solid var(--edge);
   border-radius: 50%;
-  color: #101a0e;
+  padding: 0;
+  overflow: hidden;
   box-shadow: inset 0 1px 0 var(--hl);
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 800;
 }
 .profile-heading {
   display: flex;
@@ -1227,6 +1209,73 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .linked-avatar { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
 .google-slot { display: grid; justify-items: stretch; min-height: 44px; }
 
+/* Connect a coding agent: profile card row and Connect screen chrome. */
+.agent-connect-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  background: var(--panel-thin);
+  font-size: 12px;
+  font-weight: 600;
+}
+.agent-connect-row .agent-marks { display: flex; flex: 0 0 auto; gap: 6px; color: var(--fg2); }
+.agent-connect-row span { flex: 1 1 auto; }
+.agent-notes-heading { margin: 12px 0 6px; color: var(--fg3); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.agent-note-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.day-chip, .source-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--fg3);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.source-chip { color: var(--lime); }
+.agent-notes-more { margin: 4px 0 0; color: var(--fg3); font-size: 11px; }
+
+.token-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  background: var(--chip);
+}
+.token-box code { flex: 1 1 auto; overflow: hidden; color: var(--lime); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.copy-block {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  background: var(--panel-thin);
+}
+.copy-block pre {
+  margin: 0;
+  overflow-x: auto;
+  color: var(--fg2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.connect-status { margin: 4px 0 0; color: var(--fg3); font-size: 11px; }
+
 /* Memory bullets: two lines until tapped. */
 .note-line {
   display: -webkit-box;
@@ -1250,22 +1299,25 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
    and position belong to MapLibre. */
 .map-pin--off { visibility: hidden; }
 
-/* Generated character tile: the model's colour fills it instead of glass. */
-.avatar--gen { background: var(--avatar); }
-.avatar--gen .avatar-glyph { font-size: 30px; }
-
 /* Conversations shortcut: floats under the carry bar, right edge, over the map. */
 .talks-fab {
-  position: absolute; z-index: 15; top: 156px; right: 12px;
+  position: absolute; z-index: 14; top: 156px; right: 12px; /* below the share card, so an opened card paints over it */
   width: 44px; height: 44px; padding: 0;
   display: grid; place-items: center;
-  border: 1px solid var(--edge); border-radius: 50%;
-  color: var(--lime); background: var(--panel-deep);
+  border: 1px solid rgba(255, 255, 255, .5); border-radius: 50%;
+  color: #fff; background: rgba(10, 16, 12, .82);
   box-shadow: inset 0 1px 0 var(--hl), 0 12px 28px -12px rgba(0, 0, 0, .8);
   font-size: 18px; line-height: 1; cursor: pointer;
 }
-/* Talks list rows are whole-row buttons. */
-.person-row--tap { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+/* Keep the Read/Review link flush right under the score. */
+.person-end .link-btn { justify-self: end; }
 
 .meet-at { display: flex; gap: 6px; align-items: baseline; margin: 0 0 10px; color: var(--fg2); font-size: 11.5px; }
 .meet-at strong { color: var(--fg); font-weight: 600; }
+
+/* Create: persona owns the top half, intent the bottom half, no dead space. */
+.content--split { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.content--split .half { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; margin: 0; }
+.content--split .half .textarea { flex: 1 1 auto; min-height: 0; resize: none; font-size: 15px; line-height: 1.45; }
+.content--split .half .helper { flex: 0 0 auto; }
+.content--split .half .secondary { flex: 0 0 auto; margin-top: 8px; }
