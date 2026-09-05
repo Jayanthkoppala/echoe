@@ -729,8 +729,10 @@ export const joinEvent = spacetimedb.reducer(
     const id = trimmed(eventId, MAX_EVENT_ID, 'event_id');
     const cleanGoal = trimmed(goal, MAX_EVENT_GOAL, 'goal');
     // Stored as canonical profile links, whatever shape the player pasted.
-    const li = `https://www.linkedin.com/in/${handleOf(linkedin, 'linkedin')}`;
-    const tw = `https://x.com/${handleOf(twitter, 'twitter')}`;
+    // One link is enough; a blank one is stored blank and never shown on reveal.
+    const li = linkedin.trim() ? `https://www.linkedin.com/in/${handleOf(linkedin, 'linkedin')}` : '';
+    const tw = twitter.trim() ? `https://x.com/${handleOf(twitter, 'twitter')}` : '';
+    if (!li && !tw) fail('link_required');
     const key = `${id}:${ctx.sender.toHexString()}`;
     const contactRow = { key, eventId: id, identity: ctx.sender, linkedin: li, twitter: tw, givenAt: ctx.timestamp };
     if (ctx.db.eventContact.key.find(key)) ctx.db.eventContact.key.update(contactRow);

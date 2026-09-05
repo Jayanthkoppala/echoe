@@ -11,8 +11,9 @@ interface JoinEventScreenProps extends ScreenProps {
 
 /**
  * Joining an event asks what you are building (the Echoe leads with it), one
- * line on what you want from the event, plus the two links it never sees. The
- * links go to a private table; only a mutual Reveal shows them.
+ * line on what you want from the event, plus one or two links it never sees.
+ * At least one link is required; they go to a private table and only a mutual
+ * Reveal shows them.
  */
 export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: JoinEventScreenProps) {
   const [building, setBuilding] = useState('');
@@ -21,7 +22,7 @@ export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: Jo
   const [twitter, setTwitter] = useState('');
   const [showPrompt, setShowPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
-  const ready = Boolean(building.trim() && goal.trim() && linkedin.trim() && twitter.trim());
+  const ready = Boolean(building.trim() && goal.trim() && (linkedin.trim() || twitter.trim()));
   const prompt = eventBuildPrompt(eventTitle);
 
   const copyPrompt = async () => {
@@ -83,6 +84,7 @@ export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: Jo
         <label className="label" htmlFor="event-linkedin">
           Your LinkedIn link
         </label>
+        <p className="helper helper--tight">One link is enough, LinkedIn or X.</p>
         <input
           className="input"
           id="event-linkedin"
