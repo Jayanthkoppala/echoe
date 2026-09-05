@@ -3,13 +3,14 @@ import { TopBar } from '../components/TopBar';
 import type { Run, ScreenProps } from '../state/types';
 
 export function LimitsScreen({ actions, go, run }: ScreenProps & { run: Run }) {
-  const [goal, setGoal] = useState('');
+  const DEFAULT_GOAL = 'People who ship side projects on weekends';
+
+const [goal, setGoal] = useState('');
 
   const start = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!goal.trim()) return;
     actions.onStartRun({
-      goal: goal.trim(),
+      goal: goal.trim() || DEFAULT_GOAL,
       maxPeople: run.maxPeople,
       repliesPerPerson: run.repliesPerPerson,
       creditCap: run.creditCap,
@@ -27,13 +28,13 @@ export function LimitsScreen({ actions, go, run }: ScreenProps & { run: Run }) {
           id="runGoal"
           value={goal}
           onChange={event => setGoal(event.target.value)}
-          placeholder="People who ship side projects on weekends"
+          placeholder={DEFAULT_GOAL}
           autoFocus
           maxLength={120}
         />
       </div>
       <div className="footer">
-        <button className="primary" type="submit" disabled={!goal.trim()}>
+        <button className="primary" type="submit">
           Start the 24-hour Echo run <span aria-hidden="true">→</span>
         </button>
       </div>
