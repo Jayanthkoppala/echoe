@@ -7,6 +7,8 @@ interface JoinEventScreenProps extends ScreenProps {
   eventId: string;
   eventTitle: string;
   backTo: ScreenName;
+  /** My `event_build` text for this event, when a coding agent already wrote one. */
+  initialBuilding?: string;
 }
 
 /**
@@ -15,8 +17,16 @@ interface JoinEventScreenProps extends ScreenProps {
  * At least one link is required; they go to a private table and only a mutual
  * Reveal shows them.
  */
-export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: JoinEventScreenProps) {
-  const [building, setBuilding] = useState('');
+export function JoinEventScreen({
+  actions,
+  go,
+  eventId,
+  eventTitle,
+  backTo,
+  initialBuilding,
+}: JoinEventScreenProps) {
+  // An agent-written event_build row, when one already exists, shows up ready to submit.
+  const [building, setBuilding] = useState(initialBuilding ?? '');
   const [goal, setGoal] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [twitter, setTwitter] = useState('');
@@ -84,7 +94,6 @@ export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: Jo
         <label className="label" htmlFor="event-linkedin">
           Your LinkedIn link
         </label>
-        <p className="helper helper--tight">One link is enough, LinkedIn or X.</p>
         <input
           className="input"
           id="event-linkedin"
@@ -108,8 +117,8 @@ export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: Jo
           autoComplete="off"
         />
         <p className="helper helper--tight">
-          Shown to one person only when you both tap Reveal on a conversation. Your Echoe never
-          sees them.
+          One link is enough, LinkedIn or X. Shown to one person only when you both tap Reveal on
+          a conversation. Your Echoe never sees them.
         </p>
       </div>
       <div className="footer">

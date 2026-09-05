@@ -357,7 +357,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 /* ── Create ───────────────────────────────────────────────────────────── */
 
 .section-block { margin-top: 16px; }
-.prompt-card { display: grid; gap: 8px; justify-items: end; padding: 12px; }
+.prompt-card { display: grid; flex-shrink: 0; gap: 8px; justify-items: end; padding: 12px; } /* flex-shrink: inside .content--close a clamped card would squash to a bar */
 .prompt-text {
   display: -webkit-box;
   position: relative;
