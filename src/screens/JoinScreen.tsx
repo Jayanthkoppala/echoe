@@ -20,16 +20,13 @@ export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: Jo
   };
 
   return (
-    <form className="screen" onSubmit={submit}>
+    <form className={hostCard ? 'screen' : 'screen screen--cinema'} onSubmit={submit}>
+      {hostCard ? null : (
+        <video className="cinema-video" src="/echo-hero.mp4" autoPlay muted loop playsInline aria-hidden="true" />
+      )}
       <TopBar title="Echoe" step={connected ? 'Live' : 'Connecting…'} showMark />
       <div className="content content--fit">
-        {hostCard ? (
-          <HostIntentCard host={hostCard} />
-        ) : (
-          <div className="hero-world" aria-hidden="true">
-            <video className="hero-video" src="/echo-hero.mp4" autoPlay muted loop playsInline />
-          </div>
-        )}
+        {hostCard ? <HostIntentCard host={hostCard} /> : null}
 
         {hostLinkExpired ? (
           <p className="expired-note">This link has expired. You can still come in.</p>
