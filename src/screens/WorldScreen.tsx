@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { MapSlot } from '../components/MapSlot';
 import { ShareCard } from '../components/ShareCard';
+import { VerifiedBadge } from '../components/VerifiedBadge';
+import { VerifySheet } from '../components/VerifySheet';
 import { Toast } from '../components/Toast';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { landmarkById } from '../data/landmarks';
@@ -40,6 +43,7 @@ export function WorldScreen({
   toast,
 }: WorldScreenProps) {
   const mounted = useMounted();
+  const [verifying, setVerifying] = useState(false);
   const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
 
   return (
@@ -76,6 +80,7 @@ export function WorldScreen({
             <div>
               <small>You are at</small>
               <h3 className="location-name">{placeName}</h3>
+              <VerifiedBadge badge={player?.badge} />
             </div>
             <span className="credit-pill">{usd(run?.spentUsd ?? 0)} spent</span>
           </div>
@@ -92,7 +97,17 @@ export function WorldScreen({
               Adjust limits
             </button>
           </div>
+
+          {player?.badge ? null : (
+            <button className="verify-btn" onClick={() => setVerifying(true)}>
+              Verify my company
+            </button>
+          )}
         </div>
+
+        {verifying ? (
+          <VerifySheet badge={player?.badge} onClose={() => setVerifying(false)} />
+        ) : null}
       </div>
     </div>
   );

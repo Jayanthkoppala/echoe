@@ -28,6 +28,8 @@ export const RECEIPT_ICON: Record<string, string> = {
   find: '⌕',
   talk: '☵',
   llm: '$',
+  free_used: '!',
+  verified: '✔',
   run_start: '◆',
   run_end: '✓',
 };
@@ -45,3 +47,6 @@ export const shareText = (intent: string, url: string): string =>
 
 /** OpenRouter credits are USD; show them like a bill, not a wallet. */
 export const usd = (n: number): string => `$${n.toFixed(n < 0.01 && n > 0 ? 4 : 2)}`;
+
+/** Mirrors FREE_CONVERSATIONS in the module. */
+export const FREE_CONVERSATIONS = 5;

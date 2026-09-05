@@ -6,6 +6,7 @@ import type { AgentSpec } from '../map/BengaluruMap';
 import { LANDMARKS } from '../data/landmarks';
 
 import AgentTravelSchema from '../module_bindings/agent_travel_table';
+import CompanySchema from '../module_bindings/company_table';
 import ConversationSchema from '../module_bindings/conversation_table';
 import EchoSchema from '../module_bindings/echo_table';
 import IntentSchema from '../module_bindings/intent_table';
@@ -15,9 +16,10 @@ import RunSchema from '../module_bindings/run_table';
 import TranscriptLineSchema from '../module_bindings/transcript_line_table';
 
 import { AVATAR_COLOUR } from './copy';
-import type { HostCard, Match, Player, Receipt, Run, RunStatus, TranscriptLine } from './types';
+import type { Badge, HostCard, Match, Player, Receipt, Run, RunStatus, TranscriptLine } from './types';
 
 export type AgentTravelRow = Infer<typeof AgentTravelSchema>;
+export type CompanyRow = Infer<typeof CompanySchema>;
 export type ConversationRow = Infer<typeof ConversationSchema>;
 export type EchoRow = Infer<typeof EchoSchema>;
 export type IntentRow = Infer<typeof IntentSchema>;
@@ -40,10 +42,22 @@ export const placeIndexOf = (landmarkId: string): number => {
 
 export const avatarColour = (avatar: string): string => AVATAR_COLOUR[avatar] ?? '#f4b857';
 
-export function toPlayer(row: PlayerRow): Player {
+/** The one join from a player to their company, used by every badge surface. */
+export function badgeOf(
+  row: { companyId: number; verifiedDomain: string } | undefined,
+  companies: readonly CompanyRow[],
+): Badge | undefined {
+  if (!row?.verifiedDomain) return undefined;
+  const named = companies.find(c => c.id === row.companyId);
+  return { companyName: named?.name ?? row.verifiedDomain, logo: named?.logo ?? '' };
+}
+
+export function toPlayer(row: PlayerRow, companies: readonly CompanyRow[] = []): Player {
   return {
     name: row.name,
+    badge: badgeOf(row, companies),
     avatar: row.avatar,
+    openrouterLinked: row.openrouterLinked,
     currentPlace: landmarkOf(row.currentPlace).id,
   };
 }
@@ -71,13 +85,19 @@ export function toReceipt(row: ReceiptRow): Receipt {
   };
 }
 
-export function hostCardFrom(intent: IntentRow, host: PlayerRow | undefined, nowMs: number): HostCard {
+export function hostCardFrom(
+  intent: IntentRow,
+  host: PlayerRow | undefined,
+  nowMs: number,
+  companies: readonly CompanyRow[] = [],
+): HostCard {
   const daysLeft = Math.max(0, Math.ceil((msOf(intent.expiresAt) - nowMs) / 86_400_000));
   return {
     name: host?.name ?? 'Someone',
     avatar: host?.avatar ?? 'circle',
     intent: intent.text,
     expiresInDays: daysLeft,
+    badge: badgeOf(host, companies),
   };
 }
 
@@ -129,6 +149,7 @@ export function rankedMatches(
   hostEchoId: bigint | undefined,
   echoes: readonly EchoRow[],
   players: readonly PlayerRow[],
+  companies: readonly CompanyRow[] = [],
 ): Match[] {
   if (myEchoId === undefined) return [];
   const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
@@ -147,6 +168,7 @@ export function rankedMatches(
         why: row.why,
         placeName: landmarkOf(row.placeId).name,
         isHost: hostEchoId !== undefined && otherEchoId === hostEchoId,
+        badge: badgeOf(other, companies),
       };
     })
     .sort((a, b) => b.score - a.score);
@@ -158,6 +180,7 @@ export function toTranscript(
   myEchoId: bigint | undefined,
   echoes: readonly EchoRow[],
   players: readonly PlayerRow[],
+  companies: readonly CompanyRow[] = [],
 ): TranscriptLine[] {
   const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
   const playerBy = new Map(players.map(player => [player.identity.toHexString(), player]));
@@ -165,12 +188,16 @@ export function toTranscript(
   return lines
     .filter(row => String(row.conversationId) === conversationId)
     .sort((a, b) => (a.id < b.id ? -1 : 1))
-    .map(row => ({
+    .map(row => {
+      const speaker = playerBy.get(ownerOf.get(row.speakerEchoId) ?? '');
+      return {
       id: String(row.id),
-      speaker: playerBy.get(ownerOf.get(row.speakerEchoId) ?? '')?.name ?? 'Echoe',
+      speaker: speaker?.name ?? 'Echoe',
+      badge: badgeOf(speaker, companies),
       text: row.text,
       isAi: row.isAi,
       feedback: row.feedback,
       mine: myEchoId !== undefined && row.speakerEchoId === myEchoId,
-    }));
+    };
+    });
 }

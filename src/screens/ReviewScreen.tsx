@@ -1,4 +1,5 @@
 import { TopBar } from '../components/TopBar';
+import { VerifiedBadge } from '../components/VerifiedBadge';
 import type { Match, ScreenProps, TranscriptLine } from '../state/types';
 
 interface ReviewScreenProps extends ScreenProps {
@@ -27,7 +28,10 @@ export function ReviewScreen({
             ☻
           </div>
           <div>
-            <strong>{match ? `${match.name}'s Echoe · clearly AI` : 'Echoe conversation'}</strong>
+            <strong>
+              {match ? `${match.name}'s Echoe · clearly AI` : 'Echoe conversation'}
+              <VerifiedBadge badge={match?.badge} compact />
+            </strong>
             <span>
               {match ? `${match.placeName} · match ${match.score}` : ''}
             </span>

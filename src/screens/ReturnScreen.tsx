@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { ShareCard } from '../components/ShareCard';
+import { VerifiedBadge } from '../components/VerifiedBadge';
+import { VerifySheet } from '../components/VerifySheet';
 import { TopBar } from '../components/TopBar';
 import { AVATAR_COLOUR, AVATAR_GLYPH, RECEIPT_ICON, usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
-import type { Match, Receipt, Run, ScreenProps } from '../state/types';
+import type { Badge, Match, Receipt, Run, ScreenProps } from '../state/types';
 
 interface ReturnScreenProps extends ScreenProps {
   run?: Run;
@@ -11,6 +14,8 @@ interface ReturnScreenProps extends ScreenProps {
   receipts: Receipt[];
   intent: string;
   shareId: string;
+  /** My own badge, so the verify prompt disappears once it exists. */
+  badge?: Badge;
   onReview: (conversationId: string) => void;
 }
 
@@ -23,9 +28,11 @@ export function ReturnScreen({
   receipts,
   intent,
   shareId,
+  badge,
   onReview,
 }: ReturnScreenProps) {
   const mounted = useMounted();
+  const [verifying, setVerifying] = useState(false);
 
   return (
     <div className="screen">
@@ -83,6 +90,7 @@ export function ReturnScreen({
                         {match.isHost ? <span className="host-tag">your host</span> : null}
                       </strong>
                       <small>{match.placeName}</small>
+                      <VerifiedBadge badge={match.badge} />
                     </div>
                     <b className="match-score tabular">
                       {match.score}
@@ -110,6 +118,12 @@ export function ReturnScreen({
         )}
 
         {/* Decision 5: the link comes back here, where a thin list gets fixed. */}
+        {badge ? null : (
+          <button className="verify-btn" onClick={() => setVerifying(true)}>
+            Verify my company
+          </button>
+        )}
+
         <ShareCard intent={intent} shareId={shareId} variant="inline" />
 
         <div className="setting-head" style={{ marginTop: 18 }}>
@@ -130,6 +144,7 @@ export function ReturnScreen({
             </div>
           ))}
         </div>
+        {verifying ? <VerifySheet badge={badge} onClose={() => setVerifying(false)} /> : null}
       </div>
       <div className="footer">
         <button className="primary" onClick={() => go('world')}>

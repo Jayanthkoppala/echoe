@@ -1,3 +1,4 @@
+import { VerifiedBadge } from './VerifiedBadge';
 import { AVATAR_COLOUR, AVATAR_GLYPH } from '../state/copy';
 import type { HostCard } from '../state/types';
 
@@ -16,6 +17,7 @@ export function HostIntentCard({ host }: { host: HostCard }) {
         <div>
           <small>You were invited by</small>
           <strong>{host.name}</strong>
+          <VerifiedBadge badge={host.badge} />
         </div>
       </div>
       <p className="host-intent">“{host.intent}”</p>

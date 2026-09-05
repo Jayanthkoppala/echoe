@@ -14,9 +14,19 @@ export type ScreenName =
 
 export type RunStatus = 'running' | 'paused' | 'ended';
 
+/** A verified work domain, resolved to a seeded company when we know one. */
+export interface Badge {
+  companyName: string;
+  /** Empty means draw initials instead of a logo. */
+  logo: string;
+}
+
 export interface Player {
   name: string;
+  badge?: Badge;
   avatar: string;
+  /** True once the player signed in with OpenRouter; the key itself stays server-side. */
+  openrouterLinked: boolean;
   /** Landmark id, for example 'cubbon-park'. */
   currentPlace: string;
 }
@@ -49,6 +59,7 @@ export interface TranscriptLine {
   /** Server feedback string: 'none', 'like' or 'not_me'. */
   feedback: string;
   mine: boolean;
+  badge?: Badge;
 }
 
 /** The host's intent card shown to anyone opening a /i/<shareId> link. */
@@ -57,6 +68,7 @@ export interface HostCard {
   avatar: string;
   intent: string;
   expiresInDays: number;
+  badge?: Badge;
 }
 
 /** One ranked "who to meet and why" row on the return screen. */
@@ -68,6 +80,7 @@ export interface Match {
   why: string;
   placeName: string;
   isHost: boolean;
+  badge?: Badge;
 }
 
 export interface RunLimits {
@@ -76,7 +89,9 @@ export interface RunLimits {
 
 /** Each member is one reducer call. App.tsx binds them to module_bindings. */
 export interface Actions {
-  onJoin(name: string): void;
+  onJoin(name: string, email: string): void;
+  /** Sends the Echoe out again with the same line (and the same host, if any). */
+  onRestart(): void;
   onCreateEcho(avatar: string, persona: string, intent: string): void;
   onTravel(placeId: string): void;
   onStartRun(limits: RunLimits): void;
@@ -84,6 +99,9 @@ export interface Actions {
   onEndRun(): void;
   onRateLine(lineId: string, soundsLikeMe: boolean): void;
   onCorrect(lineId: string, shouldHaveSaid: string, behaviourChange: string): void;
+  /** Adjust limits: OpenRouter sign-in (PKCE). Leaves the page and comes back. */
+  onLinkOpenRouter(): void;
+  onUnlinkOpenRouter(): void;
 }
 
 export interface ScreenProps {

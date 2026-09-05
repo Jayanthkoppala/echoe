@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import './styles.css';
 
+import { Toast } from './components/Toast';
 import { CorrectScreen } from './screens/CorrectScreen';
 import { CreateScreen } from './screens/CreateScreen';
 import { DoneScreen } from './screens/DoneScreen';
@@ -13,7 +14,9 @@ import { ReviewScreen } from './screens/ReviewScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
 
-import { behaviourFrom } from './state/copy';
+import { FREE_CONVERSATIONS, behaviourFrom } from './state/copy';
+import { startOpenRouterLink, takeOpenRouterCode } from './state/openrouter';
+import type { DbConnection } from './module_bindings';
 import {
   agentsFrom,
   hostCardFrom,
@@ -31,7 +34,7 @@ const hostShareIdFromUrl = (): string =>
   window.location.pathname.match(/^\/i\/([a-z0-9]+)/i)?.[1] ?? '';
 
 function App() {
-  const { identity, isActive } = useSpacetimeDB();
+  const { identity, isActive, getConnection } = useSpacetimeDB();
   const [screen, setScreen] = useState<ScreenName>('join');
   const [toast, setToast] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -50,6 +53,7 @@ function App() {
   const [travels] = useTable(tables.agentTravel);
   const [places] = useTable(tables.place);
   const [missions] = useTable(tables.mission);
+  const [companies] = useTable(tables.company);
 
   const join = useReducer(reducers.join);
   const createEcho = useReducer(reducers.createEcho);
@@ -60,6 +64,7 @@ function App() {
   const endRun = useReducer(reducers.endRun);
   const rateLine = useReducer(reducers.rateLine);
   const correct = useReducer(reducers.correct);
+  const unlinkOpenRouter = useReducer(reducers.unlinkOpenRouter);
 
   const hex = identity?.toHexString();
   const myPlayerRow = players.find(row => row.identity.toHexString() === hex);
@@ -88,6 +93,19 @@ function App() {
     [],
   );
 
+  // Back from openrouter.ai/auth: hand the one-time code to the module, which
+  // does the exchange and stores the key server-side. Runs once per page load.
+  const linkAttempted = useRef(false);
+  useEffect(() => {
+    if (!isActive || linkAttempted.current) return;
+    const conn = getConnection() as DbConnection | undefined;
+    if (!conn) return;
+    const pkce = takeOpenRouterCode();
+    if (!pkce) return;
+    linkAttempted.current = true;
+    run('Connect OpenRouter', conn.procedures.linkOpenRouter(pkce), () => setScreen('limits'));
+  }, [isActive, getConnection, run]);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 2600);
@@ -107,8 +125,18 @@ function App() {
 
   const actions: Actions = useMemo(
     () => ({
-      onJoin(name) {
-        run('Join', join({ name }), () => setScreen('create'));
+      onJoin(name, email) {
+        run('Join', join({ name, email }), () => setScreen('create'));
+      },
+      onRestart() {
+        // Same line, same host if the player came in through a link. The run
+        // row is upserted server-side, so this works after a run has ended.
+        const intent = myIntentRow?.text ?? '';
+        run(
+          'Send out again',
+          startRun({ goal: hostName ? `Meet ${hostName}` : intent, hostShareId }),
+          () => setScreen('roaming'),
+        );
       },
       onCreateEcho(avatar, persona, intent) {
         // Decision 2: no Limits stop on the first run. The run starts here with
@@ -142,6 +170,12 @@ function App() {
         const paused = myRunRow?.status === 'paused';
         run(paused ? 'Resume' : 'Pause', paused ? resumeRun() : pauseRun());
       },
+      onLinkOpenRouter() {
+        void startOpenRouterLink();
+      },
+      onUnlinkOpenRouter() {
+        run('Disconnect OpenRouter', unlinkOpenRouter());
+      },
       onEndRun() {
         run('End run', endRun(), () => setScreen('return'));
       },
@@ -160,13 +194,16 @@ function App() {
     }),
     // The reducer handles are stable; myRunRow.status decides pause versus resume.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [run, hostShareId, hostName, limitsFrom, myRunRow?.status],
+    [run, hostShareId, hostName, limitsFrom, myRunRow?.status, myIntentRow?.text],
   );
 
+  const onlineCount = useMemo(() => players.filter(row => row.online).length, [players]);
+
   const go = setScreen;
-  const player = myPlayerRow ? toPlayer(myPlayerRow) : undefined;
+  const player = myPlayerRow ? toPlayer(myPlayerRow, companies) : undefined;
   const runView = myRunRow ? toRun(myRunRow) : undefined;
   const myEchoId = myEchoRow?.id;
+  const freeLeft = Math.max(0, FREE_CONVERSATIONS - (myEchoRow?.freeUsed ?? 0));
   const hostEchoId = hostIntentRow?.echoId;
 
   const agents = useMemo(
@@ -175,13 +212,13 @@ function App() {
   );
 
   const matches = useMemo(
-    () => rankedMatches(conversations, myEchoId, hostEchoId, echoes, players),
-    [conversations, myEchoId, hostEchoId, echoes, players],
+    () => rankedMatches(conversations, myEchoId, hostEchoId, echoes, players, companies),
+    [conversations, myEchoId, hostEchoId, echoes, players, companies],
   );
 
   const transcript = useMemo(
-    () => (conversationId ? toTranscript(lines, conversationId, myEchoId, echoes, players) : []),
-    [lines, conversationId, myEchoId, echoes, players],
+    () => (conversationId ? toTranscript(lines, conversationId, myEchoId, echoes, players, companies) : []),
+    [lines, conversationId, myEchoId, echoes, players, companies],
   );
 
   const receipts = useMemo(
@@ -195,7 +232,7 @@ function App() {
 
   const hostCard =
     hostIntentRow && hostShareId
-      ? hostCardFrom(hostIntentRow, hostPlayerRow, Date.now())
+      ? hostCardFrom(hostIntentRow, hostPlayerRow, Date.now(), companies)
       : undefined;
 
   // Only call the link dead once the intent table has actually arrived.
@@ -243,7 +280,14 @@ function App() {
         />
       )}
       {screen === 'limits' && (
-        <LimitsScreen actions={actions} go={go} run={runView} backTo={limitsFrom} />
+        <LimitsScreen
+          actions={actions}
+          go={go}
+          run={runView}
+          backTo={limitsFrom}
+          freeLeft={freeLeft}
+          linked={player?.openrouterLinked ?? false}
+        />
       )}
       {screen === 'roaming' && (
         <RoamingScreen
@@ -259,10 +303,12 @@ function App() {
           actions={actions}
           go={go}
           run={runView}
+          freeLeft={freeLeft}
           matches={matches}
           receipts={receipts}
           intent={myIntentRow?.text ?? ''}
           shareId={myIntentRow?.shareId ?? ''}
+          badge={player?.badge}
           onReview={openReview}
         />
       )}
