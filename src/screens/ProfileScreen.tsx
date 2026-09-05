@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSpacetimeDB } from 'spacetimedb/react';
+import type { DbConnection } from '../module_bindings';
+import { GOOGLE_CLIENT_ID, loadGoogle, renderGoogleButton } from '../state/google';
 import { TopBar } from '../components/TopBar';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { VerifySheet } from '../components/VerifySheet';
@@ -22,14 +25,30 @@ interface ProfileScreenProps extends ScreenProps {
   corrections: Correction[];
   history: PlaceVisit[];
   people: Match[];
+  /** The linked_account row for this identity, when there is one. */
+  google?: { displayName: string; avatarUrl: string };
   onRename: (name: string) => void;
   onUnverify: () => void;
+  onUnlinkGoogle: () => void;
   onReview: (conversationId: string) => void;
   /** Forgets this browser's identity and returns to Join. Nothing is deleted. */
   onLogout: () => void;
 }
 
-const SOON = ['Connect X', 'Connect LinkedIn', 'Connect Google'];
+const SOON = ['Connect X', 'Connect LinkedIn'];
+
+const GOOGLE_ERRORS: Record<string, string> = {
+  google_client_id_not_set: 'Google sign-in is not configured yet.',
+  join_first: 'Join the world first.',
+  aud_mismatch: 'That sign-in was for a different app.',
+  provider_unsupported: 'That provider is not supported yet.',
+};
+
+const sayGoogle = (raw: unknown): string => {
+  const text = raw instanceof Error ? raw.message : String(raw);
+  const key = Object.keys(GOOGLE_ERRORS).find(k => text.includes(k));
+  return key ? GOOGLE_ERRORS[key] : 'Google sign-in failed. Try again.';
+};
 
 const ago = (ms: number): string => {
   const mins = Math.round((Date.now() - ms) / 60_000);
@@ -49,11 +68,16 @@ export function ProfileScreen({
   corrections,
   history,
   people,
+  google,
   onRename,
   onUnverify,
+  onUnlinkGoogle,
   onReview,
   onLogout,
 }: ProfileScreenProps) {
+  const { getConnection } = useSpacetimeDB();
+  const googleSlot = useRef<HTMLDivElement>(null);
+  const [googleError, setGoogleError] = useState('');
   const [name, setName] = useState(player?.name ?? '');
   const [verifying, setVerifying] = useState(false);
 
@@ -61,6 +85,31 @@ export function ProfileScreen({
     .split('\n')
     .map(line => line.replace(/^-\s*/, '').trim())
     .filter(Boolean);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || google) return;
+    let live = true;
+    loadGoogle()
+      .then(() => {
+        if (!live || !googleSlot.current) return;
+        renderGoogleButton(googleSlot.current, async idToken => {
+          const conn = getConnection() as DbConnection | undefined;
+          if (!conn) return;
+          try {
+            // 'linked_verified' also refreshes the verified chip, which rides
+            // the player row the subscription already updates.
+            await conn.procedures.linkGoogle({ idToken });
+            setGoogleError('');
+          } catch (err) {
+            setGoogleError(sayGoogle(err));
+          }
+        });
+      })
+      .catch(() => setGoogleError('Google sign-in could not load.'));
+    return () => {
+      live = false;
+    };
+  }, [google, getConnection]);
 
   const saveName = () => {
     const clean = name.trim();
@@ -213,6 +262,29 @@ export function ProfileScreen({
             </button>
           )}
           <div className="soon-grid">
+            {google ? (
+              <div className="linked-row">
+                {google.avatarUrl ? (
+                  <img
+                    className="linked-avatar"
+                    src={google.avatarUrl}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                  />
+                ) : null}
+                <strong>Google · {google.displayName}</strong>
+                <button className="link-btn" onClick={onUnlinkGoogle}>
+                  Unlink
+                </button>
+              </div>
+            ) : GOOGLE_CLIENT_ID ? (
+              <div className="google-slot" ref={googleSlot} />
+            ) : (
+              <button className="soon-btn" disabled>
+                Connect Google <i>soon</i>
+              </button>
+            )}
+            {googleError ? <p className="verify-error">{googleError}</p> : null}
             {SOON.map(label => (
               <button className="soon-btn" key={label} disabled>
                 {label} <i>soon</i>

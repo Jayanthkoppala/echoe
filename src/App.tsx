@@ -59,9 +59,11 @@ function App() {
   const [missions] = useTable(tables.mission);
   const [companies] = useTable(tables.company);
   const [correctionRows] = useTable(tables.correction);
+  const [linkedAccounts] = useTable(tables.linkedAccount);
 
   const join = useReducer(reducers.join);
   const unverify = useReducer(reducers.unverify);
+  const unlinkGoogle = useReducer(reducers.unlinkGoogle);
   const createEcho = useReducer(reducers.createEcho);
   const travel = useReducer(reducers.travel);
   const startRun = useReducer(reducers.startRun);
@@ -239,6 +241,9 @@ function App() {
 
   const corrections = useMemo(() => correctionsFor(correctionRows, hex), [correctionRows, hex]);
   const history = useMemo(() => historyFrom(receipts), [receipts]);
+  const myGoogle = linkedAccounts.find(
+    row => row.identity.toHexString() === hex && row.provider === 'google',
+  );
 
   const hostCard =
     hostIntentRow && hostShareId
@@ -356,7 +361,9 @@ function App() {
           history={history}
           people={matches}
           onRename={name => run('Rename', join({ name, email: '' }))}
+          google={myGoogle}
           onUnverify={() => run('Unverify', unverify())}
+          onUnlinkGoogle={() => run('Unlink', unlinkGoogle())}
           onReview={openReview}
           onLogout={logout}
         />

@@ -18,12 +18,16 @@ class MapBoundary extends Component<{ fallback: ReactNode; children: ReactNode }
   }
 }
 
+export type PinKind = 'startup' | 'vc' | 'spot' | 'place';
+
 interface MapSlotProps {
   agents: AgentSpec[];
   activePlaceId?: string;
+  pinKinds?: PinKind[];
   onPlaceTap?: (placeId: string) => void;
 }
 
+// pinKinds is accepted and not yet forwarded; see the TODO below.
 export function MapSlot({ agents, activePlaceId, onPlaceTap }: MapSlotProps) {
   return (
     <div id="map-slot">
@@ -35,6 +39,7 @@ export function MapSlot({ agents, activePlaceId, onPlaceTap }: MapSlotProps) {
           </>
         }
       >
+        {/* TODO: pass pinKinds={pinKinds} once BengaluruMap accepts the prop. */}
         <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} activePlaceId={activePlaceId} />
       </MapBoundary>
       {/* The OpenFreeMap "liberty" basemap is light. This sinks it to obsidian

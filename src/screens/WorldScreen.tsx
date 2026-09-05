@@ -1,4 +1,5 @@
-import { MapSlot } from '../components/MapSlot';
+import { useState } from 'react';
+import { MapSlot, type PinKind } from '../components/MapSlot';
 import { ShareCard } from '../components/ShareCard';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { ProfileButton } from '../components/ProfileButton';
@@ -25,6 +26,14 @@ interface WorldScreenProps extends ScreenProps {
  * A host sees the share card pinned on top; a visitor sees the walk status
  * there instead and the share card drops into the sheet (UX-ORDER decision 3).
  */
+const PIN_FILTERS: Record<string, PinKind[]> = {
+  All: ['startup', 'vc', 'spot', 'place'],
+  Startups: ['startup'],
+  VCs: ['vc'],
+  Places: ['place'],
+  Pubs: ['spot'],
+};
+
 export function WorldScreen({
   actions,
   go,
@@ -40,6 +49,7 @@ export function WorldScreen({
   onProfile,
 }: WorldScreenProps) {
   const mounted = useMounted();
+  const [filter, setFilter] = useState<keyof typeof PIN_FILTERS>('All');
   const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
 
   return (
@@ -47,6 +57,7 @@ export function WorldScreen({
       <div className="world-wrap">
         <MapSlot
           agents={agents}
+          pinKinds={PIN_FILTERS[filter]}
           activePlaceId={player?.currentPlace}
           onPlaceTap={actions.onTravel}
         />
@@ -74,6 +85,20 @@ export function WorldScreen({
           <ShareCard intent={intent} shareId={shareId} mission={mission} variant="pinned" />
         )}
 
+        <div className="map-bottom">
+        <div className="pin-filter">
+          {Object.keys(PIN_FILTERS).map(name => (
+            <button
+              key={name}
+              className={name === filter ? 'pin-pill glass on' : 'pin-pill glass'}
+              onClick={() => setFilter(name)}
+              aria-pressed={name === filter}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+
         <div className={mounted ? 'map-sheet glass map-sheet--in' : 'map-sheet glass'}>
           <div className="sheet-head">
             <div>
@@ -98,9 +123,8 @@ export function WorldScreen({
               Adjust limits
             </button>
           </div>
-
         </div>
-
+        </div>
       </div>
     </div>
   );
