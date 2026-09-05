@@ -76,7 +76,7 @@ Say so in one line. Then ask me exactly three questions, chosen so that the answ
 
 Now write the persona.`;
 
-export const INTENT_PLACEHOLDER = 'investing pre-seed in fintech, Bengaluru';
+export const INTENT_PLACEHOLDER = 'looking for a technical cofounder who has shipped';
 
 export const RECEIPT_ICON: Record<string, string> = {
   travel: '↗',

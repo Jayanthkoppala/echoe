@@ -79,24 +79,30 @@ Symbol layers, not DOM markers. Layer and source ids the UI can rely on:
 
 | Id | What |
 |---|---|
-| `pins` (source) | featured startups, every VC, featured spots. Unclustered. |
+| `pins` (source) | featured startups and every VC. Unclustered. |
 | `pins-rest` (source) | unfeatured startups only. `cluster: true`, radius 40, maxzoom 14. |
 | `pin-featured` | startups and VCs from city zoom |
-| `pin-spots` | spots from zoom 13 |
+| `events` (source) | `src/data/events.json`, loaded through `import.meta.glob` so a missing file still builds. Never clustered. |
+| `pin-events` | every event on its exact `lat`/`lng`, at every zoom |
 | `pin-rest` | unclustered leftovers from 13.5 |
 | `pin-clusters` | cluster bubble; tap expands via `getClusterExpansionZoom` |
 | `pin-cluster-count` | the count label |
 
-Prop: `pinKinds?: Array<'startup' | 'vc' | 'spot' | 'place'>`, default all four,
+Prop: `pinKinds?: Array<'startup' | 'vc' | 'event' | 'place'>`, default all four,
 forwarded through `MapSlot`. `'place'` is the ten landmark chips, which are DOM
 markers and take a `.map-pin--off` class rather than a filter. Everything else
 is `setFilter` on the layers above, never a source rebuild. Only startups
 cluster, so toggling startups toggles the cluster layers exactly.
 
-Rings are drawn into each chip: white for a startup, lime for a VC, amber
-(`#e0a458`) for a spot. A VC's name carries a second line reading VC from zoom
-14. A spot with no logo gets a drawn glyph, a cup for a cafe and a beer
-otherwise, rather than initials. Icon size runs 0.4 at city zoom, 0.45 at 12.5,
+Rings are drawn into each chip: white for a startup, lime for a VC, coral
+(`#ef7e66`) for an event. A VC's name carries a second line reading VC from zoom
+14. An event chip is the category glyph, its title sits under the pin in coral,
+and an `approx: true` row gets a dashed ring so a guessed area never reads as an
+exact venue. Tapping one calls `onEventTap(row)`, which the World screen shows
+as a glass card naming the day, time, venue and address.
+
+The pub/spot layer this replaced (872 OpenStreetMap rows, amber, clustered) is
+gone, along with `src/data/spots.json` and its two fetch scripts. Icon size runs 0.4 at city zoom, 0.45 at 12.5,
 0.8 at 15. A tap calls `onCompanyTap(slug)` and flies in with a `[0, -130]`
 offset, without which the pin lands behind the sheet at pitch 60.
 

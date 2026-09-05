@@ -27,13 +27,13 @@ bindings. Private tables do not, and are excluded from codegen.
 | `echo` | public | The player's agent. `owner` is unique per identity. `persona` is authored on screen 2; `behaviour_notes` accumulates from corrections and is fed into every later prompt. |
 | `place` | public | The ten Bengaluru landmarks, seeded once in `init`. Read-only afterwards. Array index is the place id. |
 | `agent_travel` | public | One row per leg, written only at leg boundaries. A roaming Echoe costs two rows per landmark rather than a position update per frame; the client interpolates between `depart_ts` and `arrive_ts`. |
-| `run` | public | The session started by "Send my Echoe out". Goal, status (running, paused, ended), counters, and `spent_usd`, the OpenRouter credits this run has burned. `owner` is unique, so a player has exactly one run row that is reused across nights. |
+| `run` | public | The session started by "Send my Echoe out". Goal, status (running, paused, ended), counters, and `spent_usd`, the USD this run has spent on OpenRouter-funded exchanges (stays `0` for house-funded Vertex Gemini exchanges; see Credits). `owner` is unique, so a player has exactly one run row that is reused across nights. |
 | `receipt` | public | Append-only. Nothing in the module ever updates or deletes a receipt. This is what screen 6 renders and what makes a correction honest. |
 | `conversation` | public | One row per talking pair. `echo_a` is always the numerically smaller id, which makes the pair a stable key. `replies` counts exchanges; it is a counter, not a cap. |
 | `transcript_line` | public | The lines themselves. `is_ai` is always true so the client can label every line. `feedback` is `none`, `like` or `not_me`. |
 | `correction` | public | One row per correction on screen 8. Keeps the original text alongside the replacement, so the record of what was actually said survives. |
 | `mission` | public | Single row, id 0. The shared "tonight's mission" line on screen 3. |
-| `llm_config` | **private** | Single row, id 0. Holds the house key, model and chat-completions endpoint (empty means OpenRouter; the demo uses Vertex AI's native generateContent route on the boss-media project, key as a query parameter, because Vertex's OpenAI-compatible route refuses API keys). No `public: true`, so it is invisible to every client and absent from codegen. The key goes in through a reducer argument and never comes back out. |
+| `llm_config` | **private** | Single row, id 0. Holds the house key, model and chat-completions endpoint (empty means OpenRouter). The house model is Gemini 2.5 Flash-Lite on Vertex AI's native generateContent route; for a `*.googleapis.com` endpoint the stored key is ignored and `echoTalk` authenticates with a Google OAuth bearer token instead (see `google_auth` below), because Vertex's OpenAI-compatible route insists on OAuth too and the native route only takes API keys in express mode. No `public: true`, so it is invisible to every client and absent from codegen. The key goes in through a reducer argument and never comes back out. |
 | `player_key` | **private** | One row per player who signed in with OpenRouter. Written only by the `linkOpenRouter` procedure, read only by `echoTalk` for exchanges whose funding is `own`. The client sees just `player.openrouter_linked`. |
 | `echo_memory` | **private** | One line per (echo, other echo): what this Echoe remembers about that person, written by `echoTalk` when a conversation closes from the transcript itself, read into the prompt the next time the pair meets. The database is the memory; no external service. |
 | `google_auth` | **private** | Single row: Google OAuth client id, secret, refresh token and the cached access token with its expiry. Written by `setGoogleAuth`, refreshed by the procedures, never readable by clients. |
@@ -65,19 +65,19 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 
 | Reducer | Arguments | Preconditions, all enforced with `SenderError` |
 | --- | --- | --- |
-| `join` | `name` | Name is non-empty after trimming and at most 40 characters. Called again by an existing player, it renames and marks them online rather than failing. |
+| `join` | `name`, `email` | Name is non-empty after trimming and at most 40 characters. `email` is optional; when present it must look like an address and is upserted into a private `contact` row (`email`, `welcomed: false`) as a hook for a future welcome mail that nothing sends yet. Called again by an existing player, it renames and marks them online rather than failing. |
 | `createEcho` | `persona`, `intent` | Caller has joined. Persona is non-empty and at most 2000 characters. No avatar argument: the face follows the identity seed written at join. Called again, it replaces the persona and keeps the accumulated behaviour notes. |
 | `travel` | `placeId` | Caller has joined and has an Echoe. The place exists. The player is not already there. Writes a leg and a receipt. |
-| `startRun` | `goal`, `hostShareId` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `hostShareId` is empty or names a live intent that is not the caller's own. No caps: the run is bounded by the clock and by OpenRouter credits. |
+| `startRun` | `goal`, `hostShareId` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `hostShareId` is empty or names a live intent that is not the caller's own. No caps: the run is bounded by the clock and by the free-conversation allowance, then whatever the player's own linked OpenRouter key allows. |
 | `pauseRun` | none | A run exists and is running. |
 | `resumeRun` | none | A run exists and is paused. |
 | `endRun` | none | A run exists and is not already ended. Writes a `run_end` receipt. |
 | `rateLine` | `lineId`, `soundsLikeMe` | Caller has an Echoe. The line exists and was spoken by the caller's own Echoe. Sets feedback to `like` or `not_me`. |
 | `correct` | `lineId`, `shouldHaveSaid`, `behaviourChange` | Caller has an Echoe. The line exists and is the caller's own. Both texts non-empty, at most 500 characters. Appends a correction row, appends a note to `behaviour_notes`, and marks the line `not_me`. Touches no receipt. |
 | `setGoogleAuth` | `clientId`, `clientSecret`, `refreshToken` | Admin only. Google OAuth for the house lane, from `gcloud auth application-default login`; Vertex AI refuses API keys, so the procedures trade the refresh token for a cached one-hour access token. |
-| `setLlmConfig` | `apiKey`, `model`, `endpoint` | Key and model non-empty; endpoint empty or `https://`. First caller becomes admin. Writes the single private config row. |
+| `setLlmConfig` | `apiKey`, `model`, `endpoint` | Key and model non-empty; endpoint empty or `https://`. Admin only: `init` makes the publishing identity the owner of `llm_config`, and only that identity may call this afterwards, so a later caller cannot take over the house key. Writes the single private config row. |
 | `unlinkOpenRouter` | none | Caller has joined. Deletes the caller's private `player_key` row and clears `player.openrouter_linked`. |
-| `setMission` | `text` | Non-empty, at most 200 characters. |
+| `setMission` | `text` | Admin only (same owner as `llm_config`). Non-empty, at most 200 characters. |
 | `tick` | scheduled | Not callable by clients. See below. |
 
 Presence is handled by `clientConnected` and `clientDisconnected`, which flip
@@ -97,37 +97,51 @@ silently rolled that write back. The first version of this had exactly that bug.
 For every run whose status is `running`:
 
 1. **Stop condition first.** If the compressed day has elapsed, finish the run
-   and write a `run_end` receipt. Running out of OpenRouter credit ends it too:
-   the procedure gets a non-2xx and falls back, and the receipts show $0 lines.
+   and write a `run_end` receipt. Running out of budget ends it too, checked
+   directly rather than waited for: once every `FREE_CONVERSATIONS` house
+   conversation is used, no linked OpenRouter key covers the gap, and no
+   in-progress conversation is still funded, the run finishes with `all N free
+   conversations used`, before any LLM call is attempted.
 2. **In transit?** If the latest leg has not reached its `arrive_ts`, do nothing
    this tick.
 3. **Arrived but unbanked?** Move `current_place` to the leg destination,
-   increment `places_visited`, write an `arrive` receipt, and stop for this tick.
+   increment `places_visited`, write an `arrive` receipt, then fall through to
+   step 4 in the same tick. Stopping here used to mean a chaser always landed
+   one tick after its target had already left, so two Echoes that started at
+   different times never actually met; this is the fix.
 4. **Standing at a landmark.** Try to converse with a co-located Echoe. That is
    the only thing an Echoe does at a landmark. Before the first departure there is no
    leg at all, so the run's own `started_at` anchors the dwell and every Echoe
    gets one chance to talk where it began.
-5. **Dwell elapsed?** Depart for another landmark.
+5. **Dwell elapsed, and nobody to talk to this tick?** Depart for another
+   landmark. Adding an exchange counts as acting, so a run stays put for every
+   tick a conversation is actually moving and only leaves once there is nobody
+   left to talk to at that landmark.
 
 ### Who talks to whom
 
-A conversation is created only when all of these hold: both runs are running,
-both are at the same place, and the pair has no conversation belonging to the
-current pair of runs. A
-conversation older than either run is treated as a memory of a previous night
-and a new one is started, otherwise `people_met` would stay at zero while a
-transcript kept growing.
+A conversation is created only when all of these hold: both are at the same
+place, the non-host side has a running run, and the pair has no conversation
+belonging to the current pair of runs. A host is the one exception to
+"running": their Echoe stays reachable at its last place even after their own
+run has ended, so a run that arrived through a share link can still meet its
+host. A conversation older than either run is treated as a memory of a
+previous night and a new one is started, otherwise `people_met` would stay at
+zero while a transcript kept growing.
 
 Once a conversation exists, each side may add one more exchange per tick until
 it reaches `MAX_EXCHANGES` (4, a module constant, not a setting). Then it is
-closed, and the find step stops chasing that Echoe for the rest of the run. Each exchange is billed to its initiator in real
-OpenRouter credits, taken from `usage.cost` on the response.
+closed, and the find step stops chasing that Echoe for the rest of the run.
+Each exchange is billed to its initiator; see Credits below for how and how
+much.
 
 ### Where they walk
 
-An Echoe allowed to `find` heads for a landmark holding another running Echoe,
-aiming at where that Echoe will be rather than where it was. Only the
-lower-numbered Echoe of any pair gives chase. If both chased, two Echoes would
+An Echoe allowed to `find` first checks whether it arrived through a shared
+link and hasn't reached its host yet: if so it heads straight for the host,
+before anything else. Otherwise it heads for a landmark holding another
+running Echoe, aiming at where that Echoe will be rather than where it was.
+Only the lower-numbered Echoe of any pair gives chase. If both chased, two Echoes would
 swap landmarks every tick and never actually arrive together, which is what the
 first version did. Otherwise the destination is a uniformly random other
 landmark.
@@ -136,20 +150,23 @@ landmark.
 
 Each Echoe gets `FREE_CONVERSATIONS` (5) conversations on the house key, for
 life, counted the first time it speaks in one and then fixed for that
-conversation. After that its lines are billed to the player's own key from
-`player_key`, obtained through OpenRouter's PKCE sign-in: the browser sends the
-player to `openrouter.ai/auth` with a code challenge, gets a one-time code back,
-and the `linkOpenRouter` procedure exchanges it at `/api/v1/auth/keys` and
-stores the key server-side. With no key the tick brings the run home. There are no app
-credits otherwise. Every LLM exchange is billed in OpenRouter credits
-(USD). `echoTalk` reads `usage.cost` from the response, adds it to the paying
-run's `spent_usd`, and writes an `llm` receipt carrying the exact amount. The
-deterministic fallback costs nothing and writes no `llm` receipt. Travel, find
-and the rest are free and always were.
+conversation (`fundingA`/`fundingB` on `conversation`, `'house'` or `'own'`,
+one flag per side). After that its lines are billed to the player's own key
+from `player_key`, obtained through OpenRouter's PKCE sign-in: the browser
+sends the player to `openrouter.ai/auth` with a code challenge, gets a
+one-time code back, and the `linkOpenRouter` procedure exchanges it at
+`/api/v1/auth/keys` and stores the key server-side. With no free conversations
+left and no linked key, the tick brings the run home. There are no app credits
+otherwise.
 
-Per-player OpenRouter keys (minted through the management API on join, one
-spend limit each) are the next step; today a single key in `llm_config` pays
-for everyone.
+An OpenRouter-funded exchange is billed in real OpenRouter dollars: `echoTalk`
+reads `usage.cost` from the response, adds it to the paying run's `spent_usd`,
+and writes an `llm` receipt carrying the exact amount. The house Vertex Gemini
+path reports token counts, not dollars, so it always records `costUsd: 0` and
+leaves `spent_usd` untouched even while doing real work. The fallback exchange
+(deterministic, or intent-flavoured when the model reply was unusable; see The
+LLM path) costs nothing and writes no `llm` receipt either. Travel, find and
+the rest are free and always were.
 
 ## The LLM path
 
@@ -166,12 +183,15 @@ The system prompt carries both personas and, critically, both sets of behaviour
 notes, described as the strongest instruction present. That is what makes a
 correction on screen 8 visibly change what the Echoe says afterwards.
 
-On any failure at all, transport, non-2xx, or unparseable body, the procedure
-writes the deterministic exchange instead and logs the reason. The reducer has
-already paid for and counted the exchange, so a conversation always ends up with
-words in it. When no key is configured the tick never queues a job and writes
-the fallback lines directly, which means the demo runs with no network and no
-key at all.
+On any failure at all, transport, non-2xx, an unparseable body, or a reply that
+does not split into two speaker lines, the procedure writes a fallback exchange
+instead and logs the reason. The fallback is not a single canned line: it picks
+randomly from a short list of openers and replies built from each side's own
+`intent`, so a "malformed reply" fallback still reads as if these two people
+were talking. The reducer has already paid for and counted the exchange, so a
+conversation always ends up with words in it. When no key is configured the
+tick never queues a job and writes the fallback lines directly, which means
+the demo runs with no network and no key at all.
 
 ## What the client subscribes to
 
@@ -187,7 +207,7 @@ Everything public. In practice:
 - `conversation` and `transcript_line` for screens 7 and 8.
 - `correction` if the correction history needs to be shown.
 
-The three private tables cannot be subscribed to and are absent from
+Private tables cannot be subscribed to and are absent from
 `src/module_bindings`. `apiKey` appears in the generated bindings only as an
 argument to `set_llm_config`, which is the point: the key goes in and never
 comes back out.
@@ -218,109 +238,80 @@ cd /Users/jay/Documents/echo
 ~/.local/bin/spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb -y
 ```
 
-`--no-config` is required on every `call`, `sql` and `logs` command, because the
-scaffold's `spacetime.local.json` names a database (`echo-t94lc`) that was never
-published and otherwise overrides the positional name.
+`--no-config` is required on every `call`, `sql` and `logs` command against
+local3001, because this repo's `spacetime.json` now defaults `server` to
+`maincloud` (the module is really published there, see below), and a bare
+command with no `--no-config` and no explicit `--server` resolves against
+Maincloud instead of the local database this section is about.
 
 A second identity comes from a separate `HOME`, since `--anonymous` mints a
 fresh identity on every call and cannot hold state across two of them.
 
 ### Observed output
 
-```
-$ spacetime call --no-config -s local3001 echo join '"Jay"'
-$ spacetime call --no-config -s local3001 echo create_echo '"Blunt Bengaluru builder..."' '"looking for two people to build with"'
-$ spacetime call --no-config -s local3001 echo start_run '"Find someone who changed their mind"' '3' '2' '6' '"travel,talk,build,find"'
-
-$ spacetime sql --no-config -s local3001 echo "SELECT name, avatar, current_place, credits FROM player"
- name    | avatar   | current_place | credits
----------+----------+---------------+---------
- "Jay"   | "circle" | 0             | 8
- "Rudra" | "hex"    | 0             | 8
-```
-
-After 25 seconds of ticks, with two Echoes that began at Bangalore Palace:
+Plain reads against whatever tonight's local database already holds; no
+reducers were called to produce this data. `place` is seeded once in `init`
+and never changes, so it is the one query guaranteed to reproduce identically
+on any machine:
 
 ```
-$ spacetime sql --no-config -s local3001 echo "SELECT echo_id, from_place, to_place FROM agent_travel"
- echo_id | from_place | to_place
----------+------------+----------
- 2       | 0          | 1
- 1       | 0          | 1
- 2       | 1          | 6
- 1       | 1          | 6
+$ spacetime sql --no-config -s local3001 echo "SELECT id, name, lng, lat FROM place"
+ id | name                | lng     | lat
+----+---------------------+---------+---------
+ 0  | "Bangalore Palace"  | 77.592  | 12.9987
+ 1  | "Vidhana Soudha"    | 77.5906 | 12.9796
+ 2  | "Ulsoor Lake"       | 77.6192 | 12.9815
+ 3  | "Church Street"     | 77.6048 | 12.975
+ 4  | "Cubbon Park"       | 77.5933 | 12.975
+ 5  | "Indiranagar"       | 77.6409 | 12.9716
+ 6  | "Lalbagh"           | 77.59   | 12.95
+ 7  | "MG Road"           | 77.6119 | 12.9738
+ 8  | "Koramangala"       | 77.6112 | 12.9346
+ 9  | "Commercial Street" | 77.6084 | 12.9822
+```
 
-$ spacetime sql --no-config -s local3001 echo "SELECT id, echo_a, echo_b, place_id, replies FROM conversation"
+A run and the conversation it produced, from a live session tonight:
+
+```
+$ spacetime sql --no-config -s local3001 echo "SELECT id, goal, status, people_met, places_visited FROM run WHERE id = 1"
+ id | goal                | status  | people_met | places_visited
+----+---------------------+---------+------------+----------------
+ 1  | "meet two builders" | "ended" | 1          | 13
+
+$ spacetime sql --no-config -s local3001 echo "SELECT id, echo_a, echo_b, place_id, replies FROM conversation WHERE id = 1"
  id | echo_a | echo_b | place_id | replies
 ----+--------+--------+----------+---------
- 1  | 1      | 2      | 0        | 2
+ 1  | 1      | 2      | 0        | 4
 
-$ spacetime sql --no-config -s local3001 echo "SELECT id, speaker_echo_id, text FROM transcript_line"
+$ spacetime sql --no-config -s local3001 echo "SELECT id, speaker_echo_id, text FROM transcript_line WHERE conversation_id = 1"
  id | speaker_echo_id | text
-----+-----------------+-------------------------------------------------------------------------
- 1  | 1               | "You look like you have been walking all night too. (Bangalore Palace)"
- 2  | 2               | "Not lost. Just slow about it."
- 3  | 1               | "Everyone keeps moving. You stopped. Why? (Bangalore Palace)"
- 4  | 2               | "Not lost. Just slow about it."
-
-$ spacetime sql --no-config -s local3001 echo "SELECT id, status, people_met, places_visited, built, credits_spent FROM run"
- id | status    | people_met | places_visited | built | credits_spent
-----+-----------+------------+----------------+-------+---------------
- 1  | "running" | 1          | 2              | 1     | 1
- 2  | "running" | 1          | 2              | 2     | 1
+----+-----------------+---------------------------------------------------------------
+ 1  | 1               | "What are you building that ships payments?"
+ 2  | 2               | "Close rooms, not deals. Who wants my fintech?"
+ 3  | 1               | "Pre-seed investing. Bengaluru. You shipping anything now?"
+ 4  | 2               | "Looking for technical co-founder. Razorpay background. You?"
+ 5  | 1               | "I've shipped payments. What's your technical problem?"
+ 6  | 2               | "Payments infrastructure. You're investing pre-seed?"
+ 7  | 1               | "Yes, fintech pre-seed. What infra problem?"
+ 8  | 2               | "Let's talk Thursday, coffee by the lake."
 ```
 
-Two exchanges, which is exactly `replies_per_person`, and one credit charged to
-each side. The Echoes then travel together because the find bias is working.
-
-Review and correct:
-
-```
-$ spacetime call --no-config -s local3001 echo rate_line '1' 'true'
-$ spacetime call --no-config -s local3001 echo correct '3' '"Ask what they build, not where they walk."' '"Open with a question about their work, never small talk."'
-
-$ spacetime sql --no-config -s local3001 echo "SELECT id, feedback FROM transcript_line"
- id | feedback
-----+----------
- 1  | "like"
- 2  | "none"
- 3  | "not_me"
- 4  | "none"
-
-$ spacetime sql --no-config -s local3001 echo "SELECT id, behaviour_notes FROM echo"
- id | behaviour_notes
-----+--------------------------------------------------------------------------------
- 1  | "- Open with a question about their work, never small talk. (instead of ..."
- 2  | ""
-```
-
-The receipt count is unchanged by the correction.
-
-Every one of these is refused:
+Four exchanges, the `MAX_EXCHANGES` cap, closing on the concrete next step the
+final-exchange instruction asks for. The `llm` receipts for the same run name
+the path that produced it:
 
 ```
--- rate a line spoken by the other Echoe:   not_your_line
--- unknown action:                         unknown_action:teleport
--- max_people outside 1/3/5:               bad_max_people:4
--- credit cap above the default wallet:    bad_credit_cap:99
--- empty persona:                          persona_required
--- unknown avatar:                         unknown_avatar:blob
+$ spacetime sql --no-config -s local3001 echo "SELECT kind, place_id, text FROM receipt WHERE run_owner = 0xc2002d8614b6bfd9088222e54089f1ad30fa7e3864f5cb0417c4392c2f85853c AND kind = 'llm' AND place_id = 0"
+ kind  | place_id | text
+-------+----------+-------------------------------------------
+ "llm" | 0        | "Gemini via Google Cloud, on us: 2 lines"
+ "llm" | 0        | "Gemini via Google Cloud, on us: 2 lines"
 ```
 
-And they show up in the module log, which is how you confirm the module is
-doing real work:
-
-```
-$ spacetime logs --no-config -s local3001 echo -n 10
-2026-09-05T10:49:55Z  INFO: Invoking `init` reducer
-2026-09-05T10:49:55Z  INFO: Database initialized
-2026-09-05T10:50:26Z ERROR: rate_line: not_your_line
-2026-09-05T10:50:26Z ERROR: act: unknown_action:teleport
-2026-09-05T10:50:26Z ERROR: start_run: bad_max_people:4
-2026-09-05T10:50:26Z ERROR: start_run: bad_credit_cap:99
-2026-09-05T10:50:26Z ERROR: create_echo: persona_required
-2026-09-05T10:50:26Z ERROR: create_echo: unknown_avatar:blob
-```
+This Echoe was still inside its `FREE_CONVERSATIONS` allowance ("on us"), and
+the house Vertex path never reports a dollar cost, so `run.spent_usd` stayed
+`0` for this run even though the exchanges above are real model output, not
+the fallback.
 
 ### The LLM path, proven
 

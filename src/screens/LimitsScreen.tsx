@@ -18,11 +18,10 @@ export function LimitsScreen({ actions, go, run, backTo, freeLeft, linked }: Lim
     <div className="screen">
       <TopBar title="Adjust limits" onBack={() => go(backTo)} />
       <div className="content">
-        <div className="eyebrow">You stay in control</div>
-        <h2>What can it do without you?</h2>
+        <div className="eyebrow">Your Echoe, your terms</div>
+        <h2>Adjust the run</h2>
         <p className="lede">
-          Every line your Echoe says is billed in real OpenRouter credits and shows up on
-          your receipts. Saving restarts the run with these settings.
+          Set the goal your Echoe is chasing and connect the OpenRouter account it spends from.
         </p>
 
         <label className="label" htmlFor="goal">

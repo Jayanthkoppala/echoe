@@ -52,7 +52,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
 
   return (
     <div className="screen">
-      <TopBar title="Your Echoe" step="02 / 03" onBack={() => go('join')} />
+      <TopBar title="Your Echoe" onBack={() => go('join')} />
       <div className="content content--split">
         {hostCard ? <HostIntentCard host={hostCard} /> : null}
 

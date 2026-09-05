@@ -1,7 +1,8 @@
+import { avatarUri } from '../state/copy';
 import { TopBar } from '../components/TopBar';
 import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
-import type { Match, Player, ScreenProps, TranscriptLine } from '../state/types';
+import type { Match, Player, ScreenProps, TranscriptLine, ScreenName } from '../state/types';
 
 interface ReviewScreenProps extends ScreenProps {
   transcript: TranscriptLine[];
@@ -10,6 +11,7 @@ interface ReviewScreenProps extends ScreenProps {
   player?: Player;
   onProfile: () => void;
   onFocus: (id: string) => void;
+  backTo?: ScreenName;
 }
 
 export function ReviewScreen({
@@ -21,6 +23,7 @@ export function ReviewScreen({
   player,
   onProfile,
   onFocus,
+  backTo = 'return',
 }: ReviewScreenProps) {
   const focused = transcript.find(line => line.id === focusedId);
 
@@ -28,11 +31,11 @@ export function ReviewScreen({
     <div className="screen">
       <TopBar
         title="Review conversation"
-        onBack={() => go('return')}
+        onBack={() => go(backTo)}
         right={
           <ProfileButton
             name={player?.name ?? '?'}
-            avatar={player?.avatar ?? 'circle'}
+            avatar={player?.avatar ?? ''}
             onClick={onProfile}
           />
         }
@@ -40,7 +43,7 @@ export function ReviewScreen({
       <div className="content">
         <div className="chat-person glass">
           <div className="mini-avatar" aria-hidden="true">
-            ☻
+            <img src={avatarUri(match?.avatar)} alt="" />
           </div>
           <div>
             <strong>

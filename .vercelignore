@@ -1,0 +1,5 @@
+# .env.local points at the local server and must never ship. .env.production holds
+# only public values (host, database name, Google OAuth client id); build-env flags
+# override its host and database at deploy time.
+.env.local
+spacetimedb/node_modules

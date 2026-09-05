@@ -45,7 +45,7 @@ export function RoamingScreen({
           <span className="step-count">{onlineCount} online</span>
           <ProfileButton
             name={player?.name ?? '?'}
-            avatar={player?.avatar ?? 'circle'}
+            avatar={player?.avatar ?? ''}
             onClick={onProfile}
           />
         </header>

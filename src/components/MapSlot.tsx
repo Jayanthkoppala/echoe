@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import BengaluruMap, { type AgentSpec, type PinKind } from '../map/BengaluruMap';
+import BengaluruMap, { type AgentSpec, type EventPin, type PinKind } from '../map/BengaluruMap';
 import { MapPins } from './MapPins';
 
 /**
@@ -18,16 +18,18 @@ class MapBoundary extends Component<{ fallback: ReactNode; children: ReactNode }
   }
 }
 
-export type { PinKind } from '../map/BengaluruMap';
+export type { EventPin, PinKind } from '../map/BengaluruMap';
 
 interface MapSlotProps {
   agents: AgentSpec[];
   activePlaceId?: string;
   pinKinds?: PinKind[];
   onPlaceTap?: (placeId: string) => void;
+  onEventTap?: (event: EventPin) => void;
+  followMine?: number;
 }
 
-export function MapSlot({ agents, activePlaceId, pinKinds, onPlaceTap }: MapSlotProps) {
+export function MapSlot({ agents, activePlaceId, pinKinds, onPlaceTap, onEventTap, followMine }: MapSlotProps) {
   return (
     <div id="map-slot">
       <MapBoundary
@@ -38,7 +40,7 @@ export function MapSlot({ agents, activePlaceId, pinKinds, onPlaceTap }: MapSlot
           </>
         }
       >
-        <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} activePlaceId={activePlaceId} pinKinds={pinKinds} />
+        <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} onEventTap={onEventTap} activePlaceId={activePlaceId} pinKinds={pinKinds} followMine={followMine} />
       </MapBoundary>
       {/* The OpenFreeMap "liberty" basemap is light. This sinks it to obsidian
           without touching the map component. */}

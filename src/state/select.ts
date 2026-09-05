@@ -4,7 +4,6 @@
 import type { Infer } from 'spacetimedb';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { LANDMARKS } from '../data/landmarks';
-import spotsJson from '../data/spots.json';
 
 import AgentMemorySchema from '../module_bindings/agent_memory_table';
 import AgentTravelSchema from '../module_bindings/agent_travel_table';
@@ -22,11 +21,11 @@ import { avatarColour, behaviourFrom } from './copy';
 import type {
   AgentNote,
   Badge,
-  MeetAt,
   Correction,
   HostCard,
   JoinedEvent,
   Match,
+  MeetAt,
   Player,
   PlaceVisit,
   Receipt,
@@ -47,19 +46,6 @@ export type ReceiptRow = Infer<typeof ReceiptSchema>;
 export type RunRow = Infer<typeof RunSchema>;
 export type TranscriptLineRow = Infer<typeof TranscriptLineSchema>;
 
-interface Spot {
-  name: string;
-  category: string;
-  hq_area: string;
-  lat: number;
-  lng: number;
-  featured: boolean;
-}
-
-const SPOTS = spotsJson as Spot[];
-
-const GLYPH: Record<string, string> = { cafe: '\u2615', pub: '\ud83c\udf7a', bar: '\ud83c\udf7a', brewery: '\ud83c\udf7a' };
-
 /** Great-circle distance in kilometres. */
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -71,37 +57,16 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
   return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function nearest(list: readonly Spot[], lat: number, lng: number) {
-  let best: { spot: Spot; km: number } | undefined;
-  for (const spot of list) {
-    const km = haversineKm(lat, lng, spot.lat, spot.lng);
-    if (!best || km < best.km) best = { spot, km };
-  }
-  return best;
-}
-
 /**
- * A spot near the midpoint of two players' current places. Featured first,
- * any category as the fallback, nothing beyond 4 km.
+ * A landmark near the midpoint of two players' current places, nothing beyond
+ * 4 km. This used to name a pub from spots.json, which the events layer
+ * replaced; the ten landmarks are the only place names the app still ships.
  */
 export function meetAtFor(placeA: number, placeB: number): MeetAt | undefined {
   const a = landmarkOf(placeA);
   const b = landmarkOf(placeB);
-  const lat = (a.lat + b.lat) / 2;
-  const lng = (a.lng + b.lng) / 2;
-
-  const pick =
-    nearest(SPOTS.filter(s => s.featured), lat, lng) ?? nearest(SPOTS, lat, lng);
-  const fallback = pick && pick.km > 4 ? nearest(SPOTS, lat, lng) : pick;
-  if (!fallback || fallback.km > 4) return undefined;
-
-  const { spot } = fallback;
-  return {
-    name: spot.name,
-    // Most rows have no hq_area, so name the closest landmark instead.
-    area: spot.hq_area.trim() || nearestLandmarkName(spot.lat, spot.lng),
-    glyph: GLYPH[spot.category] ?? '\u2615',
-  };
+  const near = nearestLandmark((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+  return near.km > 4 ? undefined : { name: near.name, area: 'Bengaluru', glyph: near.icon };
 }
 
 /** Closest of the ten landmarks, with the distance so callers can gate on it. */
@@ -113,10 +78,6 @@ export function nearestLandmark(lat: number, lng: number) {
     if (km < bestKm) { bestKm = km; best = mark; }
   }
   return { ...best, km: bestKm };
-}
-
-function nearestLandmarkName(lat: number, lng: number): string {
-  return nearestLandmark(lat, lng).name;
 }
 
 /** Timestamps arrive as microseconds since the epoch, in a bigint. */

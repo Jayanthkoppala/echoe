@@ -18,7 +18,7 @@ ROOT="$(dirname "$0")/.."
 OUT="$ROOT/public/logos"
 
 # Every pin source. Missing files are skipped, so this stays runnable while
-# spots.json is deliberately absent: spot chips are drawn glyphs, never logos.
+# events.json is deliberately absent: event chips are drawn glyphs, never logos.
 SRCS="companies.json vcs.json companies-osm.json"
 
 mkdir -p "$OUT"

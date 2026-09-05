@@ -89,6 +89,8 @@ interface BengaluruMapProps {
   agents: AgentSpec[];
   onPlaceTap?: (placeId: string) => void;
   onCompanyTap?: (slug: string) => void;
+  /** An event pin was tapped. The row is the events.json entry, verbatim. */
+  onEventTap?: (event: EventPin) => void;
   /** Which pin kinds to show. 'place' is the ten landmark chips. Default all. */
   pinKinds?: PinKind[];
   /**
@@ -258,7 +260,7 @@ const ZOOM_RANGE: [string, number, number][] = [
 // and at 14px it lands straight across the landmark cluster, so it goes.
 const HIDE = ['place_city_large'];
 
-/* ── Map pins: startups, VCs and spots ───────────────────────────
+/* ── Map pins: startups, VCs and events ──────────────────────────
    A symbol layer, not DOM markers, per docs/LOGO-PINS.md. Three facts about
    the data shaped this:
    1. Every source's `logo` is a Google favicon URL. It renders in an <img> but
@@ -272,7 +274,7 @@ const HIDE = ['place_city_large'];
       companies-osm.json has real precision and is left alone.
    3. companies-osm.json is 763 rows, so everything unfeatured is clustered. */
 
-export type PinKind = 'startup' | 'vc' | 'spot' | 'place';
+export type PinKind = 'startup' | 'vc' | 'event' | 'place';
 
 interface PinRow {
   name: string;
@@ -284,18 +286,48 @@ interface PinRow {
   kind?: PinKind;
   featured?: boolean;
   stage?: string;
+  /** Events only: true when the coordinate is a guess, not the venue. */
+  approx?: boolean;
 }
 
-// spots.json is still being generated. import.meta.glob resolves to an empty
-// object when nothing matches, which a static import cannot do without
-// breaking the build.
-const spotModules = import.meta.glob('../data/spots.json', { eager: true, import: 'default' });
-const spotsJson = (Object.values(spotModules)[0] ?? []) as PinRow[];
+/** One row of src/data/events.json, as the map needs it. */
+export interface EventPin {
+  id: string;
+  title: string;
+  host: string;
+  category: 'company' | 'trip' | 'date' | 'meetup';
+  date: string;
+  time: string;
+  endDate?: string;
+  venue: string;
+  area: string;
+  address?: string;
+  lat: number;
+  lng: number;
+  approx: boolean;
+  url: string;
+  price: string;
+  summary: string;
+}
+
+// events.json may be absent. import.meta.glob resolves to an empty object when
+// nothing matches, which a static import cannot do without breaking the build.
+const eventModules = import.meta.glob('../data/events.json', { eager: true, import: 'default' });
+const EVENTS = (Object.values(eventModules).flat() ?? []) as EventPin[];
+
+const EVENT_GLYPH: Record<EventPin['category'], string> = {
+  company: '\u{1F3E2}',
+  trip: '\u{1F68C}',
+  date: '\u{1F339}',
+  meetup: '\u{1F465}',
+};
 
 const FEATURED_COUNT = 12;
 const BADGE_CHECK = 'badge-check';
 
-const RING = { startup: '#ffffff', vc: LIME, spot: '#e0a458', place: '#ffffff' };
+const CORAL = '#ef7e66';
+
+const RING = { startup: '#ffffff', vc: LIME, event: CORAL, place: '#ffffff' };
 
 const slugOf = (row: PinRow) =>
   (row.domain?.split('.')[0] ?? row.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -326,11 +358,10 @@ const PIN_ROWS: PinRow[] = (() => {
   const seed = (companiesJson as PinRow[]).map((r, i) => ({ ...r, kind: 'startup' as const, featured: i < FEATURED_COUNT }));
   const vcs = (vcsJson as PinRow[]).map(r => ({ ...r, kind: 'vc' as const, featured: true }));
   const osm = (osmJson as PinRow[]).map(r => ({ ...r, kind: 'startup' as const }));
-  const spots = spotsJson.map(r => ({ ...r, kind: 'spot' as const }));
 
   const out: PinRow[] = [];
   const seen = new Set<string>();
-  for (const r of [...seed, ...vcs, ...spots, ...osm]) {
+  for (const r of [...seed, ...vcs, ...osm]) {
     const key = `${r.kind}:${r.domain || r.name}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -363,10 +394,10 @@ const featureFor = (row: PinRow) => {
   };
 };
 
-// Startups and spots are both in the hundreds, so each unfeatured set gets its
-// own clustered source. A cluster carries no kind, so one source per kind is
-// what lets the filter hide clusters exactly rather than approximately. VCs are
-// only 44 and stay whole.
+// Unfeatured startups are in the hundreds, so they get their own clustered
+// source. A cluster carries no kind, so one source per kind is what lets the
+// filter hide clusters exactly rather than approximately. VCs are only 44 and
+// stay whole; events are never clustered and never hidden by zoom.
 const isUnclustered = (r: PinRow) => r.kind === 'vc' || !!r.featured;
 
 const collect = (rows: PinRow[]): FeatureCollection => ({
@@ -376,7 +407,27 @@ const collect = (rows: PinRow[]): FeatureCollection => ({
 
 const PINS_MAIN = collect(PIN_ROWS.filter(isUnclustered));
 const PINS_REST = collect(PIN_ROWS.filter(r => !isUnclustered(r) && r.kind === 'startup'));
-const SPOTS_REST = collect(PIN_ROWS.filter(r => !isUnclustered(r) && r.kind === 'spot'));
+
+/** Events keep their exact lat/lng: no spread, no clustering, no zoom gate. */
+const EVENT_PINS: FeatureCollection = {
+  type: 'FeatureCollection',
+  features: EVENTS.map(event => {
+    const id = `pin-event-${event.id}`;
+    ROW_BY_IMAGE_ID.set(id, {
+      name: event.title,
+      lat: event.lat,
+      lng: event.lng,
+      category: event.category,
+      kind: 'event',
+      approx: event.approx,
+    });
+    return {
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [event.lng, event.lat] },
+      properties: { ...event, kind: 'event', logoId: id },
+    };
+  }),
+};
 
 const CHIP_PX = 96;
 const CHIP_R = 44;
@@ -390,30 +441,33 @@ function chipContext(): CanvasRenderingContext2D {
   return ctx;
 }
 
-function strokeRing(ctx: CanvasRenderingContext2D, colour = '#ffffff') {
+function strokeRing(ctx: CanvasRenderingContext2D, colour = '#ffffff', dashed = false) {
   ctx.beginPath();
   ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
   ctx.lineWidth = 4;
   ctx.strokeStyle = colour;
+  // A guessed coordinate gets a broken ring, so an exact venue reads differently.
+  if (dashed) ctx.setLineDash([9, 7]);
   ctx.stroke();
+  ctx.setLineDash([]);
 }
 
 const chipPixels = (ctx: CanvasRenderingContext2D) => ctx.getImageData(0, 0, CHIP_PX, CHIP_PX);
 
-/** A dark disc with initials, or a glyph for a spot with no logo. */
+/** A dark disc with initials, or a glyph for an event. */
 function fallbackChip(row: PinRow): ImageData {
   const ctx = chipContext();
   ctx.beginPath();
   ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
   ctx.fillStyle = '#182420';
   ctx.fill();
-  strokeRing(ctx, RING[row.kind ?? 'startup']);
+  strokeRing(ctx, RING[row.kind ?? 'startup'], row.kind === 'event' && !!row.approx);
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (row.kind === 'spot') {
+  if (row.kind === 'event') {
     ctx.font = '44px system-ui, sans-serif';
-    ctx.fillText(row.category === 'cafe' ? '\u2615' : '\u{1F37A}', CHIP_PX / 2, CHIP_PX / 2 + 2);
+    ctx.fillText(EVENT_GLYPH[row.category as EventPin['category']] ?? '\u{1F4C5}', CHIP_PX / 2, CHIP_PX / 2 + 2);
   } else {
     const initials =
       row.name.replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2)
@@ -512,8 +566,8 @@ async function serveMissingImage(map: maplibregl.Map, id: string, alive: () => b
   // logo first and fall back to a drawn chip.
   let data: ImageData;
   try {
-    // Spots never fetch: 872 rows, and a mug reads better than a favicon.
-    data = row.logo && row.kind !== 'spot' ? await logoChip(row) : fallbackChip(row);
+    // Events never fetch: the category glyph is the point of the pin.
+    data = row.logo && row.kind !== 'event' ? await logoChip(row) : fallbackChip(row);
   } catch {
     data = fallbackChip(row);
   }
@@ -521,7 +575,7 @@ async function serveMissingImage(map: maplibregl.Map, id: string, alive: () => b
   map.addImage(id, data, { pixelRatio: 2 });
 }
 
-const ALL_KINDS: PinKind[] = ['startup', 'vc', 'spot', 'place'];
+const ALL_KINDS: PinKind[] = ['startup', 'vc', 'event', 'place'];
 
 /**
  * Filters the pin layers in place, never rebuilding a source. 'place' means the
@@ -535,13 +589,12 @@ function applyPinKinds(map: maplibregl.Map, kinds: PinKind[], pins: Record<strin
     ? ['match', ['get', 'kind'], symbolKinds, true, false]
     : ['==', ['get', 'kind'], '\u0000'];
 
-  if (map.getLayer('pin-featured')) map.setFilter('pin-featured', ['all', ['!=', ['get', 'kind'], 'spot'], kindFilter] as never);
-  if (map.getLayer('pin-spots')) map.setFilter('pin-spots', ['all', ['==', ['get', 'kind'], 'spot'], kindFilter] as never);
+  if (map.getLayer('pin-featured')) map.setFilter('pin-featured', kindFilter as never);
   if (map.getLayer('pin-rest')) map.setFilter('pin-rest', ['all', ['!', ['has', 'point_count']], kindFilter] as never);
 
   for (const [kind, ids] of [
     ['startup', ['pin-clusters', 'pin-cluster-count']],
-    ['spot', ['spot-clusters', 'spot-cluster-count', 'spot-rest']],
+    ['event', ['pin-events']],
   ] as [PinKind, string[]][]) {
     const on = kinds.includes(kind) ? 'visible' : 'none';
     for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on);
@@ -594,7 +647,7 @@ function fanCoincidentAgents(entries: { agent: AgentSpec; lng: number; lat: numb
   }
 }
 
-export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activePlaceId, pinKinds = ALL_KINDS, followMine }: BengaluruMapProps) {
+export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, onEventTap, activePlaceId, pinKinds = ALL_KINDS, followMine }: BengaluruMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const followRef = useRef(false);
@@ -620,11 +673,11 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
   const pinsRef = useRef<Record<string, HTMLElement>>({});
   // The map is built once, so the handlers it closes over would be frozen at
   // their first-render values. This keeps the live ones reachable.
-  const handlersRef = useRef({ onPlaceTap, onCompanyTap });
+  const handlersRef = useRef({ onPlaceTap, onCompanyTap, onEventTap });
   const kindsRef = useRef(pinKinds);
 
   agentsRef.current = agents;
-  handlersRef.current = { onPlaceTap, onCompanyTap };
+  handlersRef.current = { onPlaceTap, onCompanyTap, onEventTap };
   kindsRef.current = pinKinds;
 
   useEffect(() => {
@@ -831,7 +884,7 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
       map.addSource('pins', { type: 'geojson', data: PINS_MAIN });
       const clustered = { cluster: true, clusterRadius: 40, clusterMaxZoom: 14 } as const;
       map.addSource('pins-rest', { type: 'geojson', data: PINS_REST, ...clustered });
-      map.addSource('spots-rest', { type: 'geojson', data: SPOTS_REST, ...clustered });
+      map.addSource('events', { type: 'geojson', data: EVENT_PINS });
 
       // 0.45 at 12.5 and 0.8 at 15 as asked; the low end reaches down to
       // CITY_ZOOM because the city view is 11.95, not the 12.5 the spec assumed.
@@ -858,26 +911,36 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         'text-halo-width': 1.4,
       };
 
-      // Featured startups, every VC and featured spots. Spots hold back to 13
-      // so the city view stays about companies.
+      // Featured startups and every VC.
       map.addLayer({
         id: 'pin-featured',
         type: 'symbol',
         source: 'pins',
         minzoom: CITY_ZOOM - 0.05,
-        filter: ['!=', ['get', 'kind'], 'spot'],
         layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, 'icon-allow-overlap': true, ...pinText },
         paint: pinPaint,
       });
 
+      // Events: a handful of rows on their exact venue, so they never cluster,
+      // never wait for a zoom and never lose to another pin for space.
       map.addLayer({
-        id: 'pin-spots',
+        id: 'pin-events',
         type: 'symbol',
-        source: 'pins',
-        minzoom: 13,
-        filter: ['==', ['get', 'kind'], 'spot'],
-        layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, ...pinText },
-        paint: pinPaint,
+        source: 'events',
+        layout: {
+          'icon-image': ['get', 'logoId'],
+          'icon-size': pinIconSize as never,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'text-field': ['get', 'title'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 11,
+          'text-offset': [0, 1.4],
+          'text-anchor': 'top',
+          'text-max-width': 9,
+          'text-allow-overlap': true,
+        },
+        paint: { ...pinPaint, 'text-color': CORAL },
       });
 
       // Everything unfeatured, clustered. Glass to match the sheet, without a
@@ -908,43 +971,6 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         paint: { 'text-color': '#ffffff' },
       });
 
-      // Spots cluster in amber so a pub cluster never reads as a company one.
-      map.addLayer({
-        id: 'spot-clusters',
-        type: 'circle',
-        source: 'spots-rest',
-        filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': 'rgba(56,38,20,0.82)',
-          'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 50, 24],
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': 'rgba(224,164,88,0.55)',
-        },
-      });
-
-      map.addLayer({
-        id: 'spot-cluster-count',
-        type: 'symbol',
-        source: 'spots-rest',
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': ['get', 'point_count_abbreviated'],
-          'text-font': ['Noto Sans Regular'],
-          'text-size': 11,
-        },
-        paint: { 'text-color': '#ffffff' },
-      });
-
-      map.addLayer({
-        id: 'spot-rest',
-        type: 'symbol',
-        source: 'spots-rest',
-        minzoom: 13.5,
-        filter: ['!', ['has', 'point_count']],
-        layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, ...pinText },
-        paint: pinPaint,
-      });
-
       map.addLayer({
         id: 'pin-rest',
         type: 'symbol',
@@ -955,7 +981,7 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         paint: pinPaint,
       });
 
-      const PIN_LAYERS = ['pin-featured', 'pin-spots', 'pin-rest', 'spot-rest'];
+      const PIN_LAYERS = ['pin-featured', 'pin-rest'];
 
       map.on('click', PIN_LAYERS, (e) => {
         const feature = e.features?.[0];
@@ -971,8 +997,21 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         handlersRef.current.onCompanyTap?.(String(feature.properties?.slug ?? ''));
       });
 
+      // An event pin answers what and where: the card is React's, this only
+      // brings the venue into the open band above the sheet.
+      map.on('click', 'pin-events', (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const [lng, lat] = (feature.geometry as Point).coordinates as [number, number];
+        map.flyTo({
+          center: [lng, lat], zoom: Math.max(map.getZoom(), 15), pitch: 60,
+          offset: [0, -130], duration: 1000, curve: 1.4, essential: true,
+        });
+        handlersRef.current.onEventTap?.(feature.properties as unknown as EventPin);
+      });
+
       // Documented cluster tap: expand to the zoom that breaks it apart.
-      for (const [layer, sourceId] of [['pin-clusters', 'pins-rest'], ['spot-clusters', 'spots-rest']] as const) {
+      for (const [layer, sourceId] of [['pin-clusters', 'pins-rest']] as const) {
         map.on('click', layer, async (e) => {
           const [feature] = map.queryRenderedFeatures(e.point, { layers: [layer] });
           if (!feature) return;
@@ -1189,7 +1228,25 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
   const kindsKey = pinKinds.join(',');
   useEffect(() => {
     const map = mapRef.current;
-    if (map && map.getLayer('pin-featured')) applyPinKinds(map, kindsRef.current, pinsRef.current);
+    if (!map || !map.getLayer('pin-featured')) return;
+    applyPinKinds(map, kindsRef.current, pinsRef.current);
+    // Picking Events with nothing else on means the events are what you asked
+    // for, so put them on screen rather than leaving the pin off the viewport.
+    if (kindsRef.current.length !== 1 || kindsRef.current[0] !== 'event' || !EVENTS.length) return;
+    followRef.current = false;
+    if (EVENTS.length === 1) {
+      map.easeTo({
+        center: [EVENTS[0].lng, EVENTS[0].lat],
+        zoom: 14,
+        offset: [0, -130],
+        duration: 900,
+        essential: true,
+      });
+      return;
+    }
+    const bounds = new maplibregl.LngLatBounds();
+    for (const e of EVENTS) bounds.extend([e.lng, e.lat]);
+    map.fitBounds(bounds, { padding: { top: 120, bottom: 320, left: 60, right: 60 }, maxZoom: 15, duration: 900 });
   }, [kindsKey]);
 
   useEffect(() => {

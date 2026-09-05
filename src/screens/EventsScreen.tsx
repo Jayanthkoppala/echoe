@@ -43,7 +43,7 @@ const GLYPH: Record<EventRow['category'], string> = {
 };
 
 /** "Sat 6 Sep" from a YYYY-MM-DD string. */
-const dayLabel = (date: string): string => {
+export const dayLabel = (date: string): string => {
   const d = new Date(`${date}T00:00:00`);
   return Number.isNaN(d.getTime())
     ? date

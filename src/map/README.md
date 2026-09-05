@@ -7,6 +7,12 @@ markers. Palette, label zoom rules and camera are documented in
 `docs/design/MAP-DESIGN.md`. Pass `activePlaceId` to put the lime ring on a
 landmark; without it the ring follows the player's own Echoe destination.
 
+Pin kinds are `startup`, `vc`, `event` and `place`. Events come from
+`src/data/events.json` (loaded with `import.meta.glob`, so a missing file still
+builds) and are drawn unclustered on their exact `lat`/`lng` with a coral ring,
+a category glyph and the title as a label; `approx: true` dashes the ring. The
+old pubs/spots layer and `src/data/spots.json` were removed.
+
 Usage:
 
 ```tsx

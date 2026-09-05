@@ -34,6 +34,7 @@ import {
   toReceipt,
   toRun,
   toTranscript,
+  eventsFrom,
 } from './state/select';
 import type { Actions, ScreenName } from './state/types';
 
@@ -133,9 +134,17 @@ function App() {
     if (screen === 'join' && myEchoRow) setScreen('world');
   }, [screen, myEchoRow]);
 
-  // The module ends a run on its own when the budget or the goal runs out.
+  // The module ends a run on its own when the clock or the budget runs out.
+  // Whether the player is on the status page or still watching the map, the
+  // moment their live run ends they land on Return.
+  const prevRunStatus = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (screen === 'roaming' && myRunRow?.status === 'ended') setScreen('return');
+    const status = myRunRow?.status;
+    const wasLive = prevRunStatus.current === 'running' || prevRunStatus.current === 'paused';
+    if (status === 'ended' && (screen === 'roaming' || (screen === 'world' && wasLive))) {
+      setScreen('return');
+    }
+    prevRunStatus.current = status;
   }, [screen, myRunRow?.status]);
 
   const actions: Actions = useMemo(
@@ -231,8 +240,8 @@ function App() {
   const hostEchoId = hostIntentRow?.echoId;
 
   const agents = useMemo(
-    () => agentsFrom(travels, echoes, players, myEchoId, hostEchoId),
-    [travels, echoes, players, myEchoId, hostEchoId],
+    () => agentsFrom(travels, echoes, players, runs, myEchoId, hostEchoId),
+    [travels, echoes, players, runs, myEchoId, hostEchoId],
   );
 
   const matches = useMemo(
@@ -247,6 +256,11 @@ function App() {
         myPlayerRow?.currentPlace ?? 0,
       ),
     [conversations, myEchoId, hostEchoId, echoes, players, companies, myPlayerRow?.currentPlace],
+  );
+
+  const joinedEvents = useMemo(
+    () => eventsFrom(myRunRow, myIntentRow, conversations, intents, echoes, players, myEchoId, companies),
+    [myRunRow, myIntentRow, conversations, intents, echoes, players, myEchoId, companies],
   );
 
   const transcript = useMemo(
@@ -410,6 +424,7 @@ function App() {
           actions={actions}
           go={go}
           people={matches}
+          events={joinedEvents}
           player={player}
           onProfile={() => openProfile('talks')}
           onReview={id => openReview(id, 'talks')}

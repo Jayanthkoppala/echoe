@@ -8,7 +8,7 @@ const LOOP = [
   'Return, inspect and correct',
 ];
 
-export function DoneScreen({ go }: ScreenProps) {
+export function DoneScreen({ actions, go }: ScreenProps) {
   return (
     <div className="screen">
       <TopBar title="Echoe" step="Loop complete" showMark />
@@ -31,7 +31,7 @@ export function DoneScreen({ go }: ScreenProps) {
         </div>
       </div>
       <div className="footer">
-        <button className="primary" onClick={() => go('world')}>
+        <button className="primary" onClick={() => actions.onRestart()}>
           Start tomorrow's run <span aria-hidden="true">→</span>
         </button>
         <button className="secondary" onClick={() => go('join')}>

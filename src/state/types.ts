@@ -75,6 +75,18 @@ export interface HostCard {
   badge?: Badge;
 }
 
+/** An event this Echoe hosts, is walking to, or has joined (met the host). */
+export interface JoinedEvent {
+  key: string;
+  name: string;
+  hostName: string;
+  hostAvatar: string;
+  status: 'hosting' | 'walking' | 'met';
+  placeName: string;
+  conversationId?: string;
+  badge?: Badge;
+}
+
 /** One ranked "who to meet and why" row on the return screen. */
 export interface Match {
   conversationId: string;

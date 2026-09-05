@@ -22,6 +22,7 @@ interface ReturnScreenProps extends ScreenProps {
 
 /** The recap is a ranked list of who to meet and why. */
 export function ReturnScreen({
+  actions,
   go,
   run,
   freeLeft,
@@ -160,8 +161,11 @@ export function ReturnScreen({
         </div>
       </div>
       <div className="footer">
-        <button className="primary" onClick={() => go('world')}>
-          Back to the city <span aria-hidden="true">→</span>
+        <button className="primary" onClick={() => actions.onRestart()}>
+          Send my Echoe out again <span aria-hidden="true">→</span>
+        </button>
+        <button className="secondary" onClick={() => go('world')}>
+          Back to the city
         </button>
       </div>
     </div>

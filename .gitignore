@@ -6,3 +6,9 @@ dist
 
 spacetime.local.json
 *.tsbuildinfo
+
+# secrets never belong in git; .vercelignore covers uploads
+.env
+.env.*
+!.env.example
+.vercel

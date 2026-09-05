@@ -1354,7 +1354,8 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .events-btn { min-height: 32px; padding: 0 12px; font-size: 11px; }
 
 /* Talks screen tabs reuse the map filter pills, laid out in normal flow. */
-.pin-filter--tabs { position: static; margin: 0 0 14px; }
+.pin-filter--tabs { position: static; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px; overflow: visible; }
+.pin-filter--tabs .pin-pill { width: 100%; text-align: center; }
 
 /* Event card with the host's own artwork on top. */
 .event-hero { display: block; width: calc(100% + 32px); margin: -16px -16px 12px; aspect-ratio: 5 / 3; object-fit: cover; object-position: center 40%; border-radius: var(--radius) var(--radius) 0 0; }
