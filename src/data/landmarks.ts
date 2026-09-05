@@ -12,10 +12,10 @@ export const LANDMARKS: Landmark[] = [
   { id: 'ulsoor-lake', name: 'Ulsoor Lake', lng: 77.6192, lat: 12.9815, icon: '🌊' },
   { id: 'church-street', name: 'Church Street', lng: 77.6048, lat: 12.9750, icon: '⛪' },
   { id: 'cubbon-park', name: 'Cubbon Park', lng: 77.5933, lat: 12.9750, icon: '🌳' },
-  { id: 'indiranagar', name: 'Indiranagar', lng: 77.6499, lat: 12.9699, icon: '🛍️' },
+  { id: 'indiranagar', name: 'Indiranagar', lng: 77.6409, lat: 12.9716, icon: '🛍️' },
   { id: 'lalbagh', name: 'Lalbagh', lng: 77.5900, lat: 12.9500, icon: '🌷' },
   { id: 'mg-road', name: 'MG Road', lng: 77.6119, lat: 12.9738, icon: '🛣️' },
-  { id: 'koramangala', name: 'Koramangala', lng: 77.6229, lat: 12.9259, icon: '☕' },
+  { id: 'koramangala', name: 'Koramangala', lng: 77.6112, lat: 12.9346, icon: '☕' },
   { id: 'commercial-street', name: 'Commercial Street', lng: 77.6084, lat: 12.9822, icon: '🛒' },
 ];
 

@@ -68,10 +68,10 @@ const LANDMARKS: [string, number, number][] = [
   ['Ulsoor Lake', 77.6192, 12.9815],
   ['Church Street', 77.6048, 12.975],
   ['Cubbon Park', 77.5933, 12.975],
-  ['Indiranagar', 77.6499, 12.9699],
+  ['Indiranagar', 77.6409, 12.9716],
   ['Lalbagh', 77.59, 12.95],
   ['MG Road', 77.6119, 12.9738],
-  ['Koramangala', 77.6229, 12.9259],
+  ['Koramangala', 77.6112, 12.9346],
   ['Commercial Street', 77.6084, 12.9822],
 ];
 
