@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { MapSlot } from '../components/MapSlot';
 import { ShareCard } from '../components/ShareCard';
 import { VerifiedBadge } from '../components/VerifiedBadge';
-import { VerifySheet } from '../components/VerifySheet';
-import { Toast } from '../components/Toast';
+import { ProfileButton } from '../components/ProfileButton';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { landmarkById } from '../data/landmarks';
-import { usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
 import type { HostCard, Player, Run, ScreenProps } from '../state/types';
 
@@ -19,8 +17,8 @@ interface WorldScreenProps extends ScreenProps {
   intent: string;
   shareId: string;
   mission: string;
-  placeCount: number;
-  toast: string | null;
+  onlineCount: number;
+  onProfile: () => void;
 }
 
 /**
@@ -39,11 +37,10 @@ export function WorldScreen({
   intent,
   shareId,
   mission,
-  placeCount,
-  toast,
+  onlineCount,
+  onProfile,
 }: WorldScreenProps) {
   const mounted = useMounted();
-  const [verifying, setVerifying] = useState(false);
   const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
 
   return (
@@ -59,7 +56,12 @@ export function WorldScreen({
           <div className="brand">
             <span className="brand-mark">E</span> Bengaluru
           </div>
-          <span className="step-count">{placeCount} places</span>
+          <span className="step-count">{onlineCount} online</span>
+          <ProfileButton
+            name={player?.name ?? '?'}
+            avatar={player?.avatar ?? 'circle'}
+            onClick={onProfile}
+          />
         </header>
 
         {hostCard ? (
@@ -73,8 +75,6 @@ export function WorldScreen({
           <ShareCard intent={intent} shareId={shareId} mission={mission} variant="pinned" />
         )}
 
-        <Toast message={toast} />
-
         <div className={mounted ? 'map-sheet glass map-sheet--in' : 'map-sheet glass'}>
           <div className="sheet-head">
             <div>
@@ -82,7 +82,9 @@ export function WorldScreen({
               <h3 className="location-name">{placeName}</h3>
               <VerifiedBadge badge={player?.badge} />
             </div>
-            <span className="credit-pill">{usd(run?.spentUsd ?? 0)} spent</span>
+            <span className="credit-pill">
+              {run?.peopleMet ?? 0} {(run?.peopleMet ?? 0) === 1 ? 'person' : 'people'} met
+            </span>
           </div>
 
           {hostCard ? (
@@ -98,16 +100,8 @@ export function WorldScreen({
             </button>
           </div>
 
-          {player?.badge ? null : (
-            <button className="verify-btn" onClick={() => setVerifying(true)}>
-              Verify my company
-            </button>
-          )}
         </div>
 
-        {verifying ? (
-          <VerifySheet badge={player?.badge} onClose={() => setVerifying(false)} />
-        ) : null}
       </div>
     </div>
   );
