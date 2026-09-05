@@ -8,6 +8,7 @@ import { LANDMARKS } from '../data/landmarks';
 import AgentTravelSchema from '../module_bindings/agent_travel_table';
 import CompanySchema from '../module_bindings/company_table';
 import ConversationSchema from '../module_bindings/conversation_table';
+import CorrectionSchema from '../module_bindings/correction_table';
 import EchoSchema from '../module_bindings/echo_table';
 import IntentSchema from '../module_bindings/intent_table';
 import PlayerSchema from '../module_bindings/player_table';
@@ -16,11 +17,23 @@ import RunSchema from '../module_bindings/run_table';
 import TranscriptLineSchema from '../module_bindings/transcript_line_table';
 
 import { AVATAR_COLOUR } from './copy';
-import type { Badge, HostCard, Match, Player, Receipt, Run, RunStatus, TranscriptLine } from './types';
+import type {
+  Badge,
+  Correction,
+  HostCard,
+  Match,
+  Player,
+  PlaceVisit,
+  Receipt,
+  Run,
+  RunStatus,
+  TranscriptLine,
+} from './types';
 
 export type AgentTravelRow = Infer<typeof AgentTravelSchema>;
 export type CompanyRow = Infer<typeof CompanySchema>;
 export type ConversationRow = Infer<typeof ConversationSchema>;
+export type CorrectionRow = Infer<typeof CorrectionSchema>;
 export type EchoRow = Infer<typeof EchoSchema>;
 export type IntentRow = Infer<typeof IntentSchema>;
 export type PlayerRow = Infer<typeof PlayerSchema>;
@@ -200,4 +213,38 @@ export function toTranscript(
       mine: myEchoId !== undefined && row.speakerEchoId === myEchoId,
     };
     });
+}
+
+/** Places this Echoe has stood in, most recent first. Receipts are the record. */
+export function historyFrom(receipts: readonly Receipt[]): PlaceVisit[] {
+  const byPlace = new Map<string, PlaceVisit>();
+  for (const receipt of receipts) {
+    if (receipt.kind !== 'arrive' && receipt.kind !== 'travel') continue;
+    const seen = byPlace.get(receipt.placeName);
+    if (seen) {
+      seen.count += 1;
+      seen.lastAt = Math.max(seen.lastAt, receipt.at);
+    } else {
+      byPlace.set(receipt.placeName, { placeName: receipt.placeName, count: 1, lastAt: receipt.at });
+    }
+  }
+  return [...byPlace.values()].sort((a, b) => b.lastAt - a.lastAt);
+}
+
+/** What the player taught their Echoe, newest first. */
+export function correctionsFor(
+  rows: readonly CorrectionRow[],
+  identityHex: string | undefined,
+): Correction[] {
+  if (!identityHex) return [];
+  return rows
+    .filter(row => row.owner.toHexString() === identityHex)
+    .sort((a, b) => (a.id < b.id ? 1 : -1))
+    .map(row => ({
+      id: String(row.id),
+      originalText: row.originalText,
+      shouldHaveSaid: row.shouldHaveSaid,
+      behaviourChange: row.behaviourChange,
+      at: msOf(row.appliedAt),
+    }));
 }

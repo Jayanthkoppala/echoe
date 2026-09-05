@@ -22,6 +22,8 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 maplibregl.setWorkerUrl(workerUrl);
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { LANDMARKS } from '../data/landmarks';
+import type { FeatureCollection, Point } from 'geojson';
+import companiesJson from '../data/companies.json';
 import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
@@ -74,11 +76,14 @@ export interface AgentSpec {
   departMs: number;
   arriveMs: number;
   isMine?: boolean;
+  /** Company slug for a verified employer, or 'domain' for an unseeded one. */
+  badge?: string;
 }
 
 interface BengaluruMapProps {
   agents: AgentSpec[];
   onPlaceTap?: (placeId: string) => void;
+  onCompanyTap?: (slug: string) => void;
   /**
    * Landmark that gets the lime ring. Falls back to where the player's own
    * Echoe is walking, so the ring is right on Roaming even if the caller
@@ -240,18 +245,212 @@ const ZOOM_RANGE: [string, number, number][] = [
 // and at 14px it lands straight across the landmark cluster, so it goes.
 const HIDE = ['place_city_large'];
 
-export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: BengaluruMapProps) {
+/* ── Company logo pins ──────────────────────────────────────────────────
+   Symbol layer, not DOM markers, per docs/LOGO-PINS.md. Two things in the
+   seed data forced a decision:
+   1. companies.json rounds coordinates to two decimals, so 39 rows share only
+      15 points and up to six companies stack exactly. Each group is spread on
+      a small ring so every pin is reachable.
+   2. The seeded `logo` field is a Google favicon URL. It renders in an <img>
+      but serves no CORS header, so its pixels can never be read back off a
+      canvas, which is what addImage needs. Checked live from this origin:
+      google, duckduckgo and favicon.im all fail with crossOrigin, and the one
+      service that passes it (unavatar) answered 20 of 39 with HTTP 429. So the
+      logos are vendored same-origin by scripts/fetch-logos.sh instead. */
+
+interface CompanyRow {
+  name: string; domain: string; hq_area: string;
+  lat: number; lng: number; category: string; logo: string;
+}
+
+const COMPANY_ROWS = companiesJson as CompanyRow[];
+const FEATURED_COUNT = 12;
+const BADGE_CHECK = 'badge-check';
+
+const companySlug = (domain: string) => domain.split('.')[0].toLowerCase().replace(/[^a-z0-9]/g, '-');
+const logoImageId = (slug: string) => `logo-${slug}`;
+
+/** Fans a stack of identical coordinates onto a ~390m ring, deterministically. */
+function spreadCoords(rows: CompanyRow[]): [number, number][] {
+  const out: [number, number][] = rows.map(r => [r.lng, r.lat]);
+  const groups = new Map<string, number[]>();
+  rows.forEach((r, i) => {
+    const key = `${r.lat},${r.lng}`;
+    const g = groups.get(key);
+    if (g) g.push(i);
+    else groups.set(key, [i]);
+  });
+  const radius = 0.0035;
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    members.forEach((i, n) => {
+      const angle = (2 * Math.PI * n) / members.length;
+      const lat = rows[i].lat + radius * Math.sin(angle);
+      const lng = rows[i].lng + (radius * Math.cos(angle)) / Math.cos((rows[i].lat * Math.PI) / 180);
+      out[i] = [lng, lat];
+    });
+  }
+  return out;
+}
+
+const COMPANY_COORDS = spreadCoords(COMPANY_ROWS);
+
+const COMPANIES_GEOJSON: FeatureCollection = {
+  type: 'FeatureCollection',
+  features: COMPANY_ROWS.map((c, i) => ({
+    type: 'Feature' as const,
+    geometry: { type: 'Point' as const, coordinates: COMPANY_COORDS[i] },
+    properties: {
+      slug: companySlug(c.domain),
+      name: c.name,
+      domain: c.domain,
+      category: c.category,
+      area: c.hq_area,
+      logoId: logoImageId(companySlug(c.domain)),
+      featured: i < FEATURED_COUNT,
+    },
+  })),
+};
+
+/** logo image id -> row, so a missing image can be filled in on demand. */
+const ROW_BY_IMAGE_ID = new Map(
+  COMPANY_ROWS.map(c => [logoImageId(companySlug(c.domain)), c] as const)
+);
+
+// Drawn at 2x and added with pixelRatio 2, so the 48px chip stays crisp.
+const CHIP_PX = 96;
+const CHIP_R = 44;
+
+function chipContext(): CanvasRenderingContext2D {
+  const canvas = document.createElement('canvas');
+  canvas.width = CHIP_PX;
+  canvas.height = CHIP_PX;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no 2d context');
+  return ctx;
+}
+
+function strokeRing(ctx: CanvasRenderingContext2D, colour = '#ffffff') {
+  ctx.beginPath();
+  ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = colour;
+  ctx.stroke();
+}
+
+const chipPixels = (ctx: CanvasRenderingContext2D) => ctx.getImageData(0, 0, CHIP_PX, CHIP_PX);
+
+/** Two letters on a dark disc. Used for a 404 and as the instant placeholder. */
+function initialsChip(name: string): ImageData {
+  const ctx = chipContext();
+  ctx.beginPath();
+  ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
+  ctx.fillStyle = '#182420';
+  ctx.fill();
+  strokeRing(ctx);
+  const initials =
+    name.replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2)
+      .map(w => w[0]).join('').toUpperCase() || '?';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 34px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initials, CHIP_PX / 2, CHIP_PX / 2 + 2);
+  return chipPixels(ctx);
+}
+
+/** Lime disc with a dark tick, for an agent whose employer is not in the seed. */
+function checkChip(): ImageData {
+  const ctx = chipContext();
+  ctx.beginPath();
+  ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
+  ctx.fillStyle = LIME;
+  ctx.fill();
+  ctx.strokeStyle = '#0b120e';
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(30, 50);
+  ctx.lineTo(43, 63);
+  ctx.lineTo(68, 34);
+  ctx.stroke();
+  return chipPixels(ctx);
+}
+
+async function logoChip(slug: string): Promise<ImageData> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error(slug));
+    // Same origin, so the canvas is never tainted and no CORS header is needed.
+    // Vendored by scripts/fetch-logos.sh; a missing file falls back to initials.
+    el.src = `/logos/${slug}.png`;
+    setTimeout(() => reject(new Error(`timeout ${slug}`)), 8000);
+  });
+  const ctx = chipContext();
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
+  // Most favicons are transparent and drawn for a light ground.
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.clip();
+  ctx.drawImage(img, 6, 6, CHIP_PX - 12, CHIP_PX - 12);
+  ctx.restore();
+  strokeRing(ctx);
+  return chipPixels(ctx);
+}
+
+/**
+ * Six at a time, never awaited by the caller: the map paints immediately and
+ * each pin sharpens from its initials placeholder as its logo lands.
+ */
+async function loadCompanyImages(map: maplibregl.Map, alive: () => boolean): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < COMPANY_ROWS.length && alive()) {
+      const row = COMPANY_ROWS[next++];
+      const slug = companySlug(row.domain);
+      const id = logoImageId(slug);
+      let data: ImageData;
+      try {
+        data = await logoChip(slug);
+      } catch {
+        data = initialsChip(row.name);
+      }
+      if (!alive()) return;
+      try {
+        if (map.hasImage(id)) map.updateImage(id, data);
+        else map.addImage(id, data, { pixelRatio: 2 });
+      } catch {
+        // The map went away between the check and the write. Nothing to do.
+        return;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+}
+
+export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activePlaceId }: BengaluruMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const agentsRef = useRef<AgentSpec[]>(agents);
   const legsRef = useRef<Record<string, Leg>>({});
   const rafRef = useRef<number>(0);
   const pinsRef = useRef<Record<string, HTMLElement>>({});
+  // The map is built once, so the handlers it closes over would be frozen at
+  // their first-render values. This keeps the live ones reachable.
+  const handlersRef = useRef({ onPlaceTap, onCompanyTap });
 
   agentsRef.current = agents;
+  handlersRef.current = { onPlaceTap, onCompanyTap };
 
   useEffect(() => {
     if (!containerRef.current) return;
+    // Flipped by the cleanup, so in-flight logo loads stop writing to a map
+    // that has already been removed.
+    let alive = true;
 
     const map = new maplibregl.Map({
       container: containerRef.current,
@@ -269,6 +468,11 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
       el.type = 'button';
       el.className = 'map-pin';
       el.setAttribute('aria-label', place.name);
+      // A <button> with no stylesheet is a white UA box sized to its text, which
+      // is what a marker looks like in the window before styles.css hot-reloads.
+      // These are the same values as .map-pin, written where CSS cannot be late.
+      el.style.cssText =
+        'display:grid;position:relative;place-items:center;width:44px;height:44px;padding:0;border:0;background:none;cursor:pointer';
       // Staggered so ten markers do not breathe in lockstep. Read by the
       // keyframe in styles.css; the animation is transform-only.
       el.style.setProperty('--map-pin-delay', `${(i % 5) * 0.44}s`);
@@ -285,7 +489,7 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
       el.append(chip, name);
       el.addEventListener('click', () => {
         flyToLandmark(map, place);
-        onPlaceTap?.(place.id);
+        handlersRef.current.onPlaceTap?.(place.id);
       });
       pins[place.id] = el;
 
@@ -433,6 +637,74 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
         );
       }
 
+      // Company logo pins, under the agents so a live Echoe always reads on top.
+      if (!map.hasImage(BADGE_CHECK)) map.addImage(BADGE_CHECK, checkChip(), { pixelRatio: 2 });
+      // A layer referencing an image that has not arrived logs "image not
+      // found" per feature. Answering the event with the initials chip gives
+      // the pin something to draw immediately and keeps the console clean;
+      // loadCompanyImages then swaps in the real logo with updateImage.
+      map.on('styleimagemissing', (e: { id: string }) => {
+        const row = ROW_BY_IMAGE_ID.get(e.id);
+        if (!row || map.hasImage(e.id)) return;
+        map.addImage(e.id, initialsChip(row.name), { pixelRatio: 2 });
+      });
+
+      map.addSource('companies', { type: 'geojson', data: COMPANIES_GEOJSON });
+
+      const companyIconSize = [
+        'interpolate', ['linear'], ['zoom'], 12.5, 0.45, 15, 0.8,
+      ];
+
+      map.addLayer({
+        id: 'company-pins-featured',
+        type: 'symbol',
+        source: 'companies',
+        minzoom: 12.5,
+        maxzoom: 13.5,
+        filter: ['==', ['get', 'featured'], true],
+        layout: {
+          'icon-image': ['get', 'logoId'],
+          'icon-size': companyIconSize as never,
+          // Only twelve, and they are the point of the city view, so they draw
+          // whatever else is in the way.
+          'icon-allow-overlap': true,
+        },
+      });
+
+      map.addLayer({
+        id: 'company-pins-all',
+        type: 'symbol',
+        source: 'companies',
+        minzoom: 13.5,
+        layout: {
+          'icon-image': ['get', 'logoId'],
+          'icon-size': companyIconSize as never,
+          // An empty text-field places no label, so the name simply starts at 14.
+          'text-field': ['step', ['zoom'], '', 14, ['get', 'name']],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 10,
+          'text-offset': [0, 1.4],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': 'rgba(2,6,4,0.95)',
+          'text-halo-width': 1.4,
+        },
+      });
+
+      map.on('click', ['company-pins-featured', 'company-pins-all'], (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const [lng, lat] = (feature.geometry as Point).coordinates as [number, number];
+        map.flyTo({ center: [lng, lat], zoom: 15.5, pitch: 60, duration: 1400, curve: 1.4, essential: true });
+        handlersRef.current.onCompanyTap?.(String(feature.properties?.slug ?? ''));
+      });
+
+      // Deliberately not awaited: first paint must not wait on 39 logo fetches.
+      void loadCompanyImages(map, () => alive);
+
       map.addSource(AGENTS_SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -495,10 +767,28 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
           'symbol-sort-key': ['case', ['get', 'isMine'], 0, 1],
         },
         paint: {
-          'text-color': ['case', ['get', 'isMine'], LIME, '#ffffff'],
+          // Every agent name is white. Lime stays on the player's own dot only.
+          'text-color': '#ffffff',
           'text-halo-color': 'rgba(2,6,4,0.95)',
           'text-halo-width': 1.5,
           'text-halo-blur': 0.4,
+        },
+      });
+
+      // Verified employer badge, top-right of the dot. Same source as the dot,
+      // so it rides the existing setData and costs no extra per-frame work.
+      // icon-offset is multiplied by icon-size, so [26,-26] at 0.3 is ~8px.
+      map.addLayer({
+        id: 'agents-badge',
+        type: 'symbol',
+        source: AGENTS_SOURCE_ID,
+        filter: ['has', 'badgeIcon'],
+        layout: {
+          'icon-image': ['get', 'badgeIcon'],
+          'icon-size': 0.3,
+          'icon-offset': [26, -26],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
         },
       });
 
@@ -532,6 +822,15 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
               legsRef.current[agent.id] = leg;
             }
             const [lng, lat] = agentPosition(leg, now);
+            // Only name an image that exists, or the layer logs a miss every
+            // frame until the logo lands. Undefined drops out of the JSON, so
+            // the layer's ['has','badgeIcon'] filter simply skips the feature.
+            let badgeIcon: string | undefined;
+            if (agent.badge === 'domain') badgeIcon = BADGE_CHECK;
+            else if (agent.badge) {
+              const id = logoImageId(agent.badge);
+              badgeIcon = map.hasImage(id) ? id : BADGE_CHECK;
+            }
             return {
               type: 'Feature' as const,
               geometry: { type: 'Point' as const, coordinates: [lng, lat] },
@@ -539,6 +838,7 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
                 colour: agent.colour,
                 label: agent.label,
                 isMine: !!agent.isMine,
+                badgeIcon,
                 // 0..1 breathing on the player's own dot.
                 pulse: agent.isMine ? (Math.sin((now / 1000) * 2.4) + 1) / 2 : 0,
                 // 900ms burst window as a leg lands.
@@ -556,6 +856,7 @@ export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: Beng
     map.on('dblclick', () => flyToCity(map));
 
     return () => {
+      alive = false;
       cancelAnimationFrame(rafRef.current);
       pinsRef.current = {};
       map.remove();

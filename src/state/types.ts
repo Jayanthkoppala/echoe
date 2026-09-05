@@ -10,6 +10,7 @@ export type ScreenName =
   | 'return'
   | 'review'
   | 'correct'
+  | 'profile'
   | 'done';
 
 export type RunStatus = 'running' | 'paused' | 'ended';
@@ -81,6 +82,20 @@ export interface Match {
   placeName: string;
   isHost: boolean;
   badge?: Badge;
+}
+
+export interface PlaceVisit {
+  placeName: string;
+  count: number;
+  lastAt: number;
+}
+
+export interface Correction {
+  id: string;
+  originalText: string;
+  shouldHaveSaid: string;
+  behaviourChange: string;
+  at: number;
 }
 
 export interface RunLimits {

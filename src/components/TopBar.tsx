@@ -1,12 +1,16 @@
+import type { ReactNode } from 'react';
+
 interface TopBarProps {
   title: string;
   step?: string;
   onBack?: () => void;
   showMark?: boolean;
+  /** Extra control pinned to the right, e.g. the profile button. */
+  right?: ReactNode;
 }
 
 /** Fixed header. Never scrolls. */
-export function TopBar({ title, step, onBack, showMark }: TopBarProps) {
+export function TopBar({ title, step, onBack, showMark, right }: TopBarProps) {
   return (
     <header className="topbar">
       {onBack ? (
@@ -18,7 +22,8 @@ export function TopBar({ title, step, onBack, showMark }: TopBarProps) {
         {showMark ? <span className="brand-mark">E</span> : null}
         {title}
       </div>
-      {step ? <span className="step-count">{step}</span> : <span />}
+      {step ? <span className="step-count">{step}</span> : null}
+      {right ?? (step ? null : <span />)}
     </header>
   );
 }

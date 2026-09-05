@@ -424,12 +424,16 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
    a WebGL canvas is the one thing that reliably drops frames on a mid-range
    phone, and over a map this dark a layered translucent fill reads as glass
    without it. The bob is transform-only, so it stays on the compositor. */
+/* The button stays 44px because the global rule sets that tap target; the chip
+   is the 32px visual inside it. The component also writes these as inline
+   styles, so a marker can never fall back to a white UA button if this
+   stylesheet is late or missing. */
 .map-pin {
   display: grid;
   position: relative;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   background: none;
@@ -438,31 +442,30 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 }
 .map-pin__chip {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, .3);
+  border: 1px solid rgba(255, 255, 255, .2);
   border-radius: 50%;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .17), rgba(255, 255, 255, .04) 48%, rgba(255, 255, 255, .1)),
-    rgba(9, 15, 11, .62);
+  background: rgba(10, 14, 12, .6);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .38),
-    inset 0 -1px 0 rgba(0, 0, 0, .45),
+    inset 0 1px 0 rgba(255, 255, 255, .3),
     0 6px 16px -6px rgba(0, 0, 0, .95);
-  font-size: 14px;
+  font-size: 18px;
   line-height: 1;
   animation: map-pin-bob 3.6s ease-in-out infinite;
   animation-delay: var(--map-pin-delay, 0s);
 }
 .map-pin__name {
   position: absolute;
-  top: 100%;
+  top: 50%;
   left: 50%;
-  margin-top: 5px;
+  margin-top: 20px;
   transform: translateX(-50%);
   color: var(--fg);
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: .04em;
   white-space: nowrap;
@@ -472,7 +475,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .map-pin--here .map-pin__chip {
   border-color: rgba(215, 240, 108, .85);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .38),
+    inset 0 1px 0 rgba(255, 255, 255, .3),
     0 0 0 3px rgba(215, 240, 108, .18),
     0 6px 18px -6px rgba(215, 240, 108, .5);
 }
@@ -1029,3 +1032,128 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .verify-error { margin: 0; color: var(--coral); font-size: 12px; }
 .verify-code { font-size: 22px; font-weight: 700; letter-spacing: .3em; text-align: center; }
 .verify-done { display: grid; place-items: center; padding: 12px 0 6px; }
+
+/* ── Profile ──────────────────────────────────────────────────────────── */
+
+.profile-btn {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  color: #101a0e;
+  box-shadow: inset 0 1px 0 var(--hl);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+}
+.profile-heading {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 18px 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.profile-heading span { color: var(--fg3); font-size: 11px; letter-spacing: 0; text-transform: none; }
+.profile-card { display: grid; gap: 10px; padding: 16px; }
+.profile-card > * { position: relative; z-index: 1; }
+.profile-me { display: flex; gap: 12px; align-items: center; }
+.profile-avatar {
+  display: grid;
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+  color: #101a0e;
+  font-size: 24px;
+}
+.profile-me-name { flex: 1 1 auto; min-width: 0; }
+.profile-name { min-height: 46px; font-size: 17px; font-weight: 700; }
+.link-btn {
+  justify-self: start;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--lime);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.profile-rows { display: grid; gap: 12px; margin: 0; }
+.profile-rows > div { display: grid; gap: 4px; }
+.profile-rows dt { color: var(--fg3); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.profile-rows dd { margin: 0; font-size: 13px; line-height: 1.45; }
+.profile-empty { margin: 0; color: var(--fg3); font-size: 12px; line-height: 1.5; }
+.profile-notes { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
+.correction-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  background: var(--panel-thin);
+}
+.correction-row small { color: var(--fg3); font-size: 11px; }
+.correction-row p { margin: 0; font-size: 12px; line-height: 1.45; }
+.correction-row .was { color: var(--fg3); text-decoration: line-through; }
+.correction-row .rule { color: var(--lime); font-weight: 600; }
+.place-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.place-chip {
+  padding: 5px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 600;
+}
+.profile-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.profile-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 13px; }
+.profile-list span { color: var(--fg3); font-size: 11px; }
+.person-row {
+  display: grid;
+  grid-template-columns: 42px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.person-row:first-child { border-top: 0; padding-top: 0; }
+.person-name { min-width: 0; }
+.person-name strong { display: block; font-size: 13px; }
+.person-name p { margin: 4px 0 0; color: var(--fg2); font-size: 11px; line-height: 1.45; }
+.person-end { display: grid; gap: 4px; justify-items: end; }
+.soon-grid { display: grid; gap: 8px; }
+.soon-btn {
+  display: flex;
+  min-height: 46px;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  color: rgba(255, 255, 255, .45);
+  background: var(--panel-thin);
+  cursor: not-allowed;
+  font-size: 12px;
+  font-weight: 700;
+}
+.soon-btn i {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}

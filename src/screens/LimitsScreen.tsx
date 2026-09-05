@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { TopBar } from '../components/TopBar';
+import { FREE_CONVERSATIONS } from '../state/copy';
 import type { Run, ScreenName, ScreenProps } from '../state/types';
 
 interface LimitsScreenProps extends ScreenProps {
   run?: Run;
   /** Limits edits a live run now, so it returns to whoever opened it. */
   backTo: ScreenName;
+  freeLeft: number;
+  linked: boolean;
 }
 
-export function LimitsScreen({ actions, go, run, backTo }: LimitsScreenProps) {
+export function LimitsScreen({ actions, go, run, backTo, freeLeft, linked }: LimitsScreenProps) {
   const [goal, setGoal] = useState(run?.goal ?? '');
 
   return (
@@ -34,9 +37,24 @@ export function LimitsScreen({ actions, go, run, backTo }: LimitsScreenProps) {
           maxLength={120}
         />
 
+        <div className="label">Your OpenRouter account</div>
+        {linked ? (
+          <button className="secondary" onClick={() => actions.onUnlinkOpenRouter()}>
+            OpenRouter connected. Disconnect
+          </button>
+        ) : (
+          <button className="secondary" onClick={() => actions.onLinkOpenRouter()}>
+            Connect OpenRouter
+          </button>
+        )}
+
         <div className="cost-note">
           <span aria-hidden="true">✦</span>
-          <span>Only talking costs anything, and it costs exactly what OpenRouter charges.</span>
+          <span>
+            {freeLeft} of {FREE_CONVERSATIONS} free conversations left, on us. After that your
+            Echoe talks on your OpenRouter account, at exactly what OpenRouter charges. You sign
+            in once; no key to paste.
+          </span>
         </div>
       </div>
       <div className="footer">

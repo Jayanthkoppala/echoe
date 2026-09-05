@@ -1,11 +1,14 @@
 import { TopBar } from '../components/TopBar';
+import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
-import type { Match, ScreenProps, TranscriptLine } from '../state/types';
+import type { Match, Player, ScreenProps, TranscriptLine } from '../state/types';
 
 interface ReviewScreenProps extends ScreenProps {
   transcript: TranscriptLine[];
   match?: Match;
   focusedId: string | null;
+  player?: Player;
+  onProfile: () => void;
   onFocus: (id: string) => void;
 }
 
@@ -15,13 +18,25 @@ export function ReviewScreen({
   transcript,
   match,
   focusedId,
+  player,
+  onProfile,
   onFocus,
 }: ReviewScreenProps) {
   const focused = transcript.find(line => line.id === focusedId);
 
   return (
     <div className="screen">
-      <TopBar title="Review conversation" onBack={() => go('return')} />
+      <TopBar
+        title="Review conversation"
+        onBack={() => go('return')}
+        right={
+          <ProfileButton
+            name={player?.name ?? '?'}
+            avatar={player?.avatar ?? 'circle'}
+            onClick={onProfile}
+          />
+        }
+      />
       <div className="content">
         <div className="chat-person glass">
           <div className="mini-avatar" aria-hidden="true">

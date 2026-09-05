@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { MapSlot } from '../components/MapSlot';
 import { ShareCard } from '../components/ShareCard';
 import { VerifiedBadge } from '../components/VerifiedBadge';

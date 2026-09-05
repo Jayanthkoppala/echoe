@@ -1,16 +1,28 @@
 import { MapSlot } from '../components/MapSlot';
+import { ProfileButton } from '../components/ProfileButton';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { usd } from '../state/copy';
-import type { Run, ScreenProps } from '../state/types';
+import type { Player, Run, ScreenProps } from '../state/types';
 
 interface RoamingScreenProps extends ScreenProps {
   onAdjustLimits: () => void;
+  onProfile: () => void;
+  onlineCount: number;
+  player?: Player;
   run?: Run;
   agents: AgentSpec[];
 }
 
 /** The Echoe acts while the player is away. Every number here is a live row. */
-export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingScreenProps) {
+export function RoamingScreen({
+  actions,
+  onAdjustLimits,
+  onProfile,
+  onlineCount,
+  player,
+  run,
+  agents,
+}: RoamingScreenProps) {
   const paused = run?.status === 'paused';
   const spent = usd(run?.spentUsd ?? 0);
 
@@ -32,7 +44,12 @@ export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingS
           <div className="brand">
             <span className="brand-mark">E</span> Roaming
           </div>
-          <span className="step-count tabular">{spent} spent</span>
+          <span className="step-count">{onlineCount} online</span>
+          <ProfileButton
+            name={player?.name ?? '?'}
+            avatar={player?.avatar ?? 'circle'}
+            onClick={onProfile}
+          />
         </header>
 
         <div className="roam-overlay glass">

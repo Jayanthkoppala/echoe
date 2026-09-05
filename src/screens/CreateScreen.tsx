@@ -49,7 +49,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
 
   return (
     <div className="screen">
-      <TopBar title="Your Echoe" step="02 / 08" onBack={() => go('join')} />
+      <TopBar title="Your Echoe" step="02 / 03" onBack={() => go('join')} />
       <div className="content">
         {hostCard ? <HostIntentCard host={hostCard} /> : null}
 
@@ -148,7 +148,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
       <div className="footer">
         <button
           className="primary"
-          disabled={!personaReady || !intent.trim()}
+          disabled={!intent.trim()}
           onClick={() => actions.onCreateEcho(avatar, persona.trim(), intent.trim())}
         >
           {hostCard ? `Go and meet ${hostCard.name}` : 'Send my Echoe out'}{' '}

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { ShareCard } from '../components/ShareCard';
+import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { VerifySheet } from '../components/VerifySheet';
 import { TopBar } from '../components/TopBar';
 import { AVATAR_COLOUR, AVATAR_GLYPH, RECEIPT_ICON, usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
-import type { Badge, Match, Receipt, Run, ScreenProps } from '../state/types';
+import type { Badge, Match, Player, Receipt, Run, ScreenProps } from '../state/types';
 
 interface ReturnScreenProps extends ScreenProps {
   run?: Run;
@@ -16,6 +17,8 @@ interface ReturnScreenProps extends ScreenProps {
   shareId: string;
   /** My own badge, so the verify prompt disappears once it exists. */
   badge?: Badge;
+  player?: Player;
+  onProfile: () => void;
   onReview: (conversationId: string) => void;
 }
 
@@ -29,6 +32,8 @@ export function ReturnScreen({
   intent,
   shareId,
   badge,
+  player,
+  onProfile,
   onReview,
 }: ReturnScreenProps) {
   const mounted = useMounted();
@@ -36,7 +41,17 @@ export function ReturnScreen({
 
   return (
     <div className="screen">
-      <TopBar title="Your return" onBack={() => go('world')} />
+      <TopBar
+        title="Your return"
+        onBack={() => go('world')}
+        right={
+          <ProfileButton
+            name={player?.name ?? '?'}
+            avatar={player?.avatar ?? 'circle'}
+            onClick={onProfile}
+          />
+        }
+      />
       <div className="content">
         <div className="recap-hero glass">
           <div className="eyebrow">While you were gone</div>

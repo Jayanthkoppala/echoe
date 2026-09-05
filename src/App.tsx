@@ -4,6 +4,7 @@ import { reducers, tables } from './module_bindings';
 import './styles.css';
 
 import { Toast } from './components/Toast';
+import { ProfileScreen } from './screens/ProfileScreen';
 import { CorrectScreen } from './screens/CorrectScreen';
 import { CreateScreen } from './screens/CreateScreen';
 import { DoneScreen } from './screens/DoneScreen';
@@ -19,6 +20,8 @@ import { startOpenRouterLink, takeOpenRouterCode } from './state/openrouter';
 import type { DbConnection } from './module_bindings';
 import {
   agentsFrom,
+  correctionsFor,
+  historyFrom,
   hostCardFrom,
   placeIndexOf,
   rankedMatches,
@@ -42,6 +45,7 @@ function App() {
   const [hostShareId] = useState(hostShareIdFromUrl);
   // Limits is an edit of a live run now, so it returns to whoever opened it.
   const [limitsFrom, setLimitsFrom] = useState<ScreenName>('world');
+  const [profileFrom, setProfileFrom] = useState<ScreenName>('world');
 
   const [players, playersReady] = useTable(tables.player);
   const [echoes] = useTable(tables.echo);
@@ -51,11 +55,12 @@ function App() {
   const [conversations] = useTable(tables.conversation);
   const [lines] = useTable(tables.transcriptLine);
   const [travels] = useTable(tables.agentTravel);
-  const [places] = useTable(tables.place);
   const [missions] = useTable(tables.mission);
   const [companies] = useTable(tables.company);
+  const [correctionRows] = useTable(tables.correction);
 
   const join = useReducer(reducers.join);
+  const unverify = useReducer(reducers.unverify);
   const createEcho = useReducer(reducers.createEcho);
   const travel = useReducer(reducers.travel);
   const startRun = useReducer(reducers.startRun);
@@ -198,6 +203,7 @@ function App() {
   );
 
   const onlineCount = useMemo(() => players.filter(row => row.online).length, [players]);
+  const openProfile = (from: ScreenName) => { setProfileFrom(from); setScreen('profile'); };
 
   const go = setScreen;
   const player = myPlayerRow ? toPlayer(myPlayerRow, companies) : undefined;
@@ -230,6 +236,9 @@ function App() {
     [receiptRows, hex],
   );
 
+  const corrections = useMemo(() => correctionsFor(correctionRows, hex), [correctionRows, hex]);
+  const history = useMemo(() => historyFrom(receipts), [receipts]);
+
   const hostCard =
     hostIntentRow && hostShareId
       ? hostCardFrom(hostIntentRow, hostPlayerRow, Date.now(), companies)
@@ -250,6 +259,7 @@ function App() {
 
   return (
     <main className="phone">
+      <Toast message={toast} />
       <div className="aurora" aria-hidden="true"><i /></div>
       {screen === 'join' && (
         <JoinScreen
@@ -275,8 +285,8 @@ function App() {
           intent={myIntentRow?.text ?? ''}
           shareId={myIntentRow?.shareId ?? ''}
           mission={missions[0]?.text ?? ''}
-          placeCount={places.length}
-          toast={toast}
+          onlineCount={onlineCount}
+          onProfile={() => openProfile('world')}
         />
       )}
       {screen === 'limits' && (
@@ -294,6 +304,9 @@ function App() {
           actions={actions}
           go={go}
           onAdjustLimits={() => { setLimitsFrom('roaming'); setScreen('limits'); }}
+          onProfile={() => openProfile('roaming')}
+          onlineCount={onlineCount}
+          player={player}
           run={runView}
           agents={agents}
         />
@@ -309,6 +322,8 @@ function App() {
           intent={myIntentRow?.text ?? ''}
           shareId={myIntentRow?.shareId ?? ''}
           badge={player?.badge}
+          player={player}
+          onProfile={() => openProfile('return')}
           onReview={openReview}
         />
       )}
@@ -319,11 +334,30 @@ function App() {
           transcript={transcript}
           match={matches.find(m => m.conversationId === conversationId)}
           focusedId={focusedLine?.id ?? null}
+          player={player}
+          onProfile={() => openProfile('review')}
           onFocus={setLineId}
         />
       )}
       {screen === 'correct' && (
         <CorrectScreen actions={actions} go={go} line={focusedLine} />
+      )}
+      {screen === 'profile' && (
+        <ProfileScreen
+          actions={actions}
+          go={go}
+          backTo={profileFrom}
+          player={player}
+          intent={myIntentRow?.text ?? ''}
+          persona={myEchoRow?.persona ?? ''}
+          behaviourNotes={myEchoRow?.behaviourNotes ?? ''}
+          corrections={corrections}
+          history={history}
+          people={matches}
+          onRename={name => run('Rename', join({ name, email: '' }))}
+          onUnverify={() => run('Unverify', unverify())}
+          onReview={openReview}
+        />
       )}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}
     </main>
