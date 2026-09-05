@@ -25,6 +25,7 @@ import type {
   MeetAt,
   Correction,
   HostCard,
+  JoinedEvent,
   Match,
   Player,
   PlaceVisit,
@@ -205,32 +206,59 @@ export function latestLegs(travels: readonly AgentTravelRow[]): Map<bigint, Agen
  * One map agent per Echoe that has moved. The agent id carries the leg id so a
  * new leg becomes a new agent; BengaluruMap caches its route per agent id.
  */
+/**
+ * The Echoes that are out right now. A run that is running or paused makes an
+ * Echoe live; an ended run means it is home and off the map. A live Echoe with
+ * no travel leg yet stands at its landmark, so nobody is invisible for the ten
+ * seconds before their first departure.
+ */
 export function agentsFrom(
   travels: readonly AgentTravelRow[],
   echoes: readonly EchoRow[],
   players: readonly PlayerRow[],
+  runs: readonly RunRow[],
   myEchoId: bigint | undefined,
   hostEchoId: bigint | undefined,
 ): AgentSpec[] {
   const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
   const playerBy = new Map(players.map(player => [player.identity.toHexString(), player]));
+  const live = new Set(
+    runs.filter(run => run.status === 'running' || run.status === 'paused').map(run => run.echoId),
+  );
+  const legs = latestLegs(travels);
 
-  return [...latestLegs(travels).values()].map(leg => {
-    const player = playerBy.get(ownerOf.get(leg.echoId) ?? '');
-    const isMine = myEchoId !== undefined && leg.echoId === myEchoId;
+  const spec = (echoId: bigint, key: string, fromPlace: number, toPlace: number, departMs: number, arriveMs: number): AgentSpec => {
+    const player = playerBy.get(ownerOf.get(echoId) ?? '');
     return {
-      id: `${leg.echoId}-${leg.id}`,
+      id: key,
       label: player?.name ?? 'Echoe',
-      colour:
-        leg.echoId === hostEchoId ? '#d7f06c' : avatarColour(player?.avatar),
+      colour: echoId === hostEchoId ? '#d7f06c' : avatarColour(player?.avatar),
       avatar: player?.avatar ?? '',
-      fromPlace: landmarkOf(leg.fromPlace).id,
-      toPlace: landmarkOf(leg.toPlace).id,
-      departMs: msOf(leg.departTs),
-      arriveMs: msOf(leg.arriveTs),
-      isMine,
+      fromPlace: landmarkOf(fromPlace).id,
+      toPlace: landmarkOf(toPlace).id,
+      departMs,
+      arriveMs,
+      isMine: myEchoId !== undefined && echoId === myEchoId,
     };
-  });
+  };
+
+  // Every Echoe with a player is on the map: walking its latest leg while its
+  // run is live, otherwise standing at its place. An idle Echoe still counts as
+  // presence, and "Watch it roam" needs my own dot to exist before any run.
+  const out: AgentSpec[] = [];
+  for (const echo of echoes) {
+    const echoId = echo.id;
+    const player = playerBy.get(ownerOf.get(echoId) ?? '');
+    if (!player) continue;
+    const leg = legs.get(echoId);
+    if (live.has(echoId) && leg) {
+      out.push(spec(echoId, `${echoId}-${leg.id}`, leg.fromPlace, leg.toPlace, msOf(leg.departTs), msOf(leg.arriveTs)));
+      continue;
+    }
+    const now = Date.now();
+    out.push(spec(echoId, `${echoId}-standing`, player.currentPlace, player.currentPlace, now, now));
+  }
+  return out;
 }
 
 /** Who my Echoe met, best match first. This is the recap. */
@@ -264,7 +292,72 @@ export function rankedMatches(
         meetAt: meetAtFor(myPlace, other?.currentPlace ?? 0),
       };
     })
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => (a.isHost === b.isHost ? b.score - a.score : a.isHost ? -1 : 1));
+}
+
+const HOSTING = 'Hosting ';
+const eventName = (intent: string | undefined): string | null =>
+  intent && intent.startsWith(HOSTING) ? intent.slice(HOSTING.length).trim() || null : null;
+
+/**
+ * Events are players whose line reads "Hosting <name>"; joining one is a run
+ * started from that host's share link. There is no events table, so this is
+ * derived: the event I host, the host my current run is walking to, and every
+ * host my Echoe has actually talked to. One row per host, newest talk first.
+ */
+export function eventsFrom(
+  myRun: RunRow | undefined,
+  myIntent: IntentRow | undefined,
+  conversations: readonly ConversationRow[],
+  intents: readonly IntentRow[],
+  echoes: readonly EchoRow[],
+  players: readonly PlayerRow[],
+  myEchoId: bigint | undefined,
+  companies: readonly CompanyRow[] = [],
+): JoinedEvent[] {
+  if (myEchoId === undefined) return [];
+  const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
+  const playerBy = new Map(players.map(player => [player.identity.toHexString(), player]));
+  const intentByEcho = new Map(intents.map(row => [row.echoId, row]));
+  const out: JoinedEvent[] = [];
+
+  const mine = eventName(myIntent?.text);
+  if (mine) {
+    out.push({ key: 'mine', name: mine, hostName: 'You', hostAvatar: playerBy.get(myIntent!.owner.toHexString())?.avatar ?? '', status: 'hosting', placeName: '' });
+  }
+
+  const seen = new Set<bigint>();
+  const push = (hostEchoId: bigint, status: 'walking' | 'met', conversationId?: string, placeName = '') => {
+    if (seen.has(hostEchoId)) return;
+    seen.add(hostEchoId);
+    const host = playerBy.get(ownerOf.get(hostEchoId) ?? '');
+    const line = intentByEcho.get(hostEchoId)?.text;
+    out.push({
+      key: String(hostEchoId),
+      name: eventName(line) ?? line ?? 'An event',
+      hostName: host?.name ?? 'Someone',
+      hostAvatar: host?.avatar ?? '',
+      status,
+      placeName,
+      conversationId,
+      badge: badgeOf(host, companies),
+    });
+  };
+
+  const talks = [...conversations]
+    .filter(row => row.echoA === myEchoId || row.echoB === myEchoId)
+    .sort((a, b) => (a.id < b.id ? 1 : -1));
+  const talkWith = (echoId: bigint) => talks.find(row => row.echoA === echoId || row.echoB === echoId);
+
+  if (myRun && myRun.hostEchoId !== 0n) {
+    const talk = talkWith(myRun.hostEchoId);
+    push(myRun.hostEchoId, myRun.hostMet ? 'met' : 'walking', talk ? String(talk.id) : undefined, talk ? landmarkOf(talk.placeId).name : '');
+  }
+  for (const row of talks) {
+    const other = row.echoA === myEchoId ? row.echoB : row.echoA;
+    if (eventName(intentByEcho.get(other)?.text)) push(other, 'met', String(row.id), landmarkOf(row.placeId).name);
+  }
+  return out;
 }
 
 export function toTranscript(

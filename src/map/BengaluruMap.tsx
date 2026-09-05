@@ -97,6 +97,12 @@ interface BengaluruMapProps {
    * never passes this.
    */
   activePlaceId?: string;
+  /**
+   * Bump to fly to the player's own Echoe and follow it until the player
+   * drags, scrolls or double-taps the map. "Watch it roam" without leaving
+   * the screen.
+   */
+  followMine?: number;
 }
 
 const AGENTS_SOURCE_ID = 'agents';
@@ -545,9 +551,69 @@ function applyPinKinds(map: maplibregl.Map, kinds: PinKind[], pins: Record<strin
   for (const el of Object.values(pins)) el.classList.toggle('map-pin--off', !placesOn);
 }
 
-export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activePlaceId, pinKinds = ALL_KINDS }: BengaluruMapProps) {
+const AGENT_FAN_METRES = 15;
+const AGENT_FAN_RADIUS_DEG = 0.00007; // ~7m ring; keeps fanned dots pinned to their landmark
+
+/** Metres between two [lng,lat] points; flat-earth approx, fine at this scale. */
+function metresApart(a: LngLat, b: LngLat): number {
+  const dLat = (a[1] - b[1]) * 111320;
+  const dLng = (a[0] - b[0]) * 111320 * Math.cos((a[1] * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+/**
+ * Fans Echoes standing within ~15m of each other (the same landmark;
+ * in-transit dots rarely coincide since agentPosition only returns exact
+ * endpoints) onto a small ring so dots and labels stop stacking. Grouping is
+ * sorted by agent id, not array position, so a group's ring assignment
+ * stays put frame to frame even if agentsRef reorders. The player's own dot
+ * (or, absent one, the lowest id) anchors the ring and never moves, so
+ * follow mode keeps tracking the true position.
+ */
+function fanCoincidentAgents(entries: { agent: AgentSpec; lng: number; lat: number }[]): void {
+  const used = new Array(entries.length).fill(false);
+  for (let i = 0; i < entries.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    const group = [entries[i]];
+    for (let j = i + 1; j < entries.length; j++) {
+      if (!used[j] && metresApart([entries[i].lng, entries[i].lat], [entries[j].lng, entries[j].lat]) <= AGENT_FAN_METRES) {
+        used[j] = true;
+        group.push(entries[j]);
+      }
+    }
+    if (group.length < 2) continue;
+    group.sort((a, b) => (a.agent.id < b.agent.id ? -1 : a.agent.id > b.agent.id ? 1 : 0));
+    const anchor = group.find((e) => e.agent.isMine) ?? group[0];
+    const others = group.filter((e) => e !== anchor);
+    others.forEach((e, n) => {
+      const angle = (2 * Math.PI * n) / others.length;
+      e.lng = anchor.lng + (AGENT_FAN_RADIUS_DEG * Math.cos(angle)) / Math.cos((anchor.lat * Math.PI) / 180);
+      e.lat = anchor.lat + AGENT_FAN_RADIUS_DEG * Math.sin(angle);
+    });
+  }
+}
+
+export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activePlaceId, pinKinds = ALL_KINDS, followMine }: BengaluruMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const followRef = useRef(false);
+
+  useEffect(() => {
+    if (!followMine) return;
+    const map = mapRef.current;
+    const me = agentsRef.current.find(a => a.isMine);
+    if (!map || !me) return;
+    const leg = legsRef.current[me.id];
+    const target: LngLat = leg
+      ? agentPosition(leg, Date.now())
+      : (() => {
+          const at = LANDMARKS.find(l => l.id === me.toPlace);
+          return at ? [at.lng, at.lat] : [0, 0];
+        })();
+    followRef.current = true;
+    map.flyTo({ center: target, zoom: Math.max(map.getZoom(), 14.5), duration: 900 });
+  }, [followMine]);
   const agentsRef = useRef<AgentSpec[]>(agents);
   const legsRef = useRef<Record<string, Leg>>({});
   const rafRef = useRef<number>(0);
@@ -578,6 +644,8 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
       bearing: CITY_BEARING,
     });
     mapRef.current = map;
+    // Dev aid only: lets a console or test script inspect the live map.
+    if (import.meta.env.DEV) (window as unknown as { __echoeMap?: maplibregl.Map }).__echoeMap = map;
 
     const pins = pinsRef.current;
     LANDMARKS.forEach((place, i) => {
@@ -1034,7 +1102,7 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         if (source && hasAgents && now - lastPush >= 33) {
           lastPush = now;
           pushedEmpty = false;
-          const features = agentsRef.current.map((agent) => {
+          const positioned = agentsRef.current.map((agent) => {
             let leg = legsRef.current[agent.id];
             if (!leg) {
               const from = LANDMARKS.find((l) => l.id === agent.fromPlace);
@@ -1049,6 +1117,8 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
               legsRef.current[agent.id] = leg;
             }
             const [lng, lat] = agentPosition(leg, now);
+            // Follow mode: keep the camera on my Echoe between camera animations.
+            if (agent.isMine && followRef.current && !map.isMoving()) map.setCenter([lng, lat]);
             // Only name an image that exists, or the layer logs a miss every
             // frame until the logo lands. Undefined drops out of the JSON, so
             // the layer's ['has','badgeIcon'] filter simply skips the feature.
@@ -1060,24 +1130,28 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
               const id = `pin-startup-${agent.badge}`;
               badgeIcon = map.hasImage(id) ? id : BADGE_CHECK;
             }
-            return {
-              type: 'Feature' as const,
-              geometry: { type: 'Point' as const, coordinates: [lng, lat] },
-              properties: {
-                colour: agent.colour,
-                label: agent.label,
-                // Resolved by setMissingStyleImageResolver on first sight, so
-                // the dot draws immediately and the face lands a frame later.
-                icon: agent.avatar ? `${AVATAR_IMAGE}${agent.avatar}` : undefined,
-                isMine: !!agent.isMine,
-                badgeIcon,
-                // 0..1 breathing on the player's own dot.
-                pulse: agent.isMine ? (Math.sin((now / 1000) * 2.4) + 1) / 2 : 0,
-                // 900ms burst window as a leg lands.
-                arrived: now >= leg.arriveMs && now < leg.arriveMs + 900 ? 1 : 0,
-              },
-            };
+            return { agent, leg, lng, lat, badgeIcon };
           });
+          // Echoes idle at the same landmark land on the exact same point;
+          // fan them onto a small ring so dots and labels stop stacking.
+          fanCoincidentAgents(positioned);
+          const features = positioned.map(({ agent, leg, lng, lat, badgeIcon }) => ({
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+            properties: {
+              colour: agent.colour,
+              label: agent.label,
+              // Resolved by setMissingStyleImageResolver on first sight, so
+              // the dot draws immediately and the face lands a frame later.
+              icon: agent.avatar ? `${AVATAR_IMAGE}${agent.avatar}` : undefined,
+              isMine: !!agent.isMine,
+              badgeIcon,
+              // 0..1 breathing on the player's own dot.
+              pulse: agent.isMine ? (Math.sin((now / 1000) * 2.4) + 1) / 2 : 0,
+              // 900ms burst window as a leg lands.
+              arrived: now >= leg.arriveMs && now < leg.arriveMs + 900 ? 1 : 0,
+            },
+          }));
           source.setData({ type: 'FeatureCollection', features });
         }
         rafRef.current = requestAnimationFrame(tick);
@@ -1085,7 +1159,17 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
       tick();
     });
 
-    map.on('dblclick', () => flyToCity(map));
+    const stopFollowing = () => {
+      followRef.current = false;
+    };
+    map.on('dragstart', stopFollowing);
+    map.on('wheel', stopFollowing);
+    map.on('pitchstart', stopFollowing);
+    map.on('rotatestart', stopFollowing);
+    map.on('dblclick', () => {
+      stopFollowing();
+      flyToCity(map);
+    });
 
     return () => {
       alive = false;
