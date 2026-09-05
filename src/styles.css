@@ -408,13 +408,77 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .world-wrap { position: relative; height: 100%; overflow: hidden; background: #0b120e; }
 #map-slot { position: absolute; inset: 0; overflow: hidden; }
 #map-slot .maplibregl-map { position: absolute; inset: 0; }
+/* Two gradients, nothing in the middle: a light one so the header reads, a
+   heavier one so the sheet has ground under it. The city keeps its own light. */
 .map-scrim {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(6, 10, 8, .55) 0%, rgba(6, 10, 8, 0) 30%, rgba(6, 10, 8, 0) 60%, rgba(6, 10, 8, .6) 100%);
+    linear-gradient(180deg, rgba(5, 9, 7, .68) 0%, rgba(5, 9, 7, .34) 9%, rgba(5, 9, 7, 0) 24%),
+    linear-gradient(0deg, rgba(5, 9, 7, .88) 0%, rgba(5, 9, 7, .5) 12%, rgba(5, 9, 7, 0) 32%);
+}
+
+/* Landmark markers. No backdrop-filter anywhere here: ten blurred layers over
+   a WebGL canvas is the one thing that reliably drops frames on a mid-range
+   phone, and over a map this dark a layered translucent fill reads as glass
+   without it. The bob is transform-only, so it stays on the compositor. */
+.map-pin {
+  display: grid;
+  position: relative;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+.map-pin__chip {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .17), rgba(255, 255, 255, .04) 48%, rgba(255, 255, 255, .1)),
+    rgba(9, 15, 11, .62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .38),
+    inset 0 -1px 0 rgba(0, 0, 0, .45),
+    0 6px 16px -6px rgba(0, 0, 0, .95);
+  font-size: 14px;
+  line-height: 1;
+  animation: map-pin-bob 3.6s ease-in-out infinite;
+  animation-delay: var(--map-pin-delay, 0s);
+}
+.map-pin__name {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 5px;
+  transform: translateX(-50%);
+  color: var(--fg);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .95), 0 0 7px rgba(0, 0, 0, .9);
+  pointer-events: none;
+}
+.map-pin--here .map-pin__chip {
+  border-color: rgba(215, 240, 108, .85);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .38),
+    0 0 0 3px rgba(215, 240, 108, .18),
+    0 6px 18px -6px rgba(215, 240, 108, .5);
+}
+.map-pin:focus-visible .map-pin__chip { outline: 2px solid var(--lime); outline-offset: 3px; }
+@keyframes map-pin-bob {
+  50% { transform: translateY(-3px); }
 }
 .map-fallback {
   position: absolute;
@@ -896,3 +960,72 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .match-score small { color: var(--fg3); font-size: 11px; font-weight: 700; }
 /* Fix 14: the tap affordance on Review is otherwise invisible. */
 .review-hint { margin: 0 0 12px; color: var(--fg3); font-size: 11px; }
+
+/* ── Verified company badge and sheet ─────────────────────────────────── */
+
+.verified {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid rgba(215, 240, 108, .3);
+  border-radius: 999px;
+  background: rgba(215, 240, 108, .12);
+  vertical-align: middle;
+}
+.verified b { color: var(--lime); font-size: 11px; font-weight: 700; }
+.verified-logo, .verified-initials {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .12);
+  object-fit: contain;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.verify-btn {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 10px;
+  border: 1px solid rgba(215, 240, 108, .3);
+  border-radius: var(--radius-sm);
+  color: var(--lime);
+  background: rgba(215, 240, 108, .12);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.verify-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  align-items: end;
+  padding: 12px;
+  background: rgba(6, 10, 8, .6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.verify-sheet {
+  display: grid;
+  gap: 10px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 18px;
+  animation: sheet-up 320ms var(--ease) both;
+  scrollbar-width: none;
+}
+.verify-sheet::-webkit-scrollbar { display: none; }
+.verify-sheet > * { position: relative; z-index: 1; }
+@keyframes sheet-up { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.verify-sheet h3 { font-size: 20px; }
+.verify-sheet .helper { text-align: left; }
+.verify-error { margin: 0; color: var(--coral); font-size: 12px; }
+.verify-code { font-size: 22px; font-weight: 700; letter-spacing: .3em; text-align: center; }
+.verify-done { display: grid; place-items: center; padding: 12px 0 6px; }

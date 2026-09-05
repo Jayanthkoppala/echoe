@@ -35,7 +35,7 @@ export function MapSlot({ agents, activePlaceId, onPlaceTap }: MapSlotProps) {
           </>
         }
       >
-        <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} />
+        <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} activePlaceId={activePlaceId} />
       </MapBoundary>
       {/* The OpenFreeMap "liberty" basemap is light. This sinks it to obsidian
           without touching the map component. */}

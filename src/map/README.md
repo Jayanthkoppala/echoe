@@ -1,8 +1,11 @@
 # Bengaluru map layer
 
-`BengaluruMap` renders a pitched MapLibre view (OpenFreeMap "liberty" style,
-which already has 3D buildings above zoom 14) centred on Bengaluru, with the
-10 landmarks from `src/data/landmarks.ts` as HTML markers.
+`BengaluruMap` renders a pitched MapLibre view (OpenFreeMap "dark" style,
+recoloured on load and given a `building-3d` layer from zoom 13) centred on
+Bengaluru, with the 10 landmarks from `src/data/landmarks.ts` as HTML glass
+markers. Palette, label zoom rules and camera are documented in
+`docs/design/MAP-DESIGN.md`. Pass `activePlaceId` to put the lime ring on a
+landmark; without it the ring follows the player's own Echoe destination.
 
 Usage:
 

@@ -1,13 +1,16 @@
+// Night-city map for Echoe. Base style is OpenFreeMap "dark"; everything below
+// is an override on that style's own layers plus four layers of our own.
+//
 // Verified against MapLibre GL JS docs via Context7 (/maplibre/maplibre-gl-js):
-//  - map init with center/zoom/pitch/bearing (set-pitch-and-bearing.html)
-//  - GeoJSON source + circle/symbol layer (draw-a-circle.html, draw-geojson-points.html)
-//  - updating a GeoJSON source every frame with setData (animate-a-point.html)
-//  - Marker with custom HTML element (add-custom-icons-with-markers.html)
-//  - fill-extrusion 3D buildings: OpenFreeMap's "liberty" style already ships
-//    a "building-3d" fill-extrusion layer (source-layer "building", minzoom 14)
-//    confirmed by fetching the style JSON directly, so no extra layer is added
-//  - style JSON / OpenFreeMap tiles: liberty/dark style URLs confirmed live
-//    with `curl -sI` (both return HTTP 200)
+//  - setPaintProperty / setLayoutProperty / setLayerZoomRange are the documented
+//    way to change a loaded style's layers without replacing the style
+//  - GeoJSON source + circle/symbol layer, updated per frame with setData
+//  - Marker with a custom HTML element
+// Property names, types and data-driven support checked against the installed
+// style spec (@maplibre/maplibre-gl-style-spec/src/reference/v8.json): every
+// expression below uses a property whose "property-type" is data-driven.
+// Layer ids, their paint defaults and the sprite list come from fetching the
+// style JSON and ofm.json directly, so no id here is guessed.
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 // MapLibre 6 spawns its tile worker from a URL relative to its own module, which
@@ -22,7 +25,16 @@ import { LANDMARKS } from '../data/landmarks';
 import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
-const CENTER: LngLat = [77.6, 12.97];
+
+// City view. Tuned by projecting all ten landmarks to screen coordinates and
+// checking none lands under the header band or the bottom sheet; see
+// docs/design/MAP-DESIGN.md.
+const CENTER: LngLat = [77.6153, 12.9628];
+const CITY_ZOOM = 11.95;
+const CITY_PITCH = 55;
+const CITY_BEARING = -15;
+
+const LIME = '#d7f06c';
 
 /** City view down to one landmark. `essential` keeps it under reduced motion. */
 export function flyToLandmark(
@@ -44,9 +56,9 @@ export function flyToLandmark(
 export function flyToCity(map: maplibregl.Map): void {
   map.flyTo({
     center: CENTER,
-    zoom: 12.5,
-    pitch: 55,
-    bearing: -15,
+    zoom: CITY_ZOOM,
+    pitch: CITY_PITCH,
+    bearing: CITY_BEARING,
     duration: 1800,
     curve: 1.4,
     essential: true,
@@ -67,52 +79,174 @@ export interface AgentSpec {
 interface BengaluruMapProps {
   agents: AgentSpec[];
   onPlaceTap?: (placeId: string) => void;
+  /**
+   * Landmark that gets the lime ring. Falls back to where the player's own
+   * Echoe is walking, so the ring is right on Roaming even if the caller
+   * never passes this.
+   */
+  activePlaceId?: string;
 }
 
 const AGENTS_SOURCE_ID = 'agents';
 
-const RECOLOUR: [string, string, unknown][] = [
-  ['background', 'background-color', '#0b120e'],
-  ['water', 'fill-color', '#1c4b6b'],
-  ['waterway', 'line-color', '#2a6a92'],
-  ['water_name', 'text-color', '#8fc3e6'],
-  ['water_name', 'text-halo-color', '#0b120e'],
-  ['landcover_wood', 'fill-color', '#1f4a2c'],
-  ['landcover_wood', 'fill-opacity', 0.85],
-  ['landuse_park', 'fill-color', '#22522f'],
-  ['landuse_park', 'fill-opacity', 0.85],
-  ['landuse_residential', 'fill-color', '#121a15'],
-  ['building', 'fill-color', '#1a241e'],
-  ['building', 'fill-outline-color', '#2a3830'],
-  ['highway_path', 'line-color', '#3b463f'],
-  ['highway_minor', 'line-color', '#3d4842'],
-  ['highway_major_subtle', 'line-color', '#6a776f'],
-  ['highway_major_casing', 'line-color', 'rgba(0,0,0,0.6)'],
-  ['highway_major_inner', 'line-color', '#aeb9b1'],
-  ['highway_motorway_casing', 'line-color', 'rgba(0,0,0,0.6)'],
-  ['highway_motorway_inner', 'line-color', '#d5dcd7'],
-  ['highway_motorway_subtle', 'line-color', '#6a776f'],
-  ['railway', 'line-color', '#4a5750'],
-  ['railway_transit', 'line-color', '#4a5750'],
-  ['railway_minor', 'line-color', '#4a5750'],
-  ['highway_name_other', 'text-color', 'rgba(220,228,222,0.85)'],
-  ['highway_name_other', 'text-halo-color', 'rgba(0,0,0,0.9)'],
-  ['highway_name_motorway', 'text-color', '#e8ede9'],
-  ['place_other', 'text-color', 'rgba(230,236,232,0.8)'],
-  ['place_suburb', 'text-color', 'rgba(230,236,232,0.85)'],
-  ['place_village', 'text-color', 'rgba(230,236,232,0.85)'],
-  ['place_town', 'text-color', '#f2f6f3'],
-  ['place_city', 'text-color', '#f2f6f3'],
-  ['place_city_large', 'text-color', '#f2f6f3'],
-  ['boundary_state', 'line-color', '#3b463f'],
+// Roads in three steps. The dark style paints primary through tertiary in one
+// layer, so the step comes from the feature's own class.
+const ROAD_MAJOR_COLOUR = [
+  'match',
+  ['get', 'class'],
+  ['trunk', 'primary'], '#cfd3c2',
+  ['secondary', 'tertiary'], '#6d7c70',
+  '#4a564e',
 ];
 
-export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) {
+const PAINT: [string, string, unknown][] = [
+  ['background', 'background-color', '#070c09'],
+
+  // Water: deep teal-blue. Antialias on, or the lake edges come back jagged.
+  // Dark enough that a lake filling the frame on a fly-to still reads obsidian;
+  // the shoreline below is what makes water findable at city zoom.
+  ['water', 'fill-color', '#0b2b39'],
+  ['water', 'fill-antialias', true],
+  ['waterway', 'line-color', '#1a4d61'],
+  ['water_name', 'text-color', 'rgba(255,255,255,0.7)'],
+  ['water_name', 'text-halo-color', 'rgba(4,20,26,0.9)'],
+  ['water_name', 'text-halo-width', 1.4],
+
+  // Greenery. The two greens differ in hue and value; the park layer also gets
+  // a lit edge below, which is what separates a managed park from tree cover.
+  ['landcover_wood', 'fill-color', '#12301d'],
+  ['landcover_wood', 'fill-opacity', 0.72],
+  ['landuse_park', 'fill-color', '#1c4a2c'],
+  ['landuse_park', 'fill-opacity', 0.85],
+  ['landuse_residential', 'fill-color', '#0c120e'],
+
+  // Flat buildings below the 3D layer's minzoom: lifted a step off the ground
+  // with a cool edge so blocks read as blocks.
+  ['building', 'fill-color', '#101a15'],
+  ['building', 'fill-outline-color', '#1d2a24'],
+
+  // Road hierarchy. Motorway and primary are the only light warm-white lines.
+  ['highway_motorway_inner', 'line-color', '#d9dccb'],
+  ['highway_motorway_casing', 'line-color', 'rgba(3,7,5,0.9)'],
+  ['highway_motorway_subtle', 'line-color', '#6d7c70'],
+  ['highway_major_inner', 'line-color', ROAD_MAJOR_COLOUR],
+  [
+    'highway_major_inner',
+    'line-opacity',
+    ['match', ['get', 'class'], ['trunk', 'primary'], 1, ['secondary'], 0.85, 0.62],
+  ],
+  [
+    'highway_major_inner',
+    'line-width',
+    ['interpolate', ['exponential', 1.3], ['zoom'], 10, 0.9, 13, 2.2, 20, 18],
+  ],
+  ['highway_major_casing', 'line-color', 'rgba(3,7,5,0.9)'],
+  [
+    'highway_major_casing',
+    'line-width',
+    ['interpolate', ['exponential', 1.3], ['zoom'], 10, 2.2, 13, 4.2, 20, 22],
+  ],
+  ['highway_major_subtle', 'line-color', '#4a564e'],
+
+  // Minor roads carry the city's texture but must not draw a white web at 12.5.
+  ['highway_minor', 'line-color', '#39443d'],
+  [
+    'highway_minor',
+    'line-opacity',
+    ['interpolate', ['linear'], ['zoom'], 11, 0.2, 13, 0.5, 16, 0.9],
+  ],
+  ['highway_path', 'line-color', '#2a332e'],
+  ['highway_path', 'line-opacity', 0.45],
+
+  // Railways: a dim rail with the ground colour dashed over it.
+  ['railway', 'line-color', '#3d4d46'],
+  [
+    'railway',
+    'line-width',
+    ['interpolate', ['exponential', 1.3], ['zoom'], 13, 1.2, 20, 5],
+  ],
+  ['railway_dashline', 'line-color', '#070c09'],
+  ['railway_transit', 'line-color', '#33403a'],
+  ['railway_minor', 'line-color', '#33403a'],
+
+  // Labels: white on a hard dark halo, nothing grey.
+  ['highway_name_other', 'text-color', 'rgba(255,255,255,0.72)'],
+  ['highway_name_other', 'text-halo-color', 'rgba(2,6,4,0.95)'],
+  ['highway_name_other', 'text-halo-width', 1.4],
+  ['highway_name_motorway', 'text-color', 'rgba(255,255,255,0.8)'],
+  ['highway_name_motorway', 'text-halo-color', 'rgba(2,6,4,0.95)'],
+  ['highway_name_motorway', 'text-halo-width', 1.4],
+  ['place_suburb', 'text-color', 'rgba(255,255,255,0.62)'],
+  ['place_suburb', 'text-halo-color', 'rgba(2,6,4,0.92)'],
+  ['place_suburb', 'text-halo-width', 1.4],
+  ['place_suburb', 'text-halo-blur', 0.3],
+  ['place_other', 'text-color', 'rgba(255,255,255,0.6)'],
+  ['place_other', 'text-halo-color', 'rgba(2,6,4,0.92)'],
+  ['place_village', 'text-color', 'rgba(255,255,255,0.7)'],
+  ['place_village', 'text-halo-color', 'rgba(2,6,4,0.92)'],
+  ['place_town', 'text-color', 'rgba(255,255,255,0.9)'],
+  ['place_town', 'text-halo-color', 'rgba(2,6,4,0.92)'],
+  ['place_town', 'text-halo-width', 1.6],
+  ['place_city', 'text-color', 'rgba(255,255,255,0.9)'],
+  ['place_city', 'text-halo-color', 'rgba(2,6,4,0.92)'],
+  ['place_city', 'text-halo-width', 1.6],
+  ['place_city_large', 'text-color', '#ffffff'],
+  ['place_city_large', 'text-halo-color', 'rgba(2,6,4,0.92)'],
+  ['place_city_large', 'text-halo-width', 1.6],
+
+  ['boundary_state', 'line-color', '#2b3b34'],
+  ['boundary_state', 'line-opacity', 0.5],
+];
+
+// Small caps are already on in this style; the spacing and size are not.
+const LAYOUT: [string, string, unknown][] = [
+  ['place_suburb', 'text-letter-spacing', 0.16],
+  [
+    'place_suburb',
+    'text-size',
+    ['interpolate', ['linear'], ['zoom'], 11, 9.5, 14, 11.5],
+  ],
+  ['place_town', 'text-letter-spacing', 0.2],
+  ['place_city', 'text-letter-spacing', 0.2],
+  ['place_city_large', 'text-letter-spacing', 0.2],
+  [
+    'place_town',
+    'text-size',
+    ['interpolate', ['linear'], ['zoom'], 10, 11, 14, 13],
+  ],
+  [
+    'place_city',
+    'text-size',
+    ['interpolate', ['linear'], ['zoom'], 10, 11, 14, 13],
+  ],
+  ['highway_name_other', 'text-letter-spacing', 0.08],
+];
+
+// At city zoom the only names are suburbs, towns and cities. Street names and
+// minor places wait for 14, where there is room for them.
+const ZOOM_RANGE: [string, number, number][] = [
+  ['highway_name_other', 14, 24],
+  ['highway_name_motorway', 14, 24],
+  ['place_other', 14, 16],
+  ['place_village', 14, 16],
+  ['water_name', 13, 24],
+  // Rail from the city view up. Below zoom 12 the tiles carry no minor roads,
+  // so the lines are what keep the ground from reading as empty.
+  ['railway', 11, 24],
+  ['railway_dashline', 11, 24],
+];
+
+// place_city_large is Bengaluru's own name. The header already says Bengaluru,
+// and at 14px it lands straight across the landmark cluster, so it goes.
+const HIDE = ['place_city_large'];
+
+export default function BengaluruMap({ agents, onPlaceTap, activePlaceId }: BengaluruMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const agentsRef = useRef<AgentSpec[]>(agents);
   const legsRef = useRef<Record<string, Leg>>({});
   const rafRef = useRef<number>(0);
+  const pinsRef = useRef<Record<string, HTMLElement>>({});
 
   agentsRef.current = agents;
 
@@ -123,41 +257,65 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
       container: containerRef.current,
       style: STYLE_URL,
       center: CENTER,
-      zoom: 12.5,
-      pitch: 55,
-      bearing: -15,
+      zoom: CITY_ZOOM,
+      pitch: CITY_PITCH,
+      bearing: CITY_BEARING,
     });
     mapRef.current = map;
 
-    const markerEls: HTMLElement[] = [];
-    for (const place of LANDMARKS) {
-      const el = document.createElement('div');
-      el.className = 'landmark-marker';
-      el.style.cssText =
-        'display:flex;flex-direction:column;align-items:center;cursor:pointer;font-size:22px;text-shadow:0 1px 3px rgba(0,0,0,0.6);';
-      el.innerHTML = `<span>${place.icon}</span><span style="font-size:10px;color:#fff;background:rgba(0,0,0,0.55);padding:1px 4px;border-radius:3px;white-space:nowrap;">${place.name}</span>`;
+    const pins = pinsRef.current;
+    LANDMARKS.forEach((place, i) => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'map-pin';
+      el.setAttribute('aria-label', place.name);
+      // Staggered so ten markers do not breathe in lockstep. Read by the
+      // keyframe in styles.css; the animation is transform-only.
+      el.style.setProperty('--map-pin-delay', `${(i % 5) * 0.44}s`);
+
+      const chip = document.createElement('span');
+      chip.className = 'map-pin__chip';
+      chip.setAttribute('aria-hidden', 'true');
+      chip.textContent = place.icon;
+
+      const name = document.createElement('span');
+      name.className = 'map-pin__name';
+      name.textContent = place.name;
+
+      el.append(chip, name);
       el.addEventListener('click', () => {
         flyToLandmark(map, place);
         onPlaceTap?.(place.id);
       });
-      markerEls.push(el);
-      new maplibregl.Marker({ element: el })
+      pins[place.id] = el;
+
+      // anchor 'center' puts the chip's middle on the coordinate; the name is
+      // taken out of flow in CSS so it hangs below without shifting the anchor.
+      new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([place.lng, place.lat])
         .addTo(map);
-    }
+    });
 
     map.on('load', () => {
-      // Recolour OpenFreeMap's monochrome dark style so the city reads:
-      // greenery green, water blue, roads light, ground a deep green-black.
-      // Layer ids come from the style itself; unknown ids are skipped.
-      for (const [layerId, prop, value] of RECOLOUR) {
-        if (map.getLayer(layerId)) map.setPaintProperty(layerId, prop as never, value as never);
+      for (const [id, prop, value] of PAINT) {
+        if (map.getLayer(id)) map.setPaintProperty(id, prop as never, value as never);
+      }
+      for (const [id, prop, value] of LAYOUT) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, prop as never, value as never);
+      }
+      for (const [id, min, max] of ZOOM_RANGE) {
+        if (map.getLayer(id)) map.setLayerZoomRange(id, min, max);
+      }
+      for (const id of HIDE) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
       }
       // The wood layer paints with a sprite pattern the style never ships
-      // ("wood-pattern" warning); a pattern also overrides fill-color. Drop it.
+      // ("wood-pattern" is absent from ofm.json); a pattern also overrides
+      // fill-color, so the greens only land once it is gone.
       if (map.getLayer('landcover_wood')) {
         map.setPaintProperty('landcover_wood', 'fill-pattern', undefined as never);
       }
+
       // Bengaluru's parks live in OpenMapTiles' `park` source layer and its
       // grass and scrub in `landcover`; the dark style only paints `landuse`
       // class=park, which is why Cubbon Park and Lalbagh stayed black.
@@ -165,7 +323,10 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
         l => (l as { 'source-layer'?: string })['source-layer'] === 'water'
       ) as { source?: string } | undefined;
       const src = vectorSource?.source ?? 'openmaptiles';
+      // Each of these inserts immediately before `waterway`, so the last one
+      // added sits highest: canopy, then park, then the two lit edges.
       const beforeGreen = map.getLayer('waterway') ? 'waterway' : undefined;
+
       if (!map.getLayer('echoe-landcover')) {
         map.addLayer(
           {
@@ -174,7 +335,7 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
             source: src,
             'source-layer': 'landcover',
             filter: ['match', ['get', 'class'], ['grass', 'wood', 'farmland', 'scrub', 'wetland'], true, false],
-            paint: { 'fill-color': '#1d452a', 'fill-opacity': 0.7 },
+            paint: { 'fill-color': '#12301d', 'fill-opacity': 0.62 },
           },
           beforeGreen
         );
@@ -186,7 +347,43 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
             type: 'fill',
             source: src,
             'source-layer': 'park',
-            paint: { 'fill-color': '#245a33', 'fill-opacity': 0.8 },
+            paint: { 'fill-color': '#1c4a2c', 'fill-opacity': 0.85 },
+          },
+          beforeGreen
+        );
+      }
+      // A line layer over a polygon source-layer draws that polygon's boundary.
+      // This lit rim is what makes a park read as a park rather than a dark
+      // patch, and it is the visible difference against flat tree cover.
+      if (!map.getLayer('echoe-park-edge')) {
+        map.addLayer(
+          {
+            id: 'echoe-park-edge',
+            type: 'line',
+            source: src,
+            'source-layer': 'park',
+            paint: {
+              'line-color': '#3a8a51',
+              'line-opacity': 0.45,
+              'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.5, 14, 1.2, 17, 2],
+            },
+          },
+          beforeGreen
+        );
+      }
+      if (!map.getLayer('echoe-water-edge')) {
+        map.addLayer(
+          {
+            id: 'echoe-water-edge',
+            type: 'line',
+            source: src,
+            'source-layer': 'water',
+            filter: ['match', ['geometry-type'], ['Polygon', 'MultiPolygon'], true, false],
+            paint: {
+              'line-color': '#2e7189',
+              'line-opacity': 0.7,
+              'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 14, 1.4, 17, 2.4],
+            },
           },
           beforeGreen
         );
@@ -208,10 +405,28 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
             minzoom: 13,
             filter: ['!=', ['get', 'hide_3d'], true],
             paint: {
-              'fill-extrusion-color': '#2a3630',
-              'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, ['get', 'render_height']],
-              'fill-extrusion-base': ['case', ['>=', ['get', 'zoom'], 16], ['get', 'render_min_height'], 0],
-              'fill-extrusion-opacity': 0.9,
+              // Taller blocks catch more light, which is what gives the skyline
+              // depth instead of one flat grey mass.
+              'fill-extrusion-color': [
+                'interpolate',
+                ['linear'],
+                ['coalesce', ['get', 'render_height'], 0],
+                0, '#14201a',
+                30, '#1d2b24',
+                90, '#26352e',
+              ],
+              // render_height is null on some features, which MapLibre warns
+              // about and then treats as 0; coalescing says so on purpose.
+              'fill-extrusion-height': [
+                'interpolate', ['linear'], ['zoom'],
+                13, 0,
+                14.5, ['coalesce', ['get', 'render_height'], 0],
+              ],
+              // The old expression read a feature property called "zoom", which
+              // does not exist, so every base came out 0.
+              'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+              'fill-extrusion-opacity': 0.92,
+              'fill-extrusion-vertical-gradient': true,
             },
           },
           labelLayer?.id
@@ -223,6 +438,21 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
         data: { type: 'FeatureCollection', features: [] },
       });
 
+      // Soft outer glow on the player's own Echoe. circle-blur is a GPU
+      // property, so this costs no frames and no DOM.
+      map.addLayer({
+        id: 'agents-glow',
+        type: 'circle',
+        source: AGENTS_SOURCE_ID,
+        filter: ['==', ['get', 'isMine'], true],
+        paint: {
+          'circle-radius': ['+', 15, ['*', ['get', 'pulse'], 5], ['*', ['get', 'arrived'], 18]],
+          'circle-color': LIME,
+          'circle-blur': 1,
+          'circle-opacity': ['*', 0.32, ['-', 1, ['*', ['get', 'arrived'], ['get', 'arrived']]]],
+        },
+      });
+
       map.addLayer({
         id: 'agents-circle',
         type: 'circle',
@@ -230,14 +460,21 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
         paint: {
           'circle-radius': [
             '+',
-            ['case', ['get', 'isMine'], 9, 6],
-            ['*', ['get', 'pulse'], 3],
+            ['case', ['get', 'isMine'], 7, 5],
+            ['*', ['get', 'pulse'], 2],
             ['*', ['get', 'arrived'], 10],
           ],
           'circle-opacity': ['-', 1, ['*', ['get', 'arrived'], ['get', 'arrived']]],
-          'circle-color': ['get', 'colour'],
-          'circle-stroke-width': ['case', ['get', 'isMine'], 3, 1.5],
-          'circle-stroke-color': '#ffffff',
+          'circle-color': ['case', ['get', 'isMine'], LIME, ['get', 'colour']],
+          'circle-stroke-width': ['case', ['get', 'isMine'], 2, 1.2],
+          // A dark rim keeps the lime core separate from its own glow; everyone
+          // else gets the thin white ring.
+          'circle-stroke-color': [
+            'case',
+            ['get', 'isMine'],
+            'rgba(6,12,9,0.9)',
+            'rgba(255,255,255,0.85)',
+          ],
         },
       });
 
@@ -248,14 +485,20 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
         layout: {
           'text-field': ['get', 'label'],
           'text-font': ['Noto Sans Regular'],
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-size': 12,
+          // Agent names sit above the dot, landmark names below the chip, so
+          // the two never land in the same band even at the same coordinate.
+          'text-offset': [0, -2.4],
+          'text-anchor': 'bottom',
+          'text-size': ['case', ['get', 'isMine'], 12, 11],
+          'text-letter-spacing': 0.02,
+          'text-padding': 4,
+          'symbol-sort-key': ['case', ['get', 'isMine'], 0, 1],
         },
         paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': '#000000',
-          'text-halo-width': 1,
+          'text-color': ['case', ['get', 'isMine'], LIME, '#ffffff'],
+          'text-halo-color': 'rgba(2,6,4,0.95)',
+          'text-halo-width': 1.5,
+          'text-halo-blur': 0.4,
         },
       });
 
@@ -314,12 +557,22 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
 
     return () => {
       cancelAnimationFrame(rafRef.current);
-      markerEls.length = 0;
+      pinsRef.current = {};
       map.remove();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lime ring on the place the player is at. classList.toggle with an explicit
+  // force is a no-op when the class is already in the right state, so this is
+  // free on the renders where nothing moved.
+  useEffect(() => {
+    const here = activePlaceId ?? agents.find(a => a.isMine)?.toPlace;
+    for (const [id, el] of Object.entries(pinsRef.current)) {
+      el.classList.toggle('map-pin--here', id === here);
+    }
+  }, [activePlaceId, agents]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }
