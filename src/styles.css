@@ -851,9 +851,15 @@ h3 { margin-bottom: 5px; font-size: 16px; letter-spacing: -.02em; }
 
 /* Desktop: centre a phone-width column */
 @media (min-width: 520px) {
-  /* Desktop: a phone-width column, full viewport height, no bezel. */
-  body { display: grid; place-items: stretch center; }
-  .phone { width: var(--phone-w); height: 100dvh; }
+  /* Desktop: a phone-width column centred on the page, no bezel. */
+  body { display: grid; place-items: center; padding: 24px; }
+  .phone {
+    width: var(--phone-w);
+    height: min(880px, calc(100dvh - 48px));
+    min-height: 620px;
+    border-radius: 28px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
