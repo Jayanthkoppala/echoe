@@ -11,7 +11,7 @@ import {
 } from "spacetimedb";
 
 export default {
-  apiKey: __t.string(),
-  model: __t.string(),
-  endpoint: __t.string(),
+  clientId: __t.string(),
+  clientSecret: __t.string(),
+  refreshToken: __t.string(),
 };

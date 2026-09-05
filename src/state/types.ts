@@ -11,6 +11,7 @@ export type ScreenName =
   | 'review'
   | 'correct'
   | 'profile'
+  | 'connect'
   | 'talks'
   | 'done';
 
@@ -113,12 +114,22 @@ export interface RunLimits {
   goal: string;
 }
 
+/** One line a connected coding agent wrote about the day, from `agent_memory`. */
+export interface AgentNote {
+  id: string;
+  /** YYYY-MM-DD, as the sending machine saw it. */
+  day: string;
+  /** 'claude-code' | 'codex' | 'mixed' */
+  source: string;
+  note: string;
+}
+
 /** Each member is one reducer call. App.tsx binds them to module_bindings. */
 export interface Actions {
   onJoin(name: string, email: string): void;
   /** Sends the Echoe out again with the same line (and the same host, if any). */
   onRestart(): void;
-  onCreateEcho(avatar: string, persona: string, intent: string): void;
+  onCreateEcho(persona: string, intent: string): void;
   onTravel(placeId: string): void;
   onStartRun(limits: RunLimits): void;
   onPause(): void;
@@ -128,6 +139,10 @@ export interface Actions {
   /** Adjust limits: OpenRouter sign-in (PKCE). Leaves the page and comes back. */
   onLinkOpenRouter(): void;
   onUnlinkOpenRouter(): void;
+  /** Profile: sets the Echoe's line to "Hosting <name>" so the existing share link becomes the event link. */
+  onHostEvent(name: string): void;
+  /** Upserts the caller's coding-agent link token (Connect screen). */
+  onSetAgentLink(token: string): void;
 }
 
 export interface ScreenProps {

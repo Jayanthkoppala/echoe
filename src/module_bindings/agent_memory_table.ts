@@ -10,8 +10,11 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  apiKey: __t.string(),
-  model: __t.string(),
-  endpoint: __t.string(),
-};
+export default __t.row({
+  id: __t.u64().primaryKey(),
+  echoId: __t.u64().name("echo_id"),
+  day: __t.string(),
+  source: __t.string(),
+  note: __t.string(),
+  createdAt: __t.timestamp().name("created_at"),
+});

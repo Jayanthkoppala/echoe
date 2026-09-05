@@ -38,11 +38,14 @@ import AdminUnverifyReducer from "./admin_unverify_reducer";
 import CorrectReducer from "./correct_reducer";
 import CreateEchoReducer from "./create_echo_reducer";
 import EndRunReducer from "./end_run_reducer";
+import IngestAgentMemoryReducer from "./ingest_agent_memory_reducer";
 import JoinReducer from "./join_reducer";
 import PauseRunReducer from "./pause_run_reducer";
 import RateLineReducer from "./rate_line_reducer";
 import ResumeRunReducer from "./resume_run_reducer";
 import SeedCompaniesReducer from "./seed_companies_reducer";
+import SetAgentLinkReducer from "./set_agent_link_reducer";
+import SetGoogleAuthReducer from "./set_google_auth_reducer";
 import SetLlmConfigReducer from "./set_llm_config_reducer";
 import SetMissionReducer from "./set_mission_reducer";
 import SetSecretReducer from "./set_secret_reducer";
@@ -60,6 +63,7 @@ import * as SuggestIntentsProcedure from "./suggest_intents_procedure";
 import * as VerifyCodeProcedure from "./verify_code_procedure";
 
 // Import all table schema definitions
+import AgentMemoryRow from "./agent_memory_table";
 import AgentTravelRow from "./agent_travel_table";
 import CompanyRow from "./company_table";
 import ConversationRow from "./conversation_table";
@@ -78,6 +82,20 @@ import TranscriptLineRow from "./transcript_line_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  agentMemory: __table({
+    name: 'agent_memory',
+    indexes: [
+      { accessor: 'echoId', name: 'agent_memory_echo_id_idx_btree', algorithm: 'btree', columns: [
+        'echoId',
+      ] },
+      { accessor: 'id', name: 'agent_memory_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'agent_memory_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AgentMemoryRow),
   agentTravel: __table({
     name: 'agent_travel',
     indexes: [
@@ -281,11 +299,14 @@ const reducersSchema = __reducers(
   __reducerSchema("correct", CorrectReducer),
   __reducerSchema("create_echo", CreateEchoReducer),
   __reducerSchema("end_run", EndRunReducer),
+  __reducerSchema("ingest_agent_memory", IngestAgentMemoryReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("pause_run", PauseRunReducer),
   __reducerSchema("rate_line", RateLineReducer),
   __reducerSchema("resume_run", ResumeRunReducer),
   __reducerSchema("seed_companies", SeedCompaniesReducer),
+  __reducerSchema("set_agent_link", SetAgentLinkReducer),
+  __reducerSchema("set_google_auth", SetGoogleAuthReducer),
   __reducerSchema("set_llm_config", SetLlmConfigReducer),
   __reducerSchema("set_mission", SetMissionReducer),
   __reducerSchema("set_secret", SetSecretReducer),

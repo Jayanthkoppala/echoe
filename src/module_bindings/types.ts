@@ -10,6 +10,26 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AgentLink = __t.object("AgentLink", {
+  owner: __t.identity(),
+  echoId: __t.u64(),
+  token: __t.string(),
+  connectedAt: __t.timestamp(),
+  lastSyncAt: __t.timestamp(),
+  syncs: __t.u32(),
+});
+export type AgentLink = __Infer<typeof AgentLink>;
+
+export const AgentMemory = __t.object("AgentMemory", {
+  id: __t.u64(),
+  echoId: __t.u64(),
+  day: __t.string(),
+  source: __t.string(),
+  note: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type AgentMemory = __Infer<typeof AgentMemory>;
+
 export const AgentTravel = __t.object("AgentTravel", {
   id: __t.u64(),
   echoId: __t.u64(),
@@ -51,6 +71,7 @@ export const Conversation = __t.object("Conversation", {
   why: __t.string(),
   fundingA: __t.string(),
   fundingB: __t.string(),
+  lastExchangeAt: __t.timestamp(),
   createdAt: __t.timestamp(),
 });
 export type Conversation = __Infer<typeof Conversation>;
@@ -75,6 +96,26 @@ export const Echo = __t.object("Echo", {
   updatedAt: __t.timestamp(),
 });
 export type Echo = __Infer<typeof Echo>;
+
+export const EchoMemory = __t.object("EchoMemory", {
+  id: __t.u64(),
+  echoId: __t.u64(),
+  otherEchoId: __t.u64(),
+  note: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type EchoMemory = __Infer<typeof EchoMemory>;
+
+export const GoogleAuth = __t.object("GoogleAuth", {
+  id: __t.u8(),
+  clientId: __t.string(),
+  clientSecret: __t.string(),
+  refreshToken: __t.string(),
+  accessToken: __t.string(),
+  expiresAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type GoogleAuth = __Infer<typeof GoogleAuth>;
 
 export const Intent = __t.object("Intent", {
   id: __t.u64(),
@@ -104,6 +145,7 @@ export const LlmConfig = __t.object("LlmConfig", {
   owner: __t.identity(),
   apiKey: __t.string(),
   model: __t.string(),
+  endpoint: __t.string(),
   updatedAt: __t.timestamp(),
 });
 export type LlmConfig = __Infer<typeof LlmConfig>;

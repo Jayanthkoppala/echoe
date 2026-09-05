@@ -14,7 +14,18 @@ import {
   type ReducerCtx,
 } from 'spacetimedb/server';
 import { ScheduleAt, TimeDuration, Timestamp } from 'spacetimedb';
-import { chat, exchangeCode, sendEmail, splitLines, type ChatMessage, type ChatResult } from './llm';
+import {
+  OPENROUTER_ENDPOINT,
+  chat,
+  exchangeCode,
+  isGoogleEndpoint,
+  refreshGoogleToken,
+  sendEmail,
+  splitLines,
+  type ChatMessage,
+  type ChatResult,
+  type HttpLike,
+} from './llm';
 import { COMPANIES } from './companies';
 import { verifyGoogleToken } from './social';
 
@@ -83,7 +94,6 @@ const DOMAIN_ALIASES = new Map([
 ]);
 
 
-const AVATARS = ['circle', 'square', 'triangle', 'diamond', 'hex'];
 
 const RUN_RUNNING = 'running';
 const RUN_PAUSED = 'paused';
@@ -94,6 +104,7 @@ const FEEDBACK_LIKE = 'like';
 const FEEDBACK_NOT_ME = 'not_me';
 
 const LLM_CONFIG_ID = 0;
+const GOOGLE_AUTH_ID = 0;
 const MISSION_ID = 0;
 
 /**
@@ -302,6 +313,7 @@ const conversation = table(
     why: t.string(), // one line a human can read: why these two should meet
     fundingA: t.string(), // '' | 'house' | 'own': who pays for A's exchanges
     fundingB: t.string(),
+    lastExchangeAt: t.timestamp(), // one exchange per tick, sides alternate
     createdAt: t.timestamp(),
   }
 );
@@ -354,6 +366,7 @@ const llmConfig = table(
     owner: t.identity(), // whoever configured it first; the only admin
     apiKey: t.string(),
     model: t.string(),
+    endpoint: t.string(), // chat-completions URL; empty means OpenRouter
     updatedAt: t.timestamp(),
   }
 );
@@ -433,6 +446,77 @@ const talkJob = table(
   }
 );
 
+/**
+ * What one Echoe remembers about another: one line, private. Written by
+ * `echoTalk` when a conversation closes, from the transcript that already
+ * exists, and read back into the prompt the next time the same two meet. No
+ * external memory service: the database is the memory.
+ */
+const echoMemory = table(
+  { name: 'echo_memory' },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    echoId: t.u64().index('btree'),
+    otherEchoId: t.u64(),
+    note: t.string(),
+    updatedAt: t.timestamp(),
+  }
+);
+
+/**
+ * Private. OAuth credentials for Google endpoints (Vertex AI refuses API keys),
+ * plus the cached access token. Filled by `setGoogleAuth` from the file that
+ * `gcloud auth application-default login` writes. Refreshed by the procedures
+ * when within a minute of expiry; the refresh token itself never leaves here.
+ */
+const googleAuth = table(
+  { name: 'google_auth' },
+  {
+    id: t.u8().primaryKey(),
+    clientId: t.string(),
+    clientSecret: t.string(),
+    refreshToken: t.string(),
+    accessToken: t.string(),
+    expiresAt: t.timestamp(),
+    updatedAt: t.timestamp(),
+  }
+);
+
+/**
+ * PRIVATE. The link between a player's Echoe and the coding agent on their own
+ * machine. `token` is generated client-side (crypto.randomUUID) and is the only
+ * credential the nightly cron carries, so the row never leaves the server.
+ */
+const agentLink = table(
+  { name: 'agent_link' },
+  {
+    owner: t.identity().primaryKey(),
+    echoId: t.u64(),
+    token: t.string().unique(),
+    connectedAt: t.timestamp(),
+    lastSyncAt: t.timestamp(),
+    syncs: t.u32(),
+  }
+);
+
+/**
+ * Public. What the player has actually been working on, distilled by their own
+ * local agent from that day's Claude Code / Codex transcripts and POSTed here.
+ * Append-only from the module's point of view: the persona is never rewritten,
+ * memory only accrues, and the oldest rows fall off past AGENT_MEMORY_KEEP.
+ */
+const agentMemory = table(
+  { name: 'agent_memory', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    echoId: t.u64().index('btree'),
+    day: t.string(), // YYYY-MM-DD, as the sending machine saw it
+    source: t.string(), // 'claude-code' | 'codex' | 'mixed'
+    note: t.string(),
+    createdAt: t.timestamp(),
+  }
+);
+
 const spacetimedb = schema({
   player,
   echo,
@@ -445,6 +529,8 @@ const spacetimedb = schema({
   receipt,
   conversation,
   transcriptLine,
+  echoMemory,
+  googleAuth,
   correction,
   mission,
   llmConfig,
@@ -454,6 +540,8 @@ const spacetimedb = schema({
   verification,
   worldTickTimer,
   talkJob,
+  agentLink,
+  agentMemory,
 });
 export default spacetimedb;
 
@@ -562,7 +650,11 @@ function writeReceipt(
 }
 
 const STOPWORDS = new Set(
-  'a an the in on at for to of and or with my me i am is are want looking need new this week someone who bengaluru bangalore india anyone people'.split(' ')
+  (
+    'a an the in on at for to of and or with my me i am is are want looking need new this week someone who bengaluru bangalore india anyone people ' +
+    'what you your yours that this these those not but like just really very about from into out have has had would could should will can its it they them their ' +
+    'was were been being get got some any more most much also than then there here when where why how all one two probably actual actually thing things'
+  ).split(' ')
 );
 
 function tokens(text: string): string[] {
@@ -766,6 +858,17 @@ export const init = spacetimedb.init(ctx => {
     updatedAt: ctx.timestamp,
   });
 
+  // The publisher is the admin from the first second. Without this row anyone
+  // who called setLlmConfig first on a fresh database would own the house key.
+  ctx.db.llmConfig.insert({
+    id: LLM_CONFIG_ID,
+    owner: ctx.sender,
+    apiKey: '',
+    model: '',
+    endpoint: '',
+    updatedAt: ctx.timestamp,
+  });
+
   ctx.db.worldTickTimer.insert({
     scheduledId: 0n,
     scheduledAt: ScheduleAt.interval(TICK_MICROS),
@@ -801,14 +904,17 @@ export const join = spacetimedb.reducer(
 
     const existing = ctx.db.player.identity.find(ctx.sender);
     if (existing) {
-      ctx.db.player.identity.update({ ...existing, name: clean, online: true });
+      // Also backfills the avatar seed for players who joined before avatars
+      // were derived from the identity.
+      ctx.db.player.identity.update({ ...existing, name: clean, avatar: avatarSeed(ctx.sender), online: true });
       return;
     }
 
     ctx.db.player.insert({
       identity: ctx.sender,
       name: clean,
-      avatar: AVATARS[0],
+      // Seed for the client's deterministic avatar. Never chosen, never edited.
+      avatar: avatarSeed(ctx.sender),
       online: true,
       currentPlace: 0,
       openrouterLinked: false,
@@ -821,15 +927,12 @@ export const join = spacetimedb.reducer(
 );
 
 export const createEcho = spacetimedb.reducer(
-  { avatar: t.string(), persona: t.string(), intent: t.string() },
-  (ctx, { avatar, persona, intent: intentLine }) => {
-    const playerRow = requirePlayer(ctx);
-    if (!AVATARS.includes(avatar)) fail(`unknown_avatar:${avatar}`);
+  { persona: t.string(), intent: t.string() },
+  (ctx, { persona, intent: intentLine }) => {
+    requirePlayer(ctx);
     // Persona is optional flavour; the intent is the product.
     const cleanPersona = persona.trim().slice(0, MAX_PERSONA_LENGTH);
     const cleanIntent = trimmed(intentLine, MAX_INTENT_LENGTH, 'intent');
-
-    ctx.db.player.identity.update({ ...playerRow, avatar });
 
     const existing = ctx.db.echo.owner.find(ctx.sender);
     let echoId: bigint;
@@ -1060,17 +1163,20 @@ function requireAdmin(ctx: Ctx) {
 }
 
 export const setLlmConfig = spacetimedb.reducer(
-  { apiKey: t.string(), model: t.string() },
-  (ctx, { apiKey, model }) => {
+  { apiKey: t.string(), model: t.string(), endpoint: t.string() },
+  (ctx, { apiKey, model, endpoint }) => {
     requireAdmin(ctx);
     const key = trimmed(apiKey, 400, 'api_key');
     const cleanModel = trimmed(model, 120, 'model');
+    const cleanEndpoint = endpoint.trim().slice(0, 400);
+    if (cleanEndpoint && !cleanEndpoint.startsWith('https://')) fail('endpoint_not_https');
 
     const row = {
       id: LLM_CONFIG_ID,
       owner: ctx.sender,
       apiKey: key,
       model: cleanModel,
+      endpoint: cleanEndpoint,
       updatedAt: ctx.timestamp,
     };
     if (ctx.db.llmConfig.id.find(LLM_CONFIG_ID)) {
@@ -1109,6 +1215,57 @@ export const setSecret = spacetimedb.reducer(
     else ctx.db.secret.insert({ key: cleanKey, value: cleanValue });
   }
 );
+
+/** Admin only. Stores the Google OAuth client and refresh token for the house lane. */
+export const setGoogleAuth = spacetimedb.reducer(
+  { clientId: t.string(), clientSecret: t.string(), refreshToken: t.string() },
+  (ctx, { clientId, clientSecret, refreshToken }) => {
+    requireAdmin(ctx);
+    const row = {
+      id: GOOGLE_AUTH_ID,
+      clientId: trimmed(clientId, 200, 'client_id'),
+      clientSecret: trimmed(clientSecret, 200, 'client_secret'),
+      refreshToken: trimmed(refreshToken, 400, 'refresh_token'),
+      accessToken: '',
+      expiresAt: ctx.timestamp, // already stale: first use refreshes
+      updatedAt: ctx.timestamp,
+    };
+    if (ctx.db.googleAuth.id.find(GOOGLE_AUTH_ID)) ctx.db.googleAuth.id.update(row);
+    else ctx.db.googleAuth.insert(row);
+  }
+);
+
+/**
+ * Access token for a Google endpoint, or '' when none is configured or the
+ * refresh failed. Cached in google_auth; refreshed when within a minute of
+ * expiry, which costs one extra HTTPS call per hour, not per exchange.
+ */
+function googleBearer(ctx: { http: HttpLike; withTx: <T>(fn: (tx: any) => T) => T }): string {
+  const auth = ctx.withTx((tx: any) => {
+    const a = tx.db.googleAuth.id.find(GOOGLE_AUTH_ID);
+    if (!a) return null;
+    return { ...a, stale: micros(a.expiresAt) - 60_000_000n <= micros(tx.timestamp) };
+  });
+  if (!auth) return '';
+  if (!auth.stale) return auth.accessToken;
+  const tok = refreshGoogleToken(ctx.http, auth.clientId, auth.clientSecret, auth.refreshToken);
+  if (!tok.ok) {
+    console.warn(`google token refresh failed: ${tok.reason}`);
+    return '';
+  }
+  ctx.withTx((tx: any) => {
+    const a = tx.db.googleAuth.id.find(GOOGLE_AUTH_ID);
+    if (a) {
+      tx.db.googleAuth.id.update({
+        ...a,
+        accessToken: tok.accessToken,
+        expiresAt: plus(tx.timestamp, BigInt(tok.expiresInSec) * 1_000_000n),
+        updatedAt: tx.timestamp,
+      });
+    }
+  });
+  return tok.accessToken;
+}
 
 /**
  * Adjust limits: forget the player's own OpenRouter key. The key row is private
@@ -1172,7 +1329,8 @@ export const tick = spacetimedb.reducer(
   (ctx, { timer }) => {
     void timer;
     const now = micros(ctx.timestamp);
-    const hasKey = ctx.db.llmConfig.id.find(LLM_CONFIG_ID) !== null;
+    const cfg = ctx.db.llmConfig.id.find(LLM_CONFIG_ID);
+    const hasKey = !!cfg && cfg.apiKey.length > 0 && cfg.model.length > 0;
 
     // Intents expire. Deleting the row is the whole mechanism: a link to an
     // expired intent fails in startRun, and the map stops matching on it.
@@ -1223,7 +1381,9 @@ export const tick = spacetimedb.reducer(
           `Arrived at ${placeName(ctx, leg.toPlace)}`,
           0
         );
-        continue;
+        // Fall through: an Echoe may talk on the tick it arrives. Skipping this
+        // tick meant a chaser always reached a landmark one tick after its
+        // target had left it, so Echoes that started at different times never met.
       }
 
       // Standing at a landmark: socialise, or build, or leave. Before the first
@@ -1234,7 +1394,9 @@ export const tick = spacetimedb.reducer(
 
       const acted = tryConverse(ctx, runRow, here, hasKey);
 
-      if (now >= standingSince + DWELL_MICROS) depart(ctx, runRow, here);
+      // Stay put while a conversation is live; leave once the dwell has passed
+      // and there is nobody left to talk to here.
+      if (!acted && now >= standingSince + DWELL_MICROS) depart(ctx, runRow, here);
     }
   }
 );
@@ -1306,7 +1468,13 @@ function tryConverse(
     // Reuse a conversation only if it belongs to the current pair of runs. A
     // conversation older than either run is a memory of a previous night, and
     // continuing it would leave peopleMet at zero while a transcript grew.
-    let existing: { id: bigint; replies: number; fundingA: string; fundingB: string } | null = null;
+    let existing: {
+      id: bigint;
+      replies: number;
+      fundingA: string;
+      fundingB: string;
+      lastExchangeAt: Timestamp;
+    } | null = null;
     for (const c of ctx.db.conversation.echoA.filter(a)) {
       if (c.echoB !== b) continue;
       const started = micros(c.createdAt);
@@ -1316,6 +1484,16 @@ function tryConverse(
     }
     // Said enough to each other tonight. Move on to the next person.
     if (existing && existing.replies >= MAX_EXCHANGES) continue;
+
+    // One exchange per tick, and the sides take turns: A opens, B answers.
+    // Two jobs in one tick both read the same history and both write openers.
+    // Engaged but not my turn still counts as acting, so nobody walks off mid-chat.
+    if (existing) {
+      const myTurn = existing.replies % 2 === 0 ? runRow.echoId === a : runRow.echoId === b;
+      if (!myTurn || micros(existing.lastExchangeAt) === micros(ctx.timestamp)) return true;
+    } else if (runRow.echoId !== a) {
+      continue; // only the lower id opens, so a pair never opens twice in one tick
+    }
 
     // Who pays for my side. Settled the first time I speak in this conversation
     // and then fixed, so a free conversation stays free to its end.
@@ -1331,6 +1509,7 @@ function tryConverse(
       ctx.db.conversation.id.update({
         ...ctx.db.conversation.id.find(existing.id)!,
         replies: existing.replies + 1,
+        lastExchangeAt: ctx.timestamp,
         ...myFunding,
       });
     } else {
@@ -1346,6 +1525,7 @@ function tryConverse(
         fundingA: '',
         fundingB: '',
         ...myFunding,
+        lastExchangeAt: ctx.timestamp,
         createdAt: ctx.timestamp,
       });
       conversationId = created.id;
@@ -1479,6 +1659,20 @@ export const echoTalk = spacetimedb.procedure(
       const funding = echoA.owner.isEqual(job.payer) ? convo.fundingA : convo.fundingB;
       const own = funding === 'own' ? tx.db.playerKey.identity.find(job.payer) : undefined;
 
+      const nameA = tx.db.player.identity.find(echoA.owner)?.name ?? 'A';
+      const nameB = tx.db.player.identity.find(echoB.owner)?.name ?? 'B';
+      const memoryOf = (me: bigint, them: bigint): string => {
+        for (const m of tx.db.echoMemory.echoId.filter(me)) if (m.otherEchoId === them) return m.note;
+        return '';
+      };
+      // What their coding agent reported, newest first, capped so a long
+      // history cannot crowd out the persona.
+      const agentWorkOf = (me: bigint): string[] =>
+        [...tx.db.agentMemory.echoId.filter(me)]
+          .sort((x, y) => (x.id < y.id ? 1 : x.id > y.id ? -1 : 0))
+          .slice(0, AGENT_MEMORY_IN_PROMPT)
+          .map(m => m.note);
+
       const history = [...tx.db.transcriptLine.conversationId.filter(convo.id)]
         .sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
         .map(l => `${l.speakerEchoId === convo.echoA ? 'A' : 'B'}: ${l.text}`);
@@ -1487,8 +1681,11 @@ export const echoTalk = spacetimedb.procedure(
       const goalB = tx.db.run.echoId.filter(echoB.id);
 
       return {
-        apiKey: own?.apiKey ?? config?.apiKey ?? '',
+        // An exchange funded by the player's own key never falls back to the house key.
+        apiKey: funding === 'own' ? own?.apiKey ?? '' : config?.apiKey ?? '',
         model: own?.model || config?.model || '',
+        // A player's own key is always an OpenRouter key; the house picks its endpoint.
+        endpoint: own ? OPENROUTER_ENDPOINT : config?.endpoint || OPENROUTER_ENDPOINT,
         funding,
         echoAId: echoA.id,
         echoBId: echoB.id,
@@ -1499,6 +1696,16 @@ export const echoTalk = spacetimedb.procedure(
         goalA: firstGoal(goalA),
         intentA: tx.db.intent.owner.find(echoA.owner)?.text ?? '',
         intentB: tx.db.intent.owner.find(echoB.owner)?.text ?? '',
+        nameA,
+        nameB,
+        // The reducer counted this exchange before queuing the job, so replies is final.
+        closing: convo.replies >= MAX_EXCHANGES,
+        exchange: convo.replies,
+        why: convo.why,
+        memoryA: memoryOf(echoA.id, echoB.id),
+        memoryB: memoryOf(echoB.id, echoA.id),
+        agentWorkA: agentWorkOf(echoA.id),
+        agentWorkB: agentWorkOf(echoB.id),
         personaB: echoB.persona,
         notesB: echoB.behaviourNotes,
         goalB: firstGoal(goalB),
@@ -1512,22 +1719,40 @@ export const echoTalk = spacetimedb.procedure(
       {
         role: 'system',
         content: [
-          `Two people meet at ${setup.placeName} in Bengaluru, late at night.`,
+          `Two strangers meet at ${setup.placeName} in Bengaluru at night. Exchange ${setup.exchange} of ${MAX_EXCHANGES}.`,
           '',
           setup.personaA ? `A is: ${setup.personaA}` : '',
-          setup.intentA ? `A is here for: ${setup.intentA}` : '',
-          setup.goalA ? `A wants: ${setup.goalA}` : '',
-          setup.notesA ? `A has been corrected before:\n${setup.notesA}` : '',
+          setup.intentA ? `A wants: ${setup.intentA}` : '',
+          setup.notesA ? `A's corrections (obey these over everything):
+${setup.notesA}` : '',
+          setup.memoryA ? `A remembers B from a previous night: ${setup.memoryA}` : '',
+          setup.agentWorkA.length > 0
+            ? `What A has actually been working on lately (from their coding sessions, use naturally, do not recite):
+${setup.agentWorkA.map(n => `- ${n}`).join('\n')}`
+            : '',
           '',
           setup.personaB ? `B is: ${setup.personaB}` : '',
-          setup.intentB ? `B is here for: ${setup.intentB}` : '',
-          setup.goalB ? `B wants: ${setup.goalB}` : '',
-          setup.notesB ? `B has been corrected before:\n${setup.notesB}` : '',
+          setup.intentB ? `B wants: ${setup.intentB}` : '',
+          setup.notesB ? `B's corrections (obey these over everything):
+${setup.notesB}` : '',
+          setup.memoryB ? `B remembers A from a previous night: ${setup.memoryB}` : '',
+          setup.agentWorkB.length > 0
+            ? `What B has actually been working on lately (from their coding sessions, use naturally, do not recite):
+${setup.agentWorkB.map(n => `- ${n}`).join('\n')}`
+            : '',
           '',
-          'Each is trying to find out whether the other is worth meeting in person this week.',
-          'Write exactly two lines of dialogue, one from A then one from B.',
-          'Format each line as "A: ..." and "B: ...". No narration, under 25 words each.',
-          'Obey every correction listed above; those are the strongest instruction here.',
+          setup.why ? `They were matched because: ${setup.why}.` : '',
+          setup.memoryA || setup.memoryB
+            ? 'They have met before. Pick up where they left off; no introductions.'
+            : '',
+          'Both are deciding whether to meet in person this week. Every line should probe the',
+          "other's want, react to what was just said, or push toward the match. No small talk.",
+          `Mention ${setup.placeName} or something physical there at most once.`,
+          'One line each, A then B, under 25 words, no narration, no names, no letters as names.',
+          'Format exactly: "A: ..." on the first line, then "B: ..." on the second.',
+          setup.exchange >= MAX_EXCHANGES
+            ? 'This is the final exchange: B must land on one concrete next step, a day, a place, or how to reach them.'
+            : '',
         ]
           .filter(l => l.length > 0)
           .join('\n'),
@@ -1541,9 +1766,11 @@ export const echoTalk = spacetimedb.procedure(
       },
     ];
 
+    // Google endpoints authenticate with an OAuth token instead of the stored key.
+    const bearer = isGoogleEndpoint(setup.endpoint) ? googleBearer(ctx) : setup.apiKey;
     const result: ChatResult =
-      setup.apiKey && setup.model
-        ? chat(ctx.http, setup.apiKey, setup.model, messages)
+      bearer && setup.model
+        ? chat(ctx.http, bearer, setup.model, messages, setup.endpoint)
         : { ok: false, reason: 'no key available for this exchange' };
 
     ctx.withTx(tx => {
@@ -1560,18 +1787,62 @@ export const echoTalk = spacetimedb.procedure(
         });
       };
 
-      if (!result.ok) {
-        console.warn(`echoTalk falling back: ${result.reason}`);
-        const o = ctx.random.integerInRange(0, OPENERS.length - 1);
-        const r = ctx.random.integerInRange(0, REPLIES.length - 1);
-        write(setup.echoAId, `${OPENERS[o]} (${setup.placeName})`);
-        write(setup.echoBId, REPLIES[r]);
+      // On the closing exchange, each side keeps one line about the other, built
+      // from what was actually said. Next time these two meet it is in the prompt.
+      const remember = () => {
+        if (!setup.closing) return;
+        const said = [...tx.db.transcriptLine.conversationId.filter(job.conversationId)].sort((x, y) =>
+          x.id < y.id ? -1 : x.id > y.id ? 1 : 0
+        );
+        const lastOf = (speaker: bigint): string => {
+          let out = '';
+          for (const l of said) if (l.speakerEchoId === speaker) out = l.text;
+          return out;
+        };
+        const upsert = (me: bigint, them: bigint, note: string) => {
+          for (const m of tx.db.echoMemory.echoId.filter(me)) {
+            if (m.otherEchoId === them) {
+              tx.db.echoMemory.id.update({ ...m, note, updatedAt: now });
+              return;
+            }
+          }
+          tx.db.echoMemory.insert({ id: 0n, echoId: me, otherEchoId: them, note, updatedAt: now });
+        };
+        const about = (name: string, intent: string, last: string) =>
+          `Met ${name} at ${setup.placeName}. Here for: ${intent || 'they did not say'}. Last thing they said: "${last}"`;
+        upsert(setup.echoAId, setup.echoBId, about(setup.nameB, setup.intentB, lastOf(setup.echoBId)));
+        upsert(setup.echoBId, setup.echoAId, about(setup.nameA, setup.intentA, lastOf(setup.echoAId)));
+      };
+      if (setup.memoryA || setup.memoryB) console.log(`echoTalk: memory in prompt for conversation ${job.conversationId}`);
+
+      // Only a reply with both speakers ships. Anything else, including a
+      // one-line or preamble-laden answer, falls back rather than guessing.
+      const lines = result.ok ? splitLines(result.text, 2) : [];
+      if (!result.ok || lines.length < 2) {
+        console.warn(`echoTalk falling back: ${result.ok ? 'malformed reply' : result.reason}`);
+        const mine = setup.intentA || 'something I cannot name yet';
+        const theirs = setup.intentB || 'something they would not say';
+        const openers = [
+          `I am out tonight for one reason: ${mine}. What is yours?`,
+          `Most people here are just walking. I am here because I am ${mine}.`,
+          `Long shot, but I came to ${setup.placeName} for ${mine}.`,
+          `You look like you are here for a reason too. Mine is ${mine}.`,
+        ];
+        const replies = [
+          `Funny. I am ${theirs}. Maybe this was not a wasted walk.`,
+          `I am ${theirs}, actually. Tell me more before I decide.`,
+          `Same instinct, different reason. I am ${theirs} tonight.`,
+          `I am ${theirs}. Did not expect to say that to a stranger.`,
+        ];
+        write(setup.echoAId, openers[ctx.random.integerInRange(0, openers.length - 1)]);
+        write(setup.echoBId, replies[ctx.random.integerInRange(0, replies.length - 1)]);
+        remember();
         return;
       }
 
-      const lines = splitLines(result.text, 2);
       write(setup.echoAId, lines[0]);
-      if (lines[1]) write(setup.echoBId, lines[1]);
+      write(setup.echoBId, lines[1]);
+      remember();
 
       // Real money, straight from OpenRouter's usage.cost. Charged to the run
       // that queued the job; the receipt is what the Return screen totals.
@@ -1584,7 +1855,7 @@ export const echoTalk = spacetimedb.procedure(
         runOwner: job.payer,
         kind: 'llm',
         placeId: setup.placeId,
-        text: `OpenRouter, ${setup.funding === 'own' ? 'your key' : 'on us'}: ${lines.length} lines`,
+        text: `${isGoogleEndpoint(setup.endpoint) ? 'Gemini via Google Cloud' : 'OpenRouter'}, ${setup.funding === 'own' ? 'your key' : 'on us'}: ${lines.length} lines`,
         costUsd: result.costUsd,
         createdAt: now,
       });
@@ -1647,9 +1918,20 @@ export const suggestIntents = spacetimedb.procedure(
     const clean = persona.trim().slice(0, MAX_PERSONA_LENGTH);
     if (clean.length === 0) throw new SenderError('persona_required');
 
-    const config = ctx.withTx(tx => tx.db.llmConfig.id.find(LLM_CONFIG_ID));
-    if (config) {
-      const result = chat(ctx.http, config.apiKey, config.model, [
+    // Joined players only: this spends the house key on every tap.
+    const state = ctx.withTx(tx => ({
+      joined: tx.db.player.identity.find(tx.sender) !== undefined,
+      config: tx.db.llmConfig.id.find(LLM_CONFIG_ID),
+    }));
+    if (!state.joined) throw new SenderError('join_first');
+    const config = state.config;
+    // No heuristic stand-in: without a model there are no suggestions.
+    if (!config || !config.apiKey || !config.model) throw new SenderError('suggestions_unavailable');
+    {
+      const endpoint = config.endpoint || OPENROUTER_ENDPOINT;
+      const bearer = isGoogleEndpoint(endpoint) ? googleBearer(ctx) : config.apiKey;
+      if (!bearer) throw new SenderError('suggestions_unavailable');
+      const result = chat(ctx.http, bearer, config.model, [
         {
           role: 'system',
           content: [
@@ -1661,30 +1943,17 @@ export const suggestIntents = spacetimedb.procedure(
           ].join(' '),
         },
         { role: 'user', content: clean },
-      ]);
+      ], endpoint);
       if (result.ok) return splitLines(result.text, 3).join('\n');
-      console.warn(`suggestIntents falling back: ${result.reason}`);
+      console.warn(`suggestIntents failed: ${result.reason}`);
+      throw new SenderError('suggestions_failed');
     }
-    return fallbackIntents(clean).join('\n');
   }
 );
 
-/** No-network intents: the persona's strongest words dropped into a few frames. */
-function fallbackIntents(persona: string): string[] {
-  const counts = new Map<string, number>();
-  for (const w of tokens(persona)) counts.set(w, (counts.get(w) ?? 0) + 1);
-  const top = [...counts.entries()]
-    .sort((x, y) => y[1] - x[1] || y[0].length - x[0].length)
-    .slice(0, 3)
-    .map(e => e[0]);
-  const a = top[0] ?? 'people';
-  const b = top[1] ?? a;
-  const c = top[2] ?? b;
-  return [
-    `looking for people into ${a} in Bengaluru`,
-    `want to meet someone building with ${b}`,
-    `open to a coffee about ${c} this week`,
-  ];
+/** The client renders a deterministic face from this. Never chosen, never edited. */
+function avatarSeed(identity: { toHexString(): string }): string {
+  return identity.toHexString().slice(0, 16);
 }
 
 function firstGoal(rows: Iterable<{ goal: string }>): string {
@@ -1932,3 +2201,121 @@ export const unlinkGoogle = spacetimedb.reducer(ctx => {
     verifiedVia: '',
   });
 });
+
+// ─── Coding-agent memory ─────────────────────────────────────────────────────
+//
+// The loop: the player generates a token in the app, a nightly cron on their own
+// machine distils that day's Claude Code / Codex transcripts into a few lines
+// with their own local agent, and POSTs them here. The Echoe then carries those
+// lines into its next conversation. The persona is never rewritten; memory only
+// appends, and only the newest AGENT_MEMORY_KEEP lines survive.
+
+const AGENT_TOKEN_MIN = 16;
+const AGENT_TOKEN_MAX = 128;
+const AGENT_NOTE_MIN = 3;
+const AGENT_NOTE_MAX = 300;
+const AGENT_NOTES_PER_SYNC = 12;
+const AGENT_MEMORY_KEEP = 40;
+const AGENT_MEMORY_IN_PROMPT = 8;
+const AGENT_SOURCES = new Set(['claude-code', 'codex', 'mixed']);
+
+/** The link token as it may be stored: opaque, URL-safe, long enough to not be guessed. */
+function cleanAgentToken(raw: string): string {
+  const token = raw.trim();
+  if (token.length < AGENT_TOKEN_MIN || token.length > AGENT_TOKEN_MAX) fail('bad_token_length');
+  for (const ch of token) {
+    const ok =
+      (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') ||
+      ch === '_' || ch === '-';
+    if (!ok) fail('bad_token_charset');
+  }
+  return token;
+}
+
+/**
+ * Connect (or rotate) the caller's coding agent. The client generates the token
+ * — the module never does, because a reducer has no randomness a client can be
+ * told about ahead of the call. Rotating resets the sync counter; re-sending the
+ * same token is idempotent and keeps it.
+ */
+export const setAgentLink = spacetimedb.reducer(
+  { token: t.string() },
+  (ctx, { token }) => {
+    const echoRow = requireEcho(ctx);
+    const clean = cleanAgentToken(token);
+
+    const holder = ctx.db.agentLink.token.find(clean);
+    if (holder && !holder.owner.isEqual(ctx.sender)) fail('token_taken');
+
+    const existing = ctx.db.agentLink.owner.find(ctx.sender);
+    const rotating = !existing || existing.token !== clean;
+    const row = {
+      owner: ctx.sender,
+      echoId: echoRow.id,
+      token: clean,
+      connectedAt: rotating ? ctx.timestamp : existing.connectedAt,
+      lastSyncAt: rotating ? ctx.timestamp : existing.lastSyncAt,
+      syncs: rotating ? 0 : existing.syncs,
+    };
+    if (existing) ctx.db.agentLink.owner.update(row);
+    else ctx.db.agentLink.insert(row);
+  }
+);
+
+/**
+ * Called by the player's own machine over plain HTTP with a throwaway identity,
+ * so `ctx.sender` means nothing here: the token is the whole authentication.
+ * Lines already remembered are skipped, which makes a re-run of the same night
+ * a no-op rather than a duplicate.
+ */
+export const ingestAgentMemory = spacetimedb.reducer(
+  { token: t.string(), day: t.string(), source: t.string(), notes: t.string() },
+  (ctx, { token, day, source, notes }) => {
+    const link = ctx.db.agentLink.token.find(token.trim());
+    if (!link) fail('bad_token');
+
+    const cleanDay = trimmed(day, 10, 'day');
+    const cleanSource = source.trim().toLowerCase();
+    const src = AGENT_SOURCES.has(cleanSource) ? cleanSource : 'mixed';
+
+    // Everything this Echoe already remembers, folded once, so N incoming lines
+    // cost one pass rather than N. ponytail: linear scan; fine at 40 rows/echo.
+    const seen = new Set<string>();
+    for (const row of ctx.db.agentMemory.echoId.filter(link.echoId)) {
+      seen.add(row.note.toLowerCase());
+    }
+
+    let added = 0;
+    for (const raw of notes.split('\n')) {
+      if (added >= AGENT_NOTES_PER_SYNC) break;
+      let line = raw.trim();
+      if (line.startsWith('- ')) line = line.slice(2).trim();
+      if (line.length < AGENT_NOTE_MIN || line.length > AGENT_NOTE_MAX) continue;
+      const key = line.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      ctx.db.agentMemory.insert({
+        id: 0n,
+        echoId: link.echoId,
+        day: cleanDay,
+        source: src,
+        note: line,
+        createdAt: ctx.timestamp,
+      });
+      added += 1;
+    }
+
+    // Oldest first: `id` is autoInc, so ascending id is ascending age.
+    const mine = [...ctx.db.agentMemory.echoId.filter(link.echoId)]
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (let i = 0; i < mine.length - AGENT_MEMORY_KEEP; i += 1) {
+      ctx.db.agentMemory.id.delete(mine[i].id);
+    }
+
+    ctx.db.agentLink.owner.update({
+      ...link,
+      lastSyncAt: ctx.timestamp,
+      syncs: link.syncs + 1,
+    });
+  }
+);

@@ -20,5 +20,6 @@ export default __t.row({
   why: __t.string(),
   fundingA: __t.string().name("funding_a"),
   fundingB: __t.string().name("funding_b"),
+  lastExchangeAt: __t.timestamp().name("last_exchange_at"),
   createdAt: __t.timestamp().name("created_at"),
 });

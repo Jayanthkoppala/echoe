@@ -23,7 +23,7 @@ bindings. Private tables do not, and are excluded from codegen.
 
 | Table | Visibility | Purpose |
 | --- | --- | --- |
-| `player` | public | One row per human. `identity` is the primary key and always comes from `ctx.sender`, never from an argument. Holds name, avatar, online flag and `current_place`. There is no wallet: the only budget is OpenRouter spend. |
+| `player` | public | One row per human. `identity` is the primary key and always comes from `ctx.sender`, never from an argument. Holds name, avatar, online flag and `current_place`. `avatar` is not a choice: `join` sets it to the first 16 hex characters of the caller's identity, and the client renders a deterministic DiceBear face from that seed. There is no wallet: the only budget is OpenRouter spend. |
 | `echo` | public | The player's agent. `owner` is unique per identity. `persona` is authored on screen 2; `behaviour_notes` accumulates from corrections and is fed into every later prompt. |
 | `place` | public | The ten Bengaluru landmarks, seeded once in `init`. Read-only afterwards. Array index is the place id. |
 | `agent_travel` | public | One row per leg, written only at leg boundaries. A roaming Echoe costs two rows per landmark rather than a position update per frame; the client interpolates between `depart_ts` and `arrive_ts`. |
@@ -33,8 +33,10 @@ bindings. Private tables do not, and are excluded from codegen.
 | `transcript_line` | public | The lines themselves. `is_ai` is always true so the client can label every line. `feedback` is `none`, `like` or `not_me`. |
 | `correction` | public | One row per correction on screen 8. Keeps the original text alongside the replacement, so the record of what was actually said survives. |
 | `mission` | public | Single row, id 0. The shared "tonight's mission" line on screen 3. |
-| `llm_config` | **private** | Single row, id 0. Holds the OpenRouter key and model. No `public: true`, so it is invisible to every client and absent from codegen. The key goes in through a reducer argument and never comes back out. |
+| `llm_config` | **private** | Single row, id 0. Holds the house key, model and chat-completions endpoint (empty means OpenRouter; the demo uses Vertex AI's native generateContent route on the boss-media project, key as a query parameter, because Vertex's OpenAI-compatible route refuses API keys). No `public: true`, so it is invisible to every client and absent from codegen. The key goes in through a reducer argument and never comes back out. |
 | `player_key` | **private** | One row per player who signed in with OpenRouter. Written only by the `linkOpenRouter` procedure, read only by `echoTalk` for exchanges whose funding is `own`. The client sees just `player.openrouter_linked`. |
+| `echo_memory` | **private** | One line per (echo, other echo): what this Echoe remembers about that person, written by `echoTalk` when a conversation closes from the transcript itself, read into the prompt the next time the pair meets. The database is the memory; no external service. |
+| `google_auth` | **private** | Single row: Google OAuth client id, secret, refresh token and the cached access token with its expiry. Written by `setGoogleAuth`, refreshed by the procedures, never readable by clients. |
 | `world_tick` | **private** | Drives the `tick` reducer on a 5 second interval. |
 | `talk_job` | **private** | One-shot jobs carrying a conversation and its `payer` into the `echoTalk` procedure. Rows are deleted automatically once the procedure returns. |
 
@@ -64,7 +66,7 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | Reducer | Arguments | Preconditions, all enforced with `SenderError` |
 | --- | --- | --- |
 | `join` | `name` | Name is non-empty after trimming and at most 40 characters. Called again by an existing player, it renames and marks them online rather than failing. |
-| `createEcho` | `avatar`, `persona` | Caller has joined. Avatar is one of circle, square, triangle, diamond, hex. Persona is non-empty and at most 2000 characters. Called again, it replaces the persona and keeps the accumulated behaviour notes. |
+| `createEcho` | `persona`, `intent` | Caller has joined. Persona is non-empty and at most 2000 characters. No avatar argument: the face follows the identity seed written at join. Called again, it replaces the persona and keeps the accumulated behaviour notes. |
 | `travel` | `placeId` | Caller has joined and has an Echoe. The place exists. The player is not already there. Writes a leg and a receipt. |
 | `startRun` | `goal`, `hostShareId` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `hostShareId` is empty or names a live intent that is not the caller's own. No caps: the run is bounded by the clock and by OpenRouter credits. |
 | `pauseRun` | none | A run exists and is running. |
@@ -72,7 +74,8 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | `endRun` | none | A run exists and is not already ended. Writes a `run_end` receipt. |
 | `rateLine` | `lineId`, `soundsLikeMe` | Caller has an Echoe. The line exists and was spoken by the caller's own Echoe. Sets feedback to `like` or `not_me`. |
 | `correct` | `lineId`, `shouldHaveSaid`, `behaviourChange` | Caller has an Echoe. The line exists and is the caller's own. Both texts non-empty, at most 500 characters. Appends a correction row, appends a note to `behaviour_notes`, and marks the line `not_me`. Touches no receipt. |
-| `setLlmConfig` | `apiKey`, `model` | Both non-empty. Writes the single private config row. |
+| `setGoogleAuth` | `clientId`, `clientSecret`, `refreshToken` | Admin only. Google OAuth for the house lane, from `gcloud auth application-default login`; Vertex AI refuses API keys, so the procedures trade the refresh token for a cached one-hour access token. |
+| `setLlmConfig` | `apiKey`, `model`, `endpoint` | Key and model non-empty; endpoint empty or `https://`. First caller becomes admin. Writes the single private config row. |
 | `unlinkOpenRouter` | none | Caller has joined. Deletes the caller's private `player_key` row and clears `player.openrouter_linked`. |
 | `setMission` | `text` | Non-empty, at most 200 characters. |
 | `tick` | scheduled | Not callable by clients. See below. |
@@ -226,7 +229,7 @@ fresh identity on every call and cannot hold state across two of them.
 
 ```
 $ spacetime call --no-config -s local3001 echo join '"Jay"'
-$ spacetime call --no-config -s local3001 echo create_echo '"circle"' '"Blunt Bengaluru builder..."'
+$ spacetime call --no-config -s local3001 echo create_echo '"Blunt Bengaluru builder..."' '"looking for two people to build with"'
 $ spacetime call --no-config -s local3001 echo start_run '"Find someone who changed their mind"' '3' '2' '6' '"travel,talk,build,find"'
 
 $ spacetime sql --no-config -s local3001 echo "SELECT name, avatar, current_place, credits FROM player"
@@ -324,7 +327,7 @@ $ spacetime logs --no-config -s local3001 echo -n 10
 Configured with a deliberately invalid key so the fallback is exercised:
 
 ```
-$ spacetime call --no-config -s local3001 echo set_llm_config '"sk-or-v1-INVALID..."' '"google/gemini-2.0-flash-001"'
+$ spacetime call --no-config -s local3001 echo set_llm_config '"<key>"' '"google/gemini-2.5-flash-lite"' '"https://aiplatform.googleapis.com/v1/projects/<project>/locations/global/publishers/google/models"'
 
 $ spacetime logs --no-config -s local3001 echo -n 15
 2026-09-05T10:50:50Z WARN: echo_talk: echoTalk falling back: http 401: {"error":{"message":"User not found.","code":401}}

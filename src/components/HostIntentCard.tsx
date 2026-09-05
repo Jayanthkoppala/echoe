@@ -1,5 +1,5 @@
 import { VerifiedBadge } from './VerifiedBadge';
-import { AVATAR_COLOUR, AVATAR_GLYPH } from '../state/copy';
+import { avatarUri } from '../state/copy';
 import type { HostCard } from '../state/types';
 
 /** The card a stranger sees when they open someone's /i/<shareId> link. */
@@ -7,12 +7,8 @@ export function HostIntentCard({ host }: { host: HostCard }) {
   return (
     <div className="host-card glass">
       <div className="host-top">
-        <span
-          className="host-avatar"
-          style={{ background: AVATAR_COLOUR[host.avatar] ?? '#f4b857' }}
-          aria-hidden="true"
-        >
-          {AVATAR_GLYPH[host.avatar] ?? '●'}
+        <span className="host-avatar" aria-hidden="true">
+          <img src={avatarUri(host.avatar)} alt="" />
         </span>
         <div>
           <small>You were invited by</small>

@@ -11,7 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  avatar: __t.string(),
   persona: __t.string(),
   intent: __t.string(),
 };
