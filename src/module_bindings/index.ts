@@ -48,6 +48,7 @@ import StartRunReducer from "./start_run_reducer";
 import TravelReducer from "./travel_reducer";
 
 // Import all procedure arg schemas
+import * as SuggestIntentsProcedure from "./suggest_intents_procedure";
 
 // Import all table schema definitions
 import AgentTravelRow from "./agent_travel_table";
@@ -247,6 +248,7 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("suggest_intents", SuggestIntentsProcedure.params, SuggestIntentsProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

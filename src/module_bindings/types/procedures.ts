@@ -6,5 +6,8 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as SuggestIntentsProcedure from "../suggest_intents_procedure";
 
+export type SuggestIntentsArgs = __Infer<typeof SuggestIntentsProcedure.params>;
+export type SuggestIntentsResult = __Infer<typeof SuggestIntentsProcedure.returnType>;
 

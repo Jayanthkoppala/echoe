@@ -388,7 +388,7 @@ function spendCredits(
 }
 
 const STOPWORDS = new Set(
-  'a an the in on at for to of and or with my me i am is are want looking need new this week someone who'.split(' ')
+  'a an the in on at for to of and or with my me i am is are want looking need new this week someone who bengaluru bangalore india anyone people'.split(' ')
 );
 
 function tokens(text: string): string[] {
@@ -458,9 +458,10 @@ function matchPair(
   me: ReturnType<typeof requirePlayer>['identity'],
   them: ReturnType<typeof requirePlayer>['identity']
 ): { score: number; why: string } {
-  const mine = matchIntents(intentOf(ctx, me), profileOf(ctx, them));
-  const theirs = matchIntents(intentOf(ctx, them), profileOf(ctx, me));
-  return mine.score >= theirs.score ? mine : theirs;
+  // Persona-driven: who I am and what I want, against who they are and what
+  // they want. Whole profiles on both sides, so a rich persona is what makes
+  // two Echoes find each other.
+  return matchIntents(profileOf(ctx, me), profileOf(ctx, them));
 }
 
 function requireRun(ctx: Ctx) {
@@ -1306,6 +1307,61 @@ export const echoTalk = spacetimedb.procedure(
     return {};
   }
 );
+
+// ─── Intent suggestions from a persona (client-callable) ─────────────────────
+
+/**
+ * Turns a persona into two or three one-line intents the player can tap. Uses
+ * the LLM when a key is configured; otherwise builds lines from the persona's
+ * own keywords so the button always returns something. Returns one line per
+ * row of text, newline separated.
+ */
+export const suggestIntents = spacetimedb.procedure(
+  { persona: t.string() },
+  t.string(),
+  (ctx, { persona }) => {
+    const clean = persona.trim().slice(0, MAX_PERSONA_LENGTH);
+    if (clean.length === 0) throw new SenderError('persona_required');
+
+    const config = ctx.withTx(tx => tx.db.llmConfig.id.find(LLM_CONFIG_ID));
+    if (config) {
+      const result = chat(ctx.http, config.apiKey, config.model, [
+        {
+          role: 'system',
+          content: [
+            'You write one-line intents for a city networking app in Bengaluru.',
+            'Given a persona, write exactly three intents, one per line, each under 12 words,',
+            'each starting with a verb or a role, concrete enough that a stranger could act on it.',
+            'Examples: "hiring a Rust dev in Bengaluru", "raising pre-seed for a fintech",',
+            '"looking for a design cofounder", "want a gym partner in Indiranagar". No numbering.',
+          ].join(' '),
+        },
+        { role: 'user', content: clean },
+      ]);
+      if (result.ok) return splitLines(result.text, 3).join('\n');
+      console.warn(`suggestIntents falling back: ${result.reason}`);
+    }
+    return fallbackIntents(clean).join('\n');
+  }
+);
+
+/** No-network intents: the persona's strongest words dropped into a few frames. */
+function fallbackIntents(persona: string): string[] {
+  const counts = new Map<string, number>();
+  for (const w of tokens(persona)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  const top = [...counts.entries()]
+    .sort((x, y) => y[1] - x[1] || y[0].length - x[0].length)
+    .slice(0, 3)
+    .map(e => e[0]);
+  const a = top[0] ?? 'people';
+  const b = top[1] ?? a;
+  const c = top[2] ?? b;
+  return [
+    `looking for people into ${a} in Bengaluru`,
+    `want to meet someone building with ${b}`,
+    `open to a coffee about ${c} this week`,
+  ];
+}
 
 function firstGoal(rows: Iterable<{ goal: string }>): string {
   for (const r of rows) return r.goal;
