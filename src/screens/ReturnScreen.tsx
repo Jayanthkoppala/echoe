@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { ShareCard } from '../components/ShareCard';
 import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
-import { VerifySheet } from '../components/VerifySheet';
 import { TopBar } from '../components/TopBar';
 import { AVATAR_COLOUR, AVATAR_GLYPH, RECEIPT_ICON, usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
@@ -37,7 +35,6 @@ export function ReturnScreen({
   onReview,
 }: ReturnScreenProps) {
   const mounted = useMounted();
-  const [verifying, setVerifying] = useState(false);
 
   return (
     <div className="screen">
@@ -134,8 +131,8 @@ export function ReturnScreen({
 
         {/* Decision 5: the link comes back here, where a thin list gets fixed. */}
         {badge ? null : (
-          <button className="verify-btn" onClick={() => setVerifying(true)}>
-            Verify my company
+          <button className="soon-btn" type="button" disabled aria-disabled="true">
+            Verify company <i>coming soon</i>
           </button>
         )}
 
@@ -159,7 +156,6 @@ export function ReturnScreen({
             </div>
           ))}
         </div>
-        {verifying ? <VerifySheet badge={badge} onClose={() => setVerifying(false)} /> : null}
       </div>
       <div className="footer">
         <button className="primary" onClick={() => go('world')}>
