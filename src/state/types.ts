@@ -1,6 +1,5 @@
-// Plain TypeScript mirrors of what the SpacetimeDB module will expose.
-// Nothing here imports module_bindings yet, so the UI compiles before the
-// server schema is generated. Swap these for the generated row types later.
+// View types the screens render. Rows from module_bindings are mapped into
+// these in src/state/select.ts, so no screen touches a generated row.
 
 export type ScreenName =
   | 'join'
@@ -13,15 +12,15 @@ export type ScreenName =
   | 'correct'
   | 'done';
 
-export type ActionKind = 'Travel' | 'Find' | 'Talk' | 'Dance' | 'Build' | 'Bluff';
+export type ActionKind = 'travel' | 'find' | 'talk' | 'dance' | 'build' | 'bluff';
 
-export type RunStatus = 'idle' | 'running' | 'paused' | 'done';
+export type RunStatus = 'running' | 'paused' | 'ended';
 
 export interface Player {
-  intent?: string;
   name: string;
   avatar: string;
   credits: number;
+  /** Landmark id, for example 'cubbon-park'. */
   currentPlace: string;
 }
 
@@ -35,14 +34,18 @@ export interface Run {
   placesVisited: number;
   peopleMet: number;
   built: number;
+  creditsSpent: number;
+  hostMet: boolean;
+  hasHost: boolean;
 }
 
 export interface Receipt {
-  kind: ActionKind;
+  id: string;
+  kind: string;
   text: string;
   creditCost: number;
   placeName: string;
-  at: string;
+  at: number;
 }
 
 export interface TranscriptLine {
@@ -50,19 +53,30 @@ export interface TranscriptLine {
   speaker: string;
   text: string;
   isAi: boolean;
-  feedback: 'none' | 'sounds-like-me' | 'not-me';
+  /** Server feedback string: 'none', 'like' or 'not_me'. */
+  feedback: string;
+  mine: boolean;
 }
 
-export interface Place {
-  id: string;
+/** The host's intent card shown to anyone opening a /i/<shareId> link. */
+export interface HostCard {
   name: string;
-  icon: string;
-  color: string;
-  x: number;
-  y: number;
+  avatar: string;
+  intent: string;
+  expiresInDays: number;
 }
 
-/** The subset of a Run the player chooses on the limits screen. */
+/** One ranked "who to meet and why" row on the return screen. */
+export interface Match {
+  conversationId: string;
+  name: string;
+  avatar: string;
+  score: number;
+  why: string;
+  placeName: string;
+  isHost: boolean;
+}
+
 export interface RunLimits {
   goal: string;
   maxPeople: number;
@@ -71,10 +85,7 @@ export interface RunLimits {
   allowedActions: string[];
 }
 
-/**
- * Every screen receives this object. Each member is the wiring point for one
- * SpacetimeDB reducer call. App.tsx currently fulfils them with local state.
- */
+/** Each member is one reducer call. App.tsx binds them to module_bindings. */
 export interface Actions {
   onJoin(name: string): void;
   onCreateEcho(avatar: string, persona: string, intent: string): void;
@@ -82,8 +93,9 @@ export interface Actions {
   onAct(kind: ActionKind): void;
   onStartRun(limits: RunLimits): void;
   onPause(): void;
-  onRateLine(id: string, soundsLikeMe: boolean): void;
-  onCorrect(id: string, shouldHaveSaid: string): void;
+  onEndRun(): void;
+  onRateLine(lineId: string, soundsLikeMe: boolean): void;
+  onCorrect(lineId: string, shouldHaveSaid: string, behaviourChange: string): void;
 }
 
 export interface ScreenProps {

@@ -1,49 +1,53 @@
-import { useState } from 'react';
-import { MapPins } from '../components/MapPins';
 import { MapSlot } from '../components/MapSlot';
+import { ShareCard } from '../components/ShareCard';
 import { Toast } from '../components/Toast';
-import { ACTIONS, MISSION, placeById } from '../state/mock';
+import type { AgentSpec } from '../map/BengaluruMap';
+import { landmarkById } from '../data/landmarks';
+import { ACTIONS } from '../state/copy';
 import type { ActionKind, Player, ScreenProps } from '../state/types';
 
 interface WorldScreenProps extends ScreenProps {
-  player: Player;
+  player?: Player;
+  agents: AgentSpec[];
+  intent: string;
+  shareId: string;
+  mission: string;
+  placeCount: number;
   toast: string | null;
 }
 
-/**
- * Live play. The map fills the screen and everything else floats on top, so
- * there is no page scroll at any viewport height.
- */
-export function WorldScreen({ actions, go, player, toast }: WorldScreenProps) {
-  const [used, setUsed] = useState<ActionKind[]>([]);
-
-  const act = (kind: ActionKind) => {
-    setUsed(current => (current.includes(kind) ? current : [...current, kind]));
-    actions.onAct(kind);
-  };
+/** Live play. The map fills the screen, everything else floats over it. */
+export function WorldScreen({
+  actions,
+  go,
+  player,
+  agents,
+  intent,
+  shareId,
+  mission,
+  placeCount,
+  toast,
+}: WorldScreenProps) {
+  const credits = player?.credits ?? 0;
+  const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
 
   return (
     <div className="screen screen--map">
       <div className="world-wrap">
-        <MapSlot />
-        <MapPins activePlaceId={player.currentPlace} onPick={actions.onTravel} />
+        <MapSlot
+          agents={agents}
+          activePlaceId={player?.currentPlace}
+          onPlaceTap={actions.onTravel}
+        />
 
         <header className="topbar topbar--map">
           <div className="brand">
             <span className="brand-mark">E</span> Bengaluru · Live
           </div>
-          <button className="icon-btn" aria-label="Open profile">
-            ☺
-          </button>
+          <span className="timer tabular">{placeCount} places</span>
         </header>
 
-        <div className="map-hud">
-          <div>
-            <small>Tonight's mission</small>
-            <strong>{MISSION}</strong>
-          </div>
-          <div className="timer">23:48</div>
-        </div>
+        <ShareCard intent={intent} shareId={shareId} mission={mission} />
 
         <Toast message={toast} />
 
@@ -52,28 +56,28 @@ export function WorldScreen({ actions, go, player, toast }: WorldScreenProps) {
             <div className="sheet-head">
               <div>
                 <small>You are at</small>
-                <h3 className="location-name">{placeById(player.currentPlace).name}</h3>
+                <h3 className="location-name">{placeName}</h3>
               </div>
-              <span className="credit-pill">{player.credits} AI credits</span>
+              <span className="credit-pill">{credits} AI credits</span>
             </div>
             <div className="actions">
               {ACTIONS.map(action => (
                 <button
                   key={action.kind}
-                  className={used.includes(action.kind) ? 'action used' : 'action'}
-                  onClick={() => act(action.kind)}
-                  disabled={action.cost > player.credits}
+                  className="action"
+                  onClick={() => actions.onAct(action.kind as ActionKind)}
+                  disabled={action.cost > credits}
                 >
                   <span className="glyph" aria-hidden="true">
                     {action.icon}
                   </span>
-                  {action.kind}
+                  {action.label}
                   <span className="cost">{action.cost} cr</span>
                 </button>
               ))}
             </div>
             <button className="handoff-btn" onClick={() => go('limits')}>
-              Let my Echo continue for 24 hours →
+              Let my Echo keep going without me →
             </button>
           </div>
         </div>

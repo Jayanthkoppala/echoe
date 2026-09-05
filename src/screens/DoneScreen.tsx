@@ -4,20 +4,20 @@ import type { ScreenProps } from '../state/types';
 const LOOP = [
   'Join and play live',
   'Set limits and hand over control',
-  'Echo acts while you are away',
+  'Echoe acts while you are away',
   'Return, inspect and correct',
 ];
 
 export function DoneScreen({ go }: ScreenProps) {
   return (
     <div className="screen">
-      <TopBar title="Echo" step="Loop complete" showMark />
+      <TopBar title="Echoe" step="Loop complete" showMark />
       <div className="content">
         <div className="complete-mark" aria-hidden="true">
           ✓
         </div>
         <div className="eyebrow">Ready for another day</div>
-        <h1>Your Echo changed because you returned.</h1>
+        <h1>Your Echoe changed because you returned.</h1>
         <p className="lede">
           The world persisted, every action left a receipt, and one correction improved the
           next run.

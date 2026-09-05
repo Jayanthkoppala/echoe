@@ -1,43 +1,145 @@
 import { useState } from 'react';
 import { TopBar } from '../components/TopBar';
-import type { Run, ScreenProps } from '../state/types';
+import { ALLOWED_ACTION_OPTIONS, DEFAULT_ALLOWED } from '../state/copy';
+import type { ScreenProps } from '../state/types';
 
-export function LimitsScreen({ actions, go, run }: ScreenProps & { run: Run }) {
-  const DEFAULT_GOAL = 'People who ship side projects on weekends';
+const PEOPLE_CHOICES = [1, 3, 5];
+const REPLY_CHOICES = [1, 2, 3];
 
-const [goal, setGoal] = useState('');
+export function LimitsScreen({ actions, go, hostName }: ScreenProps & { hostName?: string }) {
+  const [goal, setGoal] = useState(hostName ? `Meet ${hostName}` : '');
+  const [maxPeople, setMaxPeople] = useState(3);
+  const [repliesPerPerson, setRepliesPerPerson] = useState(2);
+  const [creditCap, setCreditCap] = useState(8);
+  const [allowed, setAllowed] = useState<string[]>(DEFAULT_ALLOWED);
 
-  const start = (event: React.FormEvent) => {
-    event.preventDefault();
-    actions.onStartRun({
-      goal: goal.trim() || DEFAULT_GOAL,
-      maxPeople: run.maxPeople,
-      repliesPerPerson: run.repliesPerPerson,
-      creditCap: run.creditCap,
-      allowedActions: run.allowedActions,
-    });
-  };
+  const toggle = (id: string) =>
+    setAllowed(current =>
+      current.includes(id) ? current.filter(item => item !== id) : [...current, id],
+    );
 
   return (
-    <form className="screen" onSubmit={start}>
-      <TopBar title="Echo run" step="04 / 08" onBack={() => go('world')} />
-      <div className="content content--fit">
-        <h2>Who do you want to connect with?</h2>
+    <div className="screen">
+      <TopBar title="Echo limits" step="04 / 08" onBack={() => go('world')} />
+      <div className="content">
+        <div className="eyebrow">You stay in control</div>
+        <h2>What can it do without you?</h2>
+        <p className="lede">
+          The Echo wakes only for a meaningful action, so a long run is not a long AI bill.
+        </p>
+
+        <label className="label" htmlFor="goal">
+          Goal for this run
+        </label>
         <input
           className="input"
-          id="runGoal"
+          id="goal"
           value={goal}
           onChange={event => setGoal(event.target.value)}
-          placeholder={DEFAULT_GOAL}
-          autoFocus
+          placeholder="Find one person worth a coffee"
           maxLength={120}
         />
+
+        <div className="setting">
+          <div className="setting-head">
+            <strong>People it may meet</strong>
+            <span>{maxPeople} max</span>
+          </div>
+          <div className="choice-row">
+            {PEOPLE_CHOICES.map(value => (
+              <button
+                key={value}
+                className={value === maxPeople ? 'choice selected' : 'choice'}
+                onClick={() => setMaxPeople(value)}
+                aria-pressed={value === maxPeople}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="setting">
+          <div className="setting-head">
+            <strong>Replies per person</strong>
+            <span>
+              {repliesPerPerson} {repliesPerPerson === 1 ? 'reply' : 'replies'}
+            </span>
+          </div>
+          <div className="choice-row">
+            {REPLY_CHOICES.map(value => (
+              <button
+                key={value}
+                className={value === repliesPerPerson ? 'choice selected' : 'choice'}
+                onClick={() => setRepliesPerPerson(value)}
+                aria-pressed={value === repliesPerPerson}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="setting">
+          <div className="setting-head">
+            <strong>Hard AI spend limit</strong>
+            <span>{creditCap} credits</span>
+          </div>
+          <input
+            className="range"
+            type="range"
+            min={1}
+            max={8}
+            value={creditCap}
+            onChange={event => setCreditCap(Number(event.target.value))}
+            aria-label="AI credit budget"
+          />
+        </div>
+
+        <div className="setting">
+          <div className="setting-head">
+            <strong>Allowed actions</strong>
+            <span>{allowed.length} enabled</span>
+          </div>
+          <div className="toggle-grid">
+            {ALLOWED_ACTION_OPTIONS.map(option => (
+              <button
+                key={option.id}
+                className={allowed.includes(option.id) ? 'toggle-action on' : 'toggle-action'}
+                onClick={() => toggle(option.id)}
+                aria-pressed={allowed.includes(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="cost-note">
+          <span aria-hidden="true">✦</span>
+          <span>
+            Travelling, finding and building cost no AI credits. Only talking and bluffing
+            spend them.
+          </span>
+        </div>
       </div>
       <div className="footer">
-        <button className="primary" type="submit">
-          Start the 24-hour Echo run <span aria-hidden="true">→</span>
+        <button
+          className="primary"
+          disabled={!goal.trim() || allowed.length === 0}
+          onClick={() =>
+            actions.onStartRun({
+              goal: goal.trim(),
+              maxPeople,
+              repliesPerPerson,
+              creditCap,
+              allowedActions: allowed,
+            })
+          }
+        >
+          {hostName ? `Go and meet ${hostName}` : 'Start the run'} <span aria-hidden="true">→</span>
         </button>
       </div>
-    </form>
+    </div>
   );
 }

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
+import { reducers, tables } from './module_bindings';
 import './styles.css';
 
 import { CorrectScreen } from './screens/CorrectScreen';
@@ -11,115 +13,252 @@ import { ReviewScreen } from './screens/ReviewScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
 
+import { behaviourFrom } from './state/copy';
 import {
-  ACTIONS,
-  mockPlayer,
-  mockReceipts,
-  mockRun,
-  mockTranscript,
-  placeById,
-} from './state/mock';
+  agentsFrom,
+  hostCardFrom,
+  placeIndexOf,
+  rankedMatches,
+  toPlayer,
+  toReceipt,
+  toRun,
+  toTranscript,
+} from './state/select';
 import type { Actions, ScreenName } from './state/types';
 
-/**
- * Single-file state router. Every callback below is a wiring point: swap the
- * local setState for the matching SpacetimeDB reducer once the bindings land.
- */
+/** Reads the share id out of /i/<shareId>. Empty when entered directly. */
+const hostShareIdFromUrl = (): string =>
+  window.location.pathname.match(/^\/i\/([a-z0-9]+)/i)?.[1] ?? '';
+
 function App() {
+  const { identity, isActive } = useSpacetimeDB();
   const [screen, setScreen] = useState<ScreenName>('join');
-  const [player, setPlayer] = useState(mockPlayer);
-  const [run, setRun] = useState(mockRun);
-  const [transcript, setTranscript] = useState(mockTranscript);
-  const [focusedId, setFocusedId] = useState('l4');
   const [toast, setToast] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [lineId, setLineId] = useState<string | null>(null);
+  const [hostShareId] = useState(hostShareIdFromUrl);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 1900);
-    return () => clearTimeout(timer);
-  }, [toast]);
+  const [players, playersReady] = useTable(tables.player);
+  const [echoes] = useTable(tables.echo);
+  const [intents, intentsReady] = useTable(tables.intent);
+  const [runs] = useTable(tables.run);
+  const [receiptRows] = useTable(tables.receipt);
+  const [conversations] = useTable(tables.conversation);
+  const [lines] = useTable(tables.transcriptLine);
+  const [travels] = useTable(tables.agentTravel);
+  const [places] = useTable(tables.place);
+  const [missions] = useTable(tables.mission);
 
-  const actions: Actions = useMemo(
-    () => ({
-      // reducer: join_world(name)
-      onJoin(name) {
-        setPlayer(current => ({ ...current, name }));
-        setScreen('create');
-      },
-      // reducer: create_echo(avatar, persona, intent)
-      onCreateEcho(avatar, _persona, intent) {
-        setPlayer(current => ({ ...current, avatar, intent }));
-        setScreen('world');
-      },
-      // reducer: travel(place_id)
-      onTravel(placeId) {
-        setPlayer(current => ({ ...current, currentPlace: placeId }));
-        setToast(`Travelling to ${placeById(placeId).name} · 0 AI credits`);
-      },
-      // reducer: act(kind)
-      onAct(kind) {
-        const action = ACTIONS.find(item => item.kind === kind);
-        if (!action) return;
-        if (action.cost > 0) {
-          setPlayer(current => ({ ...current, credits: Math.max(0, current.credits - action.cost) }));
-        }
-        setToast(action.toast);
-      },
-      // reducer: start_run(limits)
-      onStartRun(limits) {
-        setRun(current => ({ ...current, ...limits, status: 'running' }));
-        setScreen('roaming');
-      },
-      // reducer: set_run_status(paused | running)
-      onPause() {
-        setRun(current => ({
-          ...current,
-          status: current.status === 'running' ? 'paused' : 'running',
-        }));
-      },
-      // reducer: rate_line(line_id, sounds_like_me)
-      onRateLine(id, soundsLikeMe) {
-        setFocusedId(id);
-        setTranscript(current =>
-          current.map(line =>
-            line.id === id
-              ? { ...line, feedback: soundsLikeMe ? 'sounds-like-me' : 'not-me' }
-              : line,
-          ),
-        );
-      },
-      // reducer: correct_line(line_id, should_have_said)
-      onCorrect() {
-        setRun(current => ({ ...current, status: 'done' }));
-        setScreen('done');
-      },
-    }),
+  const join = useReducer(reducers.join);
+  const createEcho = useReducer(reducers.createEcho);
+  const travel = useReducer(reducers.travel);
+  const act = useReducer(reducers.act);
+  const startRun = useReducer(reducers.startRun);
+  const pauseRun = useReducer(reducers.pauseRun);
+  const resumeRun = useReducer(reducers.resumeRun);
+  const endRun = useReducer(reducers.endRun);
+  const rateLine = useReducer(reducers.rateLine);
+  const correct = useReducer(reducers.correct);
+
+  const hex = identity?.toHexString();
+  const myPlayerRow = players.find(row => row.identity.toHexString() === hex);
+  const myEchoRow = echoes.find(row => row.owner.toHexString() === hex);
+  const myIntentRow = intents.find(row => row.owner.toHexString() === hex);
+  const myRunRow = runs.find(row => row.owner.toHexString() === hex);
+
+  const hostIntentRow = hostShareId
+    ? intents.find(row => row.shareId === hostShareId)
+    : undefined;
+  const hostPlayerRow = hostIntentRow
+    ? players.find(row => row.identity.toHexString() === hostIntentRow.owner.toHexString())
+    : undefined;
+
+  /** Reducer errors are the only failure a player can act on, so surface them. */
+  const run = useCallback(
+    (label: string, promise: Promise<unknown>, onDone?: () => void) => {
+      promise
+        .then(() => onDone?.())
+        .catch((error: unknown) => {
+          setToast(`${label} failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
+    },
     [],
   );
 
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // A returning player already has an Echoe, so do not make them introduce
+  // themselves twice.
+  useEffect(() => {
+    if (screen === 'join' && myEchoRow) setScreen('world');
+  }, [screen, myEchoRow]);
+
+  // The module ends a run on its own when the budget or the goal runs out.
+  useEffect(() => {
+    if (screen === 'roaming' && myRunRow?.status === 'ended') setScreen('return');
+  }, [screen, myRunRow?.status]);
+
+  const actions: Actions = useMemo(
+    () => ({
+      onJoin(name) {
+        run('Join', join({ name }), () => setScreen('create'));
+      },
+      onCreateEcho(avatar, persona, intent) {
+        run('Create Echoe', createEcho({ avatar, persona, intent }), () => setScreen('world'));
+      },
+      onTravel(placeId) {
+        run('Travel', travel({ placeId: placeIndexOf(placeId) }));
+      },
+      onAct(kind) {
+        run('Action', act({ kind }));
+      },
+      onStartRun(limits) {
+        run(
+          'Start run',
+          startRun({
+            goal: limits.goal,
+            maxPeople: limits.maxPeople,
+            repliesPerPerson: limits.repliesPerPerson,
+            creditCap: limits.creditCap,
+            allowedActions: limits.allowedActions.join(','),
+            hostShareId,
+          }),
+          () => setScreen('roaming'),
+        );
+      },
+      onPause() {
+        const paused = myRunRow?.status === 'paused';
+        run(paused ? 'Resume' : 'Pause', paused ? resumeRun() : pauseRun());
+      },
+      onEndRun() {
+        run('End run', endRun(), () => setScreen('return'));
+      },
+      onRateLine(id, soundsLikeMe) {
+        setLineId(id);
+        run('Rating', rateLine({ lineId: BigInt(id), soundsLikeMe }));
+      },
+      onCorrect(id, shouldHaveSaid, behaviourChange) {
+        const change = behaviourChange.trim() || behaviourFrom(shouldHaveSaid);
+        run(
+          'Correction',
+          correct({ lineId: BigInt(id), shouldHaveSaid, behaviourChange: change }),
+          () => setScreen('done'),
+        );
+      },
+    }),
+    // The reducer handles are stable; myRunRow.status decides pause versus resume.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [run, hostShareId, myRunRow?.status],
+  );
+
   const go = setScreen;
-  const focusedLine = transcript.find(line => line.id === focusedId) ?? transcript[transcript.length - 1];
+  const player = myPlayerRow ? toPlayer(myPlayerRow) : undefined;
+  const runView = myRunRow ? toRun(myRunRow) : undefined;
+  const myEchoId = myEchoRow?.id;
+  const hostEchoId = hostIntentRow?.echoId;
+
+  const agents = useMemo(
+    () => agentsFrom(travels, echoes, players, myEchoId, hostEchoId),
+    [travels, echoes, players, myEchoId, hostEchoId],
+  );
+
+  const matches = useMemo(
+    () => rankedMatches(conversations, myEchoId, hostEchoId, echoes, players),
+    [conversations, myEchoId, hostEchoId, echoes, players],
+  );
+
+  const transcript = useMemo(
+    () => (conversationId ? toTranscript(lines, conversationId, myEchoId, echoes, players) : []),
+    [lines, conversationId, myEchoId, echoes, players],
+  );
+
+  const receipts = useMemo(
+    () =>
+      receiptRows
+        .filter(row => row.runOwner.toHexString() === hex)
+        .sort((a, b) => (a.id < b.id ? 1 : -1))
+        .map(toReceipt),
+    [receiptRows, hex],
+  );
+
+  const hostCard =
+    hostIntentRow && hostShareId
+      ? hostCardFrom(hostIntentRow, hostPlayerRow, Date.now())
+      : undefined;
+
+  // Only call the link dead once the intent table has actually arrived.
+  const hostLinkExpired = Boolean(hostShareId) && intentsReady && !hostIntentRow;
+
+  const focusedLine =
+    transcript.find(line => line.id === lineId) ??
+    [...transcript].reverse().find(line => line.mine);
+
+  const openReview = (id: string) => {
+    setConversationId(id);
+    setLineId(null);
+    setScreen('review');
+  };
 
   return (
     <main className="phone">
-      {screen === 'join' && <JoinScreen actions={actions} go={go} />}
-      {screen === 'create' && <CreateScreen actions={actions} go={go} />}
-      {screen === 'world' && (
-        <WorldScreen actions={actions} go={go} player={player} toast={toast} />
+      {screen === 'join' && (
+        <JoinScreen
+          actions={actions}
+          go={go}
+          connected={isActive && playersReady}
+          hostCard={hostCard}
+          hostLinkExpired={hostLinkExpired}
+        />
       )}
-      {screen === 'limits' && <LimitsScreen actions={actions} go={go} run={run} />}
-      {screen === 'roaming' && <RoamingScreen actions={actions} go={go} run={run} />}
-      {screen === 'return' && <ReturnScreen actions={actions} go={go} receipts={mockReceipts} />}
+      {screen === 'create' && (
+        <CreateScreen actions={actions} go={go} hostCard={hostCard} />
+      )}
+      {screen === 'world' && (
+        <WorldScreen
+          actions={actions}
+          go={go}
+          player={player}
+          agents={agents}
+          intent={myIntentRow?.text ?? ''}
+          shareId={myIntentRow?.shareId ?? ''}
+          mission={missions[0]?.text ?? ''}
+          placeCount={places.length}
+          toast={toast}
+        />
+      )}
+      {screen === 'limits' && (
+        <LimitsScreen actions={actions} go={go} hostName={hostCard?.name} />
+      )}
+      {screen === 'roaming' && (
+        <RoamingScreen actions={actions} go={go} run={runView} agents={agents} />
+      )}
+      {screen === 'return' && (
+        <ReturnScreen
+          actions={actions}
+          go={go}
+          run={runView}
+          matches={matches}
+          receipts={receipts}
+          onReview={openReview}
+        />
+      )}
       {screen === 'review' && (
         <ReviewScreen
           actions={actions}
           go={go}
           transcript={transcript}
-          focusedId={focusedId}
-          onFocus={setFocusedId}
+          match={matches.find(m => m.conversationId === conversationId)}
+          focusedId={focusedLine?.id ?? null}
+          onFocus={setLineId}
         />
       )}
-      {screen === 'correct' && <CorrectScreen actions={actions} go={go} line={focusedLine} />}
+      {screen === 'correct' && (
+        <CorrectScreen actions={actions} go={go} line={focusedLine} />
+      )}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}
     </main>
   );

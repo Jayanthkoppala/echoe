@@ -1,14 +1,22 @@
 import { TopBar } from '../components/TopBar';
-import type { ScreenProps, TranscriptLine } from '../state/types';
+import type { Match, ScreenProps, TranscriptLine } from '../state/types';
 
 interface ReviewScreenProps extends ScreenProps {
   transcript: TranscriptLine[];
-  focusedId: string;
+  match?: Match;
+  focusedId: string | null;
   onFocus: (id: string) => void;
 }
 
-export function ReviewScreen({ actions, go, transcript, focusedId, onFocus }: ReviewScreenProps) {
-  const focused = transcript.find(line => line.id === focusedId) ?? transcript[transcript.length - 1];
+export function ReviewScreen({
+  actions,
+  go,
+  transcript,
+  match,
+  focusedId,
+  onFocus,
+}: ReviewScreenProps) {
+  const focused = transcript.find(line => line.id === focusedId);
 
   return (
     <div className="screen">
@@ -19,55 +27,68 @@ export function ReviewScreen({ actions, go, transcript, focusedId, onFocus }: Re
             ☻
           </div>
           <div>
-            <strong>Maya's Echo · clearly AI</strong>
-            <span>Church Street · 21:42 · 2 replies</span>
+            <strong>{match ? `${match.name}'s Echo · clearly AI` : 'Echo conversation'}</strong>
+            <span>
+              {match ? `${match.placeName} · match ${match.score}` : ''}
+            </span>
           </div>
         </div>
-        <div className="chat-log">
-          {transcript.map(line =>
-            line.isAi ? (
-              <div className="bubble" key={line.id}>
-                {line.text}
-              </div>
-            ) : (
+
+        {transcript.length === 0 ? (
+          <p className="lede">No lines were spoken in this conversation.</p>
+        ) : (
+          <div className="chat-log">
+            {transcript.map(line =>
+              line.mine ? (
+                <button
+                  key={line.id}
+                  className={line.id === focusedId ? 'bubble mine focused' : 'bubble mine'}
+                  onClick={() => onFocus(line.id)}
+                >
+                  {line.text}
+                </button>
+              ) : (
+                <div className="bubble" key={line.id}>
+                  {line.text}
+                </div>
+              ),
+            )}
+          </div>
+        )}
+
+        {focused ? (
+          <div className="review-card">
+            <div className="review-line">“{focused.text}”</div>
+            <div className="review-question">Does this feel like you?</div>
+            <div className="review-actions">
               <button
-                key={line.id}
-                className={line.id === focused.id ? 'bubble mine focused' : 'bubble mine'}
-                onClick={() => onFocus(line.id)}
+                className={focused.feedback === 'like' ? 'sounds selected' : 'sounds'}
+                onClick={() => actions.onRateLine(focused.id, true)}
               >
-                {line.text}
+                ✓ Sounds like me
               </button>
-            ),
-          )}
-        </div>
-        <div className="review-card">
-          <div className="review-line">“{focused.text}”</div>
-          <div className="review-question">Does this feel like you?</div>
-          <div className="review-actions">
-            <button
-              className={focused.feedback === 'sounds-like-me' ? 'sounds selected' : 'sounds'}
-              onClick={() => actions.onRateLine(focused.id, true)}
-            >
-              ✓ Sounds like me
-            </button>
-            <button
-              className={focused.feedback === 'not-me' ? 'not-me selected' : 'not-me'}
-              onClick={() => {
-                actions.onRateLine(focused.id, false);
-                go('correct');
-              }}
-            >
-              × Not me
-            </button>
+              <button
+                className={focused.feedback === 'not_me' ? 'not-me selected' : 'not-me'}
+                onClick={() => {
+                  actions.onRateLine(focused.id, false);
+                  go('correct');
+                }}
+              >
+                × Not me
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <p className="helper">Tap one of your Echo's lines to rate it.</p>
+        )}
+
         <p className="helper">
           Corrections change future behaviour. They never rewrite what already happened.
         </p>
       </div>
       <div className="footer">
-        <button className="secondary" onClick={() => go('done')}>
-          Everything sounds right
+        <button className="secondary" onClick={() => go('return')}>
+          Back to the recap
         </button>
       </div>
     </div>

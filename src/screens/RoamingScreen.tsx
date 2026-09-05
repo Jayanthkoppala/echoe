@@ -1,70 +1,68 @@
-import { useEffect, useState } from 'react';
-import { MapPins } from '../components/MapPins';
 import { MapSlot } from '../components/MapSlot';
-import { ROAM_STEPS } from '../state/mock';
+import type { AgentSpec } from '../map/BengaluruMap';
 import type { Run, ScreenProps } from '../state/types';
 
-/**
- * The Echo acts while the player is away. The step walk is a local preview.
- * Wiring point: replace ROAM_STEPS with the live run rows from the module.
- */
-export function RoamingScreen({ actions, go, run }: ScreenProps & { run: Run }) {
-  const [index, setIndex] = useState(0);
-  const running = run.status === 'running';
+interface RoamingScreenProps extends ScreenProps {
+  run?: Run;
+  agents: AgentSpec[];
+}
 
-  useEffect(() => {
-    if (!running) return;
-    const timer = setInterval(() => setIndex(current => (current + 1) % ROAM_STEPS.length), 1800);
-    return () => clearInterval(timer);
-  }, [running]);
+/** The Echo acts while the player is away. Every number here is a live row. */
+export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
+  const paused = run?.status === 'paused';
+  const creditsLeft = run ? Math.max(0, run.creditCap - run.creditsSpent) : 0;
+  const spentPct = run && run.creditCap > 0 ? (run.creditsSpent / run.creditCap) * 100 : 0;
 
-  const step = ROAM_STEPS[index];
+  const headline = run?.hasHost
+    ? run.hostMet
+      ? 'Your Echoes have met'
+      : 'Walking towards your host'
+    : run?.goal ?? 'Roaming Bengaluru';
 
   return (
     <div className="screen screen--map">
       <div className="world-wrap">
-        <MapSlot />
-        <MapPins activePlaceId="" agent={{ x: step.x, y: step.y }} />
+        <MapSlot agents={agents} />
 
         <header className="topbar topbar--map">
           <div className="brand">
             <span className="brand-mark">E</span> Echo is roaming
           </div>
-          <span className="timer tabular">{step.time}</span>
+          <span className="timer tabular">{creditsLeft} cr left</span>
         </header>
 
         <div className="roam-overlay">
           <div className="roam-top">
             <div>
-              <span className="live-dot">World running</span>
-              <h2>{step.headline}</h2>
-              <p>{step.detail}</p>
+              <span className="live-dot">{paused ? 'Paused' : 'World running'}</span>
+              <h2>{headline}</h2>
+              <p>{run?.goal ?? 'Waiting for the first move'}</p>
             </div>
-            <span className="credit-pill">{run.creditCap - step.spent} left</span>
+            <span className="credit-pill">{creditsLeft} left</span>
           </div>
           <div className="progress">
-            <div className="progress-fill" style={{ width: `${step.pct}%` }} />
+            <div className="progress-fill" style={{ width: `${Math.min(100, spentPct)}%` }} />
           </div>
           <div className="roam-stats">
             <div className="roam-stat">
-              <strong>{step.places}</strong>
+              <strong>{run?.placesVisited ?? 0}</strong>
               <span>places</span>
             </div>
             <div className="roam-stat">
-              <strong>{step.people}</strong>
+              <strong>{run?.peopleMet ?? 0}</strong>
               <span>people</span>
             </div>
             <div className="roam-stat">
-              <strong>{step.built}</strong>
+              <strong>{run?.built ?? 0}</strong>
               <span>built</span>
             </div>
           </div>
           <div className="roam-actions">
             <button className="pause-btn" onClick={actions.onPause}>
-              {running ? 'Pause' : 'Resume'}
+              {paused ? 'Resume' : 'Pause'}
             </button>
-            <button className="return-btn" onClick={() => go('return')}>
-              Preview my return →
+            <button className="return-btn" onClick={actions.onEndRun}>
+              Bring my Echo home →
             </button>
           </div>
         </div>

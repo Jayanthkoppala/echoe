@@ -1,27 +1,22 @@
 import { useState } from 'react';
+import { HostIntentCard } from '../components/HostIntentCard';
 import { TopBar } from '../components/TopBar';
-import { AVATARS, PERSONA_PROMPT } from '../state/mock';
-import type { ScreenProps } from '../state/types';
+import { AVATAR_GLYPH, AVATAR_OPTIONS, INTENT_PLACEHOLDER, PERSONA_PROMPT } from '../state/copy';
+import type { HostCard, ScreenProps } from '../state/types';
 
-const INTENT_EXAMPLES = [
-  'hiring a Rust dev in Bengaluru',
-  'raising pre-seed for a fintech',
-  'looking for a design cofounder',
-  'want to try a new gym partner',
-];
-
-export function CreateScreen({ actions, go }: ScreenProps) {
-  const [avatar, setAvatar] = useState(AVATARS[0]);
-  const [persona, setPersona] = useState('');
+/** The intent is the product, so it is the first and only required field. */
+export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard?: HostCard }) {
+  const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0].id);
   const [intent, setIntent] = useState('');
+  const [persona, setPersona] = useState('');
   const [copied, setCopied] = useState(false);
 
   const copyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(PERSONA_PROMPT);
     } catch {
-      // Clipboard is unavailable in some embedded browsers. The prompt is
-      // still selectable on screen, so this is not worth surfacing.
+      // Clipboard is blocked in some embedded browsers. The prompt is still on
+      // screen and selectable, so this is not worth interrupting anyone over.
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
@@ -29,41 +24,47 @@ export function CreateScreen({ actions, go }: ScreenProps) {
 
   return (
     <div className="screen">
-      <TopBar title="Create your Echo" step="02 / 08" onBack={() => go('join')} />
-      <div className="content content--fit">
-        <div className="section-block" style={{ marginTop: 14 }}>
+      <TopBar title="Your intent" step="02 / 08" onBack={() => go('join')} />
+      <div className="content">
+        {hostCard ? <HostIntentCard host={hostCard} /> : null}
+
+        <label className="label" htmlFor="intent">
+          What are you here for, in one line?
+        </label>
+        <textarea
+          className="textarea textarea--intent"
+          id="intent"
+          value={intent}
+          onChange={event => setIntent(event.target.value)}
+          placeholder={INTENT_PLACEHOLDER}
+          maxLength={120}
+        />
+        <p className="helper helper--tight">
+          Your Echoe carries this line around the city and shows it to anyone worth meeting.
+        </p>
+
+        <div className="section-block">
           <span className="label">Choose a character</span>
           <div className="avatar-row" role="list" aria-label="Character choices">
-            {AVATARS.map(colour => (
+            {AVATAR_OPTIONS.map(option => (
               <button
-                key={colour}
-                className={colour === avatar ? 'avatar selected' : 'avatar'}
-                style={{ ['--avatar' as string]: colour }}
-                onClick={() => setAvatar(colour)}
-                aria-label={`Character ${colour}`}
-                aria-pressed={colour === avatar}
-              />
+                key={option.id}
+                className={option.id === avatar ? 'avatar selected' : 'avatar'}
+                style={{ ['--avatar' as string]: option.colour }}
+                onClick={() => setAvatar(option.id)}
+                aria-label={option.id}
+                aria-pressed={option.id === avatar}
+              >
+                <span className="avatar-glyph" aria-hidden="true">
+                  {AVATAR_GLYPH[option.id]}
+                </span>
+              </button>
             ))}
           </div>
         </div>
 
         <div className="section-block">
-          <span className="label">What are you here for right now?</span>
-          <input
-            className="input"
-            value={intent}
-            onChange={event => setIntent(event.target.value)}
-            placeholder={INTENT_EXAMPLES[Math.floor(Date.now() / 4000) % INTENT_EXAMPLES.length]}
-            maxLength={80}
-            aria-label="Your intent"
-          />
-          <p className="helper helper--tight">
-            One line. Your Echo carries it, matches on it, and it expires in 7 days.
-          </p>
-        </div>
-
-        <div className="section-block">
-          <span className="label">Describe your persona</span>
+          <span className="label">Give it a voice (optional)</span>
           <div className="prompt-card">
             <p className="prompt-text">{PERSONA_PROMPT}</p>
             <button className="copy-btn" type="button" onClick={copyPrompt}>
@@ -71,7 +72,8 @@ export function CreateScreen({ actions, go }: ScreenProps) {
             </button>
           </div>
           <p className="helper helper--tight">
-            Paste this into ChatGPT or Claude, then bring the answer back here.
+            Paste this into ChatGPT or Claude, then bring the answer back here. Skip it and
+            your Echoe still goes.
           </p>
           <textarea
             className="textarea"
@@ -83,8 +85,12 @@ export function CreateScreen({ actions, go }: ScreenProps) {
         </div>
       </div>
       <div className="footer">
-        <button className="primary" onClick={() => actions.onCreateEcho(avatar, persona, intent.trim() || INTENT_EXAMPLES[0])}>
-          Create my Echo <span aria-hidden="true">→</span>
+        <button
+          className="primary"
+          disabled={!intent.trim()}
+          onClick={() => actions.onCreateEcho(avatar, persona, intent.trim())}
+        >
+          Send my Echoe out <span aria-hidden="true">→</span>
         </button>
       </div>
     </div>

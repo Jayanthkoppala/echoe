@@ -158,7 +158,6 @@ p, li, button, label { text-wrap: pretty; }
 
 /* Pinned bottom CTA */
 .footer {
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
   z-index: 20;
   display: grid;
   gap: 10px;
