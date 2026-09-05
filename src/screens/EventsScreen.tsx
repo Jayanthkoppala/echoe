@@ -88,7 +88,7 @@ export function EventsScreen({ actions, go, backTo }: ScreenProps & { backTo: Sc
                 .filter(e => e.date === day)
                 .map(event => {
                   const near = nearestLandmark(event.lat, event.lng);
-                  const reachable = !event.approx && near.km <= 6;
+                  const reachable = near.km <= 6;
                   return (
                     <div className="event-card glass" key={event.id}>
                       <div className="event-top">
