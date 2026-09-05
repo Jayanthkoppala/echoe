@@ -12,13 +12,11 @@ import {
 
 export default __t.row({
   identity: __t.identity().primaryKey(),
-  name: __t.string(),
-  avatar: __t.string(),
-  online: __t.bool(),
-  currentPlace: __t.u8().name("current_place"),
-  openrouterLinked: __t.bool().name("openrouter_linked"),
-  companyId: __t.u32().name("company_id"),
-  verifiedDomain: __t.string().name("verified_domain"),
-  verifiedVia: __t.string().name("verified_via"),
-  joinedAt: __t.timestamp().name("joined_at"),
+  provider: __t.string(),
+  providerId: __t.string().name("provider_id"),
+  handle: __t.string(),
+  displayName: __t.string().name("display_name"),
+  avatarUrl: __t.string().name("avatar_url"),
+  hostedDomain: __t.string().name("hosted_domain"),
+  linkedAt: __t.timestamp().name("linked_at"),
 });

@@ -87,6 +87,18 @@ export const Intent = __t.object("Intent", {
 });
 export type Intent = __Infer<typeof Intent>;
 
+export const LinkedAccount = __t.object("LinkedAccount", {
+  identity: __t.identity(),
+  provider: __t.string(),
+  providerId: __t.string(),
+  handle: __t.string(),
+  displayName: __t.string(),
+  avatarUrl: __t.string(),
+  hostedDomain: __t.string(),
+  linkedAt: __t.timestamp(),
+});
+export type LinkedAccount = __Infer<typeof LinkedAccount>;
+
 export const LlmConfig = __t.object("LlmConfig", {
   id: __t.u8(),
   owner: __t.identity(),
@@ -120,6 +132,7 @@ export const Player = __t.object("Player", {
   openrouterLinked: __t.bool(),
   companyId: __t.u32(),
   verifiedDomain: __t.string(),
+  verifiedVia: __t.string(),
   joinedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;

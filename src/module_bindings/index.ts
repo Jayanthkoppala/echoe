@@ -48,10 +48,12 @@ import SetMissionReducer from "./set_mission_reducer";
 import SetSecretReducer from "./set_secret_reducer";
 import StartRunReducer from "./start_run_reducer";
 import TravelReducer from "./travel_reducer";
+import UnlinkGoogleReducer from "./unlink_google_reducer";
 import UnlinkOpenRouterReducer from "./unlink_open_router_reducer";
 import UnverifyReducer from "./unverify_reducer";
 
 // Import all procedure arg schemas
+import * as LinkGoogleProcedure from "./link_google_procedure";
 import * as LinkOpenRouterProcedure from "./link_open_router_procedure";
 import * as RequestVerificationProcedure from "./request_verification_procedure";
 import * as SuggestIntentsProcedure from "./suggest_intents_procedure";
@@ -64,6 +66,7 @@ import ConversationRow from "./conversation_table";
 import CorrectionRow from "./correction_table";
 import EchoRow from "./echo_table";
 import IntentRow from "./intent_table";
+import LinkedAccountRow from "./linked_account_table";
 import MissionRow from "./mission_table";
 import PlaceRow from "./place_table";
 import PlayerRow from "./player_table";
@@ -173,6 +176,21 @@ const tablesSchema = __schema({
       { name: 'intent_share_id_key', constraint: 'unique', columns: ['shareId'] },
     ],
   }, IntentRow),
+  linkedAccount: __table({
+    name: 'linked_account',
+    indexes: [
+      { accessor: 'identity', name: 'linked_account_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+      { accessor: 'providerId', name: 'linked_account_provider_id_idx_btree', algorithm: 'btree', columns: [
+        'providerId',
+      ] },
+    ],
+    constraints: [
+      { name: 'linked_account_identity_key', constraint: 'unique', columns: ['identity'] },
+      { name: 'linked_account_provider_id_key', constraint: 'unique', columns: ['providerId'] },
+    ],
+  }, LinkedAccountRow),
   mission: __table({
     name: 'mission',
     indexes: [
@@ -273,12 +291,14 @@ const reducersSchema = __reducers(
   __reducerSchema("set_secret", SetSecretReducer),
   __reducerSchema("start_run", StartRunReducer),
   __reducerSchema("travel", TravelReducer),
+  __reducerSchema("unlink_google", UnlinkGoogleReducer),
   __reducerSchema("unlink_open_router", UnlinkOpenRouterReducer),
   __reducerSchema("unverify", UnverifyReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("link_google", LinkGoogleProcedure.params, LinkGoogleProcedure.returnType),
   __procedureSchema("link_open_router", LinkOpenRouterProcedure.params, LinkOpenRouterProcedure.returnType),
   __procedureSchema("request_verification", RequestVerificationProcedure.params, RequestVerificationProcedure.returnType),
   __procedureSchema("suggest_intents", SuggestIntentsProcedure.params, SuggestIntentsProcedure.returnType),

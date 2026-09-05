@@ -16,6 +16,7 @@ import {
 import { ScheduleAt, TimeDuration, Timestamp } from 'spacetimedb';
 import { chat, exchangeCode, sendEmail, splitLines, type ChatMessage, type ChatResult } from './llm';
 import { COMPANIES } from './companies';
+import { verifyGoogleToken } from './social';
 
 // ─── Tuning ──────────────────────────────────────────────────────────────────
 // A "24 hour" roam is compressed to RUN_DURATION so a judge can watch one end
@@ -44,6 +45,10 @@ const VERIFIED_BONUS = 10; // added to a complement match when both sides are ve
 const COMPLEMENT_FLOOR = 50; // matchIntents adds 50 the moment a complement fires
 const SECRET_ADMIN = 'admin_identity';
 const SECRET_RESEND_KEY = 'resend_api_key';
+const SECRET_GOOGLE_CLIENT_ID = 'google_client_id';
+const PROVIDER_GOOGLE = 'google';
+const VIA_EMAIL = 'email';
+const VIA_GOOGLE = 'google';
 
 /**
  * A badge is only worth something if it means a workplace. Free and personal
@@ -142,6 +147,7 @@ const player = table(
     // where verifiedDomain is what the badge falls back to.
     companyId: t.u32(),
     verifiedDomain: t.string(),
+    verifiedVia: t.string(), // '' | 'email' | 'google': who earned the badge
     joinedAt: t.timestamp(),
   }
 );
@@ -185,6 +191,26 @@ const place = table(
     name: t.string(),
     lng: t.f64(),
     lat: t.f64(),
+  }
+);
+
+/**
+ * Public. One row per player, one provider today. Nothing secret is written
+ * here: the raw email never leaves the token, only its local part as `handle`.
+ * `providerId` is unique, which is what stops one Google account badging two
+ * Echoes, the same trick `verification.email` uses.
+ */
+const linkedAccount = table(
+  { name: 'linked_account', public: true },
+  {
+    identity: t.identity().primaryKey(),
+    provider: t.string(), // 'google'
+    providerId: t.string().unique(),
+    handle: t.string(),
+    displayName: t.string(),
+    avatarUrl: t.string(), // provider CDN, render with referrerPolicy="no-referrer"
+    hostedDomain: t.string(), // Google Workspace `hd`, '' on a consumer account
+    linkedAt: t.timestamp(),
   }
 );
 
@@ -413,6 +439,7 @@ const spacetimedb = schema({
   intent,
   place,
   company,
+  linkedAccount,
   agentTravel,
   run,
   receipt,
@@ -488,6 +515,29 @@ function workDomain(email: string): string {
 /** The seeded company for a domain, or null: an unseeded domain still verifies. */
 function companyByDomain(db: Db, domain: string) {
   return db.company.domain.find(domain) ?? null;
+}
+
+/**
+ * Award the badge. The emailed code and Google's hosted domain both land here,
+ * so the row a client reads looks the same either way and `verifiedVia` is the
+ * only thing that says which one earned it. Returns the label for the receipt.
+ */
+function applyVerifiedDomain(
+  ctx: Ctx,
+  me: ReturnType<typeof requirePlayer>,
+  domain: string,
+  via: string
+): string {
+  const named = companyByDomain(ctx.db, domain);
+  ctx.db.player.identity.update({
+    ...me,
+    companyId: named?.id ?? NO_COMPANY,
+    verifiedDomain: domain,
+    verifiedVia: via,
+  });
+  const label = named?.name ?? domain;
+  writeReceipt(ctx, ctx.sender, 'verified', me.currentPlace, `Verified as ${label}`, 0);
+  return label;
 }
 
 
@@ -764,6 +814,7 @@ export const join = spacetimedb.reducer(
       openrouterLinked: false,
       companyId: NO_COMPANY,
       verifiedDomain: '',
+      verifiedVia: '',
       joinedAt: ctx.timestamp,
     });
   }
@@ -1073,7 +1124,7 @@ export const unlinkOpenRouter = spacetimedb.reducer(ctx => {
 export const unverify = spacetimedb.reducer(ctx => {
   const playerRow = requirePlayer(ctx);
   if (playerRow.companyId === 0 && playerRow.verifiedDomain === '') fail('not_verified');
-  ctx.db.player.identity.update({ ...playerRow, companyId: 0, verifiedDomain: '' });
+  ctx.db.player.identity.update({ ...playerRow, companyId: 0, verifiedDomain: '', verifiedVia: '' });
 });
 
 /** Admin only: clear a badge that was set by mistake, e.g. during a test run. */
@@ -1084,7 +1135,7 @@ export const adminUnverify = spacetimedb.reducer(
     if (!admin || admin.value !== ctx.sender.toHexString()) fail('not_admin');
     for (const row of [...ctx.db.player.iter()]) {
       if (row.identity.toHexString() !== identityHex.trim().toLowerCase()) continue;
-      ctx.db.player.identity.update({ ...row, companyId: 0, verifiedDomain: '' });
+      ctx.db.player.identity.update({ ...row, companyId: 0, verifiedDomain: '', verifiedVia: '' });
       return;
     }
     fail('player_not_found');
@@ -1781,24 +1832,103 @@ export const verifyCode = spacetimedb.procedure(
         return 'wrong_code';
       }
 
-      const named = companyByDomain(tx.db, row.domain);
-      tx.db.player.identity.update({
-        ...me,
-        companyId: named?.id ?? NO_COMPANY,
-        verifiedDomain: row.domain,
-      });
       // The row stays, with the code blanked: `email` being unique is what stops
       // one inbox badging a second identity, and a blank code cannot be replayed.
       tx.db.verification.identity.update({ ...row, code: '', attempts: 0 });
-      tx.db.receipt.insert({
-        id: 0n,
-        runOwner: tx.sender,
-        kind: 'verified',
-        placeId: me.currentPlace,
-        text: `Verified as ${named?.name ?? row.domain}`,
-        costUsd: 0,
-        createdAt: tx.timestamp,
-      });
+      applyVerifiedDomain(tx, me, row.domain, VIA_EMAIL);
       return 'ok';
     })
 );
+
+// ─── Google connect ──────────────────────────────────────────────────────────
+
+/**
+ * Link a Google account from the ID token the Google Identity Services button
+ * hands the page. A procedure because the token is checked against Google over
+ * HTTP; the check runs with no transaction open, and only its verdict is
+ * written. Returns 'linked', or 'linked_verified' when the player carries a
+ * company badge afterwards.
+ *
+ * A Workspace `hd` is asserted by Google rather than typed by the player, so it
+ * stands in for the emailed code. A consumer account has no `hd`, gets the
+ * linked row and stays unverified.
+ */
+export const linkGoogle = spacetimedb.procedure(
+  { idToken: t.string() },
+  t.string(),
+  (ctx, { idToken }) => {
+    const clientId = ctx.withTx(tx => {
+      if (!tx.db.player.identity.find(tx.sender)) fail('not_joined');
+      return tx.db.secret.key.find(SECRET_GOOGLE_CLIENT_ID)?.value ?? '';
+    });
+    if (!clientId) fail('google_client_id_not_set');
+
+    const nowSecs = Number(micros(ctx.timestamp) / 1_000_000n);
+    const got = verifyGoogleToken(ctx.http, idToken.trim(), clientId, nowSecs);
+    if (!got.ok) {
+      console.warn(`linkGoogle rejected a token: ${got.reason}`);
+      fail(`google_link_failed:${got.reason}`);
+    }
+    const c = got.claims;
+
+    return ctx.withTx(tx => {
+      const me = tx.db.player.identity.find(tx.sender);
+      if (!me) fail('not_joined');
+
+      const held = tx.db.linkedAccount.providerId.find(c.sub);
+      if (held && !held.identity.isEqual(tx.sender)) fail('account_taken');
+
+      const row = {
+        identity: tx.sender,
+        provider: PROVIDER_GOOGLE,
+        providerId: c.sub,
+        handle: c.email.split('@')[0] || c.name,
+        displayName: c.name || c.email,
+        avatarUrl: c.picture,
+        hostedDomain: c.hostedDomain,
+        linkedAt: tx.timestamp,
+      };
+      if (tx.db.linkedAccount.identity.find(tx.sender)) {
+        tx.db.linkedAccount.identity.update(row);
+      } else {
+        tx.db.linkedAccount.insert(row);
+      }
+      writeReceipt(
+        tx,
+        tx.sender,
+        'linked',
+        me.currentPlace,
+        `Connected Google as ${row.displayName}`,
+        0
+      );
+
+      // Google fills an empty badge or refreshes one it set itself. It never
+      // overwrites a badge the emailed code earned: that domain was proved by a
+      // code this player typed, and unlinkGoogle would then strip it.
+      const hd = c.hostedDomain;
+      const mine = me.verifiedDomain === '' || me.verifiedVia === VIA_GOOGLE;
+      if (hd && !FREE_MAIL.has(hd) && mine) applyVerifiedDomain(tx, me, hd, VIA_GOOGLE);
+
+      const after = tx.db.player.identity.find(tx.sender);
+      return after && after.verifiedDomain ? 'linked_verified' : 'linked';
+    });
+  }
+);
+
+/**
+ * Forget the Google link. The badge goes with it only if Google is what set it:
+ * a domain proved by the emailed code survives, which is what `verifiedVia`
+ * exists to answer.
+ */
+export const unlinkGoogle = spacetimedb.reducer(ctx => {
+  const playerRow = requirePlayer(ctx);
+  if (!ctx.db.linkedAccount.identity.find(ctx.sender)) fail('not_linked');
+  ctx.db.linkedAccount.identity.delete(ctx.sender);
+  if (playerRow.verifiedVia !== VIA_GOOGLE) return;
+  ctx.db.player.identity.update({
+    ...playerRow,
+    companyId: NO_COMPANY,
+    verifiedDomain: '',
+    verifiedVia: '',
+  });
+});

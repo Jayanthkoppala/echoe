@@ -20,5 +20,8 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["./**/*"]
+  "include": ["./**/*"],
+  // *.check.ts are node self-checks, not module code: they import node builtins
+  // and are run with `node --experimental-strip-types`, never shipped.
+  "exclude": ["*.check.ts"]
 }

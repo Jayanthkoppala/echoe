@@ -20,6 +20,7 @@ import SetMissionReducer from "../set_mission_reducer";
 import SetSecretReducer from "../set_secret_reducer";
 import StartRunReducer from "../start_run_reducer";
 import TravelReducer from "../travel_reducer";
+import UnlinkGoogleReducer from "../unlink_google_reducer";
 import UnlinkOpenRouterReducer from "../unlink_open_router_reducer";
 import UnverifyReducer from "../unverify_reducer";
 
@@ -37,6 +38,7 @@ export type SetMissionParams = __Infer<typeof SetMissionReducer>;
 export type SetSecretParams = __Infer<typeof SetSecretReducer>;
 export type StartRunParams = __Infer<typeof StartRunReducer>;
 export type TravelParams = __Infer<typeof TravelReducer>;
+export type UnlinkGoogleParams = __Infer<typeof UnlinkGoogleReducer>;
 export type UnlinkOpenRouterParams = __Infer<typeof UnlinkOpenRouterReducer>;
 export type UnverifyParams = __Infer<typeof UnverifyReducer>;
 

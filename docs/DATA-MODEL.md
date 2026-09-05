@@ -557,3 +557,144 @@ Step 12 is missing on purpose: `SELECT COUNT(*) FROM company` is rejected with
 `echosmoke`, ran the unseeded-domain case there and deleted it, because the send
 cap is per identity per hour and the CLI's `--anonymous` flag mints a fresh
 identity on every call, so a multi-step flow cannot run under it.
+
+## Google connect
+
+Turns on the `Connect Google` button that `ProfileScreen` renders disabled. The
+Google Identity Services button hands the page an ID token, the module checks it
+with Google, and a Workspace domain becomes a company badge with no code typed.
+Design and console setup: `docs/SOCIAL-CONNECT.md`.
+
+### Table
+
+`linked_account` (public), one row per player:
+
+| Column | Type | Note |
+| --- | --- | --- |
+| `identity` | `Identity` primary key | |
+| `provider` | `string` | `google` today |
+| `providerId` | `string` unique | Google's `sub`. Unique is what stops one Google account badging two Echoes |
+| `handle` | `string` | the email local part, or the name when there is no email |
+| `displayName` | `string` | |
+| `avatarUrl` | `string` | provider CDN, render with `referrerPolicy="no-referrer"` |
+| `hostedDomain` | `string` | Google Workspace `hd`, `''` on a consumer account |
+| `linkedAt` | `Timestamp` | |
+
+The raw email is never stored. `handle` is its local part and nothing else, so
+there is no private `linked_contact` table: nothing in the product reads a full
+address after the token is checked.
+
+`player` gains `verifiedVia: string`, one of `''`, `email`, `google`. It answers
+the only question the two paths cannot answer for each other: whether unlinking
+Google should take the badge with it.
+
+### `linkGoogle({ idToken }) -> string`
+
+A procedure because the token is checked against Google over HTTP, and the check
+runs with no transaction open. `spacetimedb/src/social.ts` holds the network half
+under the same never-throw contract as `llm.ts`.
+
+`GET https://oauth2.googleapis.com/tokeninfo?id_token=<token>`, 8s timeout, then
+five checks, all of which must pass:
+
+| Check | Failure reason |
+| --- | --- |
+| HTTP 200 | `http <status>: <body>` |
+| `aud` equals the `google_client_id` secret | `aud_mismatch` |
+| `email_verified` is `"true"` | `email_not_verified` |
+| `iss` is `accounts.google.com` or `https://accounts.google.com` | `bad_issuer:<iss>` |
+| `exp` is in the future | `token_expired` |
+
+`tokeninfo` validates the signature and the expiry but not that the token was
+minted for us, so the `aud` comparison is the security boundary and `hd` is only
+trustworthy because of it. A missing secret raises `google_client_id_not_set`
+before any HTTP call. Every rejection arrives as `google_link_failed:<reason>`
+and is also logged.
+
+On success the row is upserted and a receipt of kind `linked` reads
+`Connected Google as <name>`. When `hd` is present, is not free mail, and the
+player is either unverified or already verified by Google, `applyVerifiedDomain`
+sets `companyId`, `verifiedDomain` and `verifiedVia: 'google'` and writes the
+same `Verified as <company or domain>` receipt `verifyCode` writes. Google never
+overwrites a badge the emailed code earned: that domain was proved by a code the
+player typed, and `unlinkGoogle` would then strip it. Returns `linked_verified`
+when the player carries a badge afterwards, `linked` when not. Other errors:
+`not_joined`, `account_taken`.
+
+`unlinkGoogle()` deletes the row, and clears the badge only when
+`verifiedVia` is `google`. Raises `not_linked`.
+
+`applyVerifiedDomain` is now the one place a badge is awarded, so the emailed
+code and Google produce identical rows. `unverify` and `adminUnverify` clear
+`verifiedVia` with the rest.
+
+### Self-check
+
+The claim rules are the security boundary, so they have a runnable check that
+needs no Google and no database. Eleven assertions over a stubbed HTTP client,
+including `aud_mismatch`, an unverified email, a forged issuer, an expired
+token, a non-JSON body and a consumer account with no `hd`:
+
+```
+$ node --experimental-strip-types spacetimedb/social.check.ts
+social.check: all claim rules hold
+```
+
+`spacetimedb/tsconfig.json` excludes `*.check.ts`, which is why the file sits
+beside `src/` rather than in it: it imports node builtins that the module build
+type-checks and rejects.
+
+### Smoke test, verbatim
+
+Published with `--delete-data=always` because `player` gained `verifiedVia`.
+The `WARNING: This command is UNSTABLE` line is stripped. A real token test
+waits for Jay's client id from the Google console.
+
+```
+### 1. join
+
+### 2. link_google with no google_client_id secret (expect google_client_id_not_set)
+Error: Response text: The module instance encountered a fatal error: google_client_id_not_set
+
+### 3. set the client id, then link_google with a garbage token
+Error: Response text: The module instance encountered a fatal error: google_link_failed:http 400: {
+  "error": "invalid_token",
+  "error_description": "Invalid Value"
+}
+
+### 4. the module log for that rejection
+2026-09-05T14:00:14.769102Z  WARN: link_google spacetimedb_module:14617: linkGoogle rejected a token: http 400: {
+
+### 5. link_google with an empty token (expect empty_token, no HTTP call)
+Error: Response text: The module instance encountered a fatal error: google_link_failed:empty_token
+
+### 6. unlink_google with nothing linked (expect not_linked)
+Error: Response text: not_linked
+
+### 7. tables are empty and the player is untouched
+ linked
+--------
+ 0
+
+ name            | company_id | verified_domain | verified_via
+-----------------+------------+-----------------+--------------
+ "Google Tester" | 0          | ""              | ""
+
+### 8. the email path still works end to end after the schema change
+"logged"
+code=381903
+"ok"
+ name            | company_id | verified_domain | verified_via
+-----------------+------------+-----------------+--------------
+ "Google Tester" | 4          | "razorpay.com"  | "email"
+
+### 9. unverify clears the source too
+ name            | company_id | verified_domain | verified_via
+-----------------+------------+-----------------+--------------
+ "Google Tester" | 0          | ""              | ""
+```
+
+The real token reached Google and came back `invalid_token`, so the HTTP path,
+the timeout and the rejection branch are all proven live. What is unproven
+without a client id is the `aud` match and the `hd` badge, which the self-check
+covers against stubbed claims.
