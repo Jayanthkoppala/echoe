@@ -15,6 +15,8 @@ interface EventRow {
   lat: number;
   lng: number;
   approx: boolean;
+  image?: string;
+  brand?: { font: string; bg: string; fg: string };
   url: string;
   price: string;
   summary: string;
@@ -91,12 +93,17 @@ export function EventsScreen({ actions, go, backTo }: ScreenProps & { backTo: Sc
                   const reachable = near.km <= 6;
                   return (
                     <div className="event-card glass" key={event.id}>
+                      {event.image ? (
+                        <img className="event-hero" src={event.image} alt="" loading="lazy" />
+                      ) : null}
                       <div className="event-top">
                         <span className="event-glyph" aria-hidden="true">
                           {GLYPH[event.category]}
                         </span>
                         <div className="event-head">
-                          <strong>{event.title}</strong>
+                          <strong style={event.brand ? { fontFamily: event.brand.font } : undefined}>
+                            {event.title}
+                          </strong>
                           <small>{event.host}</small>
                         </div>
                         <span className={isFree(event.price) ? 'price-chip free' : 'price-chip'}>
