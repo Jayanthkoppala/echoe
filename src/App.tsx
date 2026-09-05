@@ -46,9 +46,9 @@ function App() {
         setPlayer(current => ({ ...current, name }));
         setScreen('create');
       },
-      // reducer: create_echo(avatar, persona)
-      onCreateEcho(avatar) {
-        setPlayer(current => ({ ...current, avatar }));
+      // reducer: create_echo(avatar, persona, intent)
+      onCreateEcho(avatar, _persona, intent) {
+        setPlayer(current => ({ ...current, avatar, intent }));
         setScreen('world');
       },
       // reducer: travel(place_id)

@@ -18,6 +18,7 @@ export type ActionKind = 'Travel' | 'Find' | 'Talk' | 'Dance' | 'Build' | 'Bluff
 export type RunStatus = 'idle' | 'running' | 'paused' | 'done';
 
 export interface Player {
+  intent?: string;
   name: string;
   avatar: string;
   credits: number;
@@ -76,7 +77,7 @@ export interface RunLimits {
  */
 export interface Actions {
   onJoin(name: string): void;
-  onCreateEcho(avatar: string, persona: string): void;
+  onCreateEcho(avatar: string, persona: string, intent: string): void;
   onTravel(placeId: string): void;
   onAct(kind: ActionKind): void;
   onStartRun(limits: RunLimits): void;

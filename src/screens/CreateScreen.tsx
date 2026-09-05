@@ -3,9 +3,17 @@ import { TopBar } from '../components/TopBar';
 import { AVATARS, PERSONA_PROMPT } from '../state/mock';
 import type { ScreenProps } from '../state/types';
 
+const INTENT_EXAMPLES = [
+  'hiring a Rust dev in Bengaluru',
+  'raising pre-seed for a fintech',
+  'looking for a design cofounder',
+  'want to try a new gym partner',
+];
+
 export function CreateScreen({ actions, go }: ScreenProps) {
   const [avatar, setAvatar] = useState(AVATARS[0]);
   const [persona, setPersona] = useState('');
+  const [intent, setIntent] = useState('');
   const [copied, setCopied] = useState(false);
 
   const copyPrompt = async () => {
@@ -40,6 +48,21 @@ export function CreateScreen({ actions, go }: ScreenProps) {
         </div>
 
         <div className="section-block">
+          <span className="label">What are you here for right now?</span>
+          <input
+            className="input"
+            value={intent}
+            onChange={event => setIntent(event.target.value)}
+            placeholder={INTENT_EXAMPLES[Math.floor(Date.now() / 4000) % INTENT_EXAMPLES.length]}
+            maxLength={80}
+            aria-label="Your intent"
+          />
+          <p className="helper helper--tight">
+            One line. Your Echo carries it, matches on it, and it expires in 7 days.
+          </p>
+        </div>
+
+        <div className="section-block">
           <span className="label">Describe your persona</span>
           <div className="prompt-card">
             <p className="prompt-text">{PERSONA_PROMPT}</p>
@@ -60,7 +83,7 @@ export function CreateScreen({ actions, go }: ScreenProps) {
         </div>
       </div>
       <div className="footer">
-        <button className="primary" onClick={() => actions.onCreateEcho(avatar, persona)}>
+        <button className="primary" onClick={() => actions.onCreateEcho(avatar, persona, intent.trim() || INTENT_EXAMPLES[0])}>
           Create my Echo <span aria-hidden="true">→</span>
         </button>
       </div>
