@@ -446,9 +446,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   place-items: center;
   border: 1px solid rgba(255, 255, 255, .2);
   border-radius: 50%;
-  background: rgba(10, 14, 12, .6);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  backdrop-filter: blur(10px) saturate(140%);
+  background: rgba(10, 14, 12, .72);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, .3),
     0 6px 16px -6px rgba(0, 0, 0, .95);
@@ -653,7 +651,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 8px;
   margin-top: 14px;
 }
@@ -1247,3 +1245,16 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   text-align: left;
 }
 .note-line.open { display: block; -webkit-line-clamp: none; line-clamp: none; }
+
+/* Hidden by the World pin filter. visibility only: the marker root's transform
+   and position belong to MapLibre. */
+.map-pin--off { visibility: hidden; }
+
+/* Generated character tile: the model's colour fills it instead of glass. */
+.avatar--gen { background: var(--avatar); }
+.avatar--gen .avatar-glyph { font-size: 30px; }
+
+/* Icon-only sheet button: the conversations shortcut on the World screen. */
+.ghost-btn--icon { min-width: 50px; padding: 0; font-size: 18px; line-height: 1; }
+/* Talks list rows are whole-row buttons. */
+.person-row--tap { width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }

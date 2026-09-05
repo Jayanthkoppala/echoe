@@ -73,31 +73,58 @@ still overlap slightly in the densest block around MG Road; HTML markers do not
 take part in MapLibre's collision engine, which is the price of keeping them
 crisp.
 
-## Company logo pins
+## Map pins
 
-A symbol layer, not DOM markers. Featured (the first twelve rows) draw from the
-city zoom to 13.5; every company draws from 13.5 with its name from zoom 14.
-Icon size runs 0.4 at city zoom, 0.45 at 12.5, 0.8 at 15. A tap calls
-`onCompanyTap(slug)` and flies in with a `[0, -130]` offset, without which the
-tapped pin lands behind the sheet at pitch 60. Agents take a `badge`: a company
-slug reuses that logo sprite, `'domain'` gets a lime check, both at icon-size
-0.3 offset to the dot's top right on the existing agents source.
+Symbol layers, not DOM markers. Layer and source ids the UI can rely on:
 
-Two things in the seed data shaped this:
+| Id | What |
+|---|---|
+| `pins` (source) | featured startups, every VC, featured spots. Unclustered. |
+| `pins-rest` (source) | unfeatured startups only. `cluster: true`, radius 40, maxzoom 14. |
+| `pin-featured` | startups and VCs from city zoom |
+| `pin-spots` | spots from zoom 13 |
+| `pin-rest` | unclustered leftovers from 13.5 |
+| `pin-clusters` | cluster bubble; tap expands via `getClusterExpansionZoom` |
+| `pin-cluster-count` | the count label |
 
-- **Logos are vendored**, by `scripts/fetch-logos.sh` into `public/logos/`. The
-  `logo` field's Google favicon URL renders in an `<img>` but serves no CORS
-  header, so its pixels cannot be read back off a canvas, which is what
-  `addImage` needs. Of the public services that do send CORS, unavatar answered
-  20 of 39 requests with HTTP 429. Same-origin files have neither problem. 33 of
-  39 resolve; the other 6 draw an initials chip, as does any 404.
-- **Coordinates are rounded to two decimals**, so 39 rows sit on 15 points and
-  six companies stack exactly. Each group is fanned onto a ~660m ring, which is
-  smaller than the 1.1km error the rounding already carries. Better coordinates
-  in the data would retire that code.
+Prop: `pinKinds?: Array<'startup' | 'vc' | 'spot' | 'place'>`, default all four,
+forwarded through `MapSlot`. `'place'` is the ten landmark chips, which are DOM
+markers and take a `.map-pin--off` class rather than a filter. Everything else
+is `setFilter` on the layers above, never a source rebuild. Only startups
+cluster, so toggling startups toggles the cluster layers exactly.
+
+Rings are drawn into each chip: white for a startup, lime for a VC, amber
+(`#e0a458`) for a spot. A VC's name carries a second line reading VC from zoom
+14. A spot with no logo gets a drawn glyph, a cup for a cafe and a beer
+otherwise, rather than initials. Icon size runs 0.4 at city zoom, 0.45 at 12.5,
+0.8 at 15. A tap calls `onCompanyTap(slug)` and flies in with a `[0, -130]`
+offset, without which the pin lands behind the sheet at pitch 60.
+
+Three data facts shaped this:
+
+- **Logos are vendored** by `scripts/fetch-logos.sh` into `public/logos/`, one
+  file per domain across every pin source. Each source's `logo` is a Google
+  favicon URL, which renders in an `<img>` but sends no CORS header, so its
+  pixels can never be read back off a canvas, which is what `addImage` needs.
+  Of the services that do send CORS, unavatar answered 20 of 39 with HTTP 429.
+  349 domains resolve; the rest draw a chip. Re-run the script when a source
+  file changes.
+- **Loading is demand-driven** through `setMissingStyleImageResolver`, which
+  MapLibre awaits before calling an image missing. Only pins actually on screen
+  fetch anything: 82 requests at city zoom, not 800, and no missing-image
+  warnings. A `styleimagemissing` listener logs one warning per pin instead.
+- **companies.json and vcs.json round coordinates to two decimals**, so dozens
+  of rows share a handful of points. Each group is fanned onto a ~660m ring,
+  smaller than the 1.1km error the rounding already carries.
+  `companies-osm.json` has real precision and is left alone.
+
+Chips carry no `backdrop-filter`. Ten blurred layers over the WebGL canvas is
+what stalls iOS Safari, so the glass is a layered translucent fill instead; the
+sheet and header keep their blur. Frame cost at city zoom with every pin kind
+on: 4.62ms mean per MapLibre draw, 8.0ms at p95, against a 16.7ms budget.
 
 ## Screenshots
 
-At 390x844 under the World chrome: `map-before.png`, `map-after.png`,
-`map-companies-city.png` and `map-companies-tapped.png` in
-`docs/design/shots/`.
+At 390x844 under the World chrome, in `docs/design/shots/`: `map-before.png`,
+`map-after.png`, `map-pins-city.png`, `map-companies-city.png` and
+`map-companies-tapped.png`.

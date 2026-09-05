@@ -24,6 +24,8 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { LANDMARKS } from '../data/landmarks';
 import type { FeatureCollection, Point } from 'geojson';
 import companiesJson from '../data/companies.json';
+import vcsJson from '../data/vcs.json';
+import osmJson from '../data/companies-osm.json';
 import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
@@ -84,6 +86,8 @@ interface BengaluruMapProps {
   agents: AgentSpec[];
   onPlaceTap?: (placeId: string) => void;
   onCompanyTap?: (slug: string) => void;
+  /** Which pin kinds to show. 'place' is the ten landmark chips. Default all. */
+  pinKinds?: PinKind[];
   /**
    * Landmark that gets the lime ring. Falls back to where the player's own
    * Echoe is walking, so the ring is right on Roaming even if the caller
@@ -245,81 +249,128 @@ const ZOOM_RANGE: [string, number, number][] = [
 // and at 14px it lands straight across the landmark cluster, so it goes.
 const HIDE = ['place_city_large'];
 
-/* ── Company logo pins ──────────────────────────────────────────────────
-   Symbol layer, not DOM markers, per docs/LOGO-PINS.md. Two things in the
-   seed data forced a decision:
-   1. companies.json rounds coordinates to two decimals, so 39 rows share only
-      15 points and up to six companies stack exactly. Each group is spread on
-      a small ring so every pin is reachable.
-   2. The seeded `logo` field is a Google favicon URL. It renders in an <img>
-      but serves no CORS header, so its pixels can never be read back off a
-      canvas, which is what addImage needs. Checked live from this origin:
-      google, duckduckgo and favicon.im all fail with crossOrigin, and the one
-      service that passes it (unavatar) answered 20 of 39 with HTTP 429. So the
-      logos are vendored same-origin by scripts/fetch-logos.sh instead. */
+/* ── Map pins: startups, VCs and spots ───────────────────────────
+   A symbol layer, not DOM markers, per docs/LOGO-PINS.md. Three facts about
+   the data shaped this:
+   1. Every source's `logo` is a Google favicon URL. It renders in an <img> but
+      serves no CORS header, so its pixels can never be read back off a canvas,
+      which is what addImage needs. Checked live from this origin: google,
+      duckduckgo and favicon.im all fail with crossOrigin, and the one service
+      that passes (unavatar) answered 20 of 39 with HTTP 429. Logos are
+      therefore vendored same-origin by scripts/fetch-logos.sh.
+   2. companies.json and vcs.json round coordinates to two decimals, so dozens
+      of rows share a handful of points. Each group is fanned onto a small ring.
+      companies-osm.json has real precision and is left alone.
+   3. companies-osm.json is 763 rows, so everything unfeatured is clustered. */
 
-interface CompanyRow {
-  name: string; domain: string; hq_area: string;
-  lat: number; lng: number; category: string; logo: string;
+export type PinKind = 'startup' | 'vc' | 'spot' | 'place';
+
+interface PinRow {
+  name: string;
+  domain?: string;
+  lat: number;
+  lng: number;
+  category?: string;
+  logo?: string;
+  kind?: PinKind;
+  featured?: boolean;
+  stage?: string;
 }
 
-const COMPANY_ROWS = companiesJson as CompanyRow[];
+// spots.json is still being generated. import.meta.glob resolves to an empty
+// object when nothing matches, which a static import cannot do without
+// breaking the build.
+const spotModules = import.meta.glob('../data/spots.json', { eager: true, import: 'default' });
+const spotsJson = (Object.values(spotModules)[0] ?? []) as PinRow[];
+
 const FEATURED_COUNT = 12;
 const BADGE_CHECK = 'badge-check';
 
-const companySlug = (domain: string) => domain.split('.')[0].toLowerCase().replace(/[^a-z0-9]/g, '-');
-const logoImageId = (slug: string) => `logo-${slug}`;
+const RING = { startup: '#ffffff', vc: LIME, spot: '#e0a458', place: '#ffffff' };
 
-/** Fans a stack of identical coordinates onto a ~390m ring, deterministically. */
-function spreadCoords(rows: CompanyRow[]): [number, number][] {
-  const out: [number, number][] = rows.map(r => [r.lng, r.lat]);
-  const groups = new Map<string, number[]>();
-  rows.forEach((r, i) => {
-    const key = `${r.lat},${r.lng}`;
+const slugOf = (row: PinRow) =>
+  (row.domain?.split('.')[0] ?? row.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+/** Fans a stack of identical coordinates onto a ~660m ring, deterministically. */
+function spreadCoords(rows: PinRow[]): void {
+  const groups = new Map<string, PinRow[]>();
+  for (const r of rows) {
+    // Only the two-decimal sources collide; anything finer is already distinct.
+    const key = `${r.lat.toFixed(2)},${r.lng.toFixed(2)}`;
     const g = groups.get(key);
-    if (g) g.push(i);
-    else groups.set(key, [i]);
-  });
-  // ~660m. Smaller than the 1.1km error the two-decimal rounding already
-  // carries, and enough to keep six logos apart at city zoom.
+    if (g) g.push(r);
+    else groups.set(key, [r]);
+  }
   const radius = 0.006;
   for (const members of groups.values()) {
     if (members.length < 2) continue;
-    members.forEach((i, n) => {
+    members.forEach((r, n) => {
       const angle = (2 * Math.PI * n) / members.length;
-      const lat = rows[i].lat + radius * Math.sin(angle);
-      const lng = rows[i].lng + (radius * Math.cos(angle)) / Math.cos((rows[i].lat * Math.PI) / 180);
-      out[i] = [lng, lat];
+      r.lat += radius * Math.sin(angle);
+      r.lng += (radius * Math.cos(angle)) / Math.cos((r.lat * Math.PI) / 180);
     });
   }
-  return out;
 }
 
-const COMPANY_COORDS = spreadCoords(COMPANY_ROWS);
+/** One flat list, de-duplicated by domain so OSM does not repeat the seed. */
+const PIN_ROWS: PinRow[] = (() => {
+  const seed = (companiesJson as PinRow[]).map((r, i) => ({ ...r, kind: 'startup' as const, featured: i < FEATURED_COUNT }));
+  const vcs = (vcsJson as PinRow[]).map(r => ({ ...r, kind: 'vc' as const, featured: true }));
+  const osm = (osmJson as PinRow[]).map(r => ({ ...r, kind: 'startup' as const }));
+  const spots = spotsJson.map(r => ({ ...r, kind: 'spot' as const }));
 
-const COMPANIES_GEOJSON: FeatureCollection = {
-  type: 'FeatureCollection',
-  features: COMPANY_ROWS.map((c, i) => ({
+  const out: PinRow[] = [];
+  const seen = new Set<string>();
+  for (const r of [...seed, ...vcs, ...spots, ...osm]) {
+    const key = `${r.kind}:${r.domain || r.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...r });
+  }
+  // Coordinates are mutated in place, which is why every row was copied above.
+  spreadCoords(out);
+  return out;
+})();
+
+/** image id -> row, so a chip can be drawn the moment the map asks for it. */
+const ROW_BY_IMAGE_ID = new Map<string, PinRow>();
+
+const featureFor = (row: PinRow) => {
+  let id = `pin-${row.kind}-${slugOf(row)}`;
+  for (let n = 2; ROW_BY_IMAGE_ID.has(id); n++) id = `pin-${row.kind}-${slugOf(row)}-${n}`;
+  ROW_BY_IMAGE_ID.set(id, row);
+  return {
     type: 'Feature' as const,
-    geometry: { type: 'Point' as const, coordinates: COMPANY_COORDS[i] },
+    geometry: { type: 'Point' as const, coordinates: [row.lng, row.lat] },
     properties: {
-      slug: companySlug(c.domain),
-      name: c.name,
-      domain: c.domain,
-      category: c.category,
-      area: c.hq_area,
-      logoId: logoImageId(companySlug(c.domain)),
-      featured: i < FEATURED_COUNT,
+      slug: slugOf(row),
+      name: row.name,
+      domain: row.domain ?? '',
+      category: row.category ?? '',
+      kind: row.kind as string,
+      stage: row.stage ?? '',
+      logoId: id,
     },
-  })),
+  };
 };
 
-/** logo image id -> row, so a missing image can be filled in on demand. */
-const ROW_BY_IMAGE_ID = new Map(
-  COMPANY_ROWS.map(c => [logoImageId(companySlug(c.domain)), c] as const)
-);
+// Only unfeatured startups cluster: they are the 700-row source. VCs and spots
+// stay whole so a cluster is always purely startups, which is what lets the
+// kind filter hide the cluster layers exactly rather than approximately.
+// ponytail: if spots.json lands in the hundreds too, give it its own clustered
+// source and layer pair rather than mixing kinds into this one.
+const isUnclustered = (r: PinRow) => r.kind !== 'startup' || !!r.featured;
 
-// Drawn at 2x and added with pixelRatio 2, so the 48px chip stays crisp.
+const PINS_MAIN: FeatureCollection = {
+  type: 'FeatureCollection',
+  features: PIN_ROWS.filter(isUnclustered).map(featureFor),
+};
+
+const PINS_REST: FeatureCollection = {
+  type: 'FeatureCollection',
+  features: PIN_ROWS.filter(r => !isUnclustered(r)).map(featureFor),
+};
+
 const CHIP_PX = 96;
 const CHIP_R = 44;
 
@@ -342,22 +393,27 @@ function strokeRing(ctx: CanvasRenderingContext2D, colour = '#ffffff') {
 
 const chipPixels = (ctx: CanvasRenderingContext2D) => ctx.getImageData(0, 0, CHIP_PX, CHIP_PX);
 
-/** Two letters on a dark disc. Used for a 404 and as the instant placeholder. */
-function initialsChip(name: string): ImageData {
+/** A dark disc with initials, or a glyph for a spot with no logo. */
+function fallbackChip(row: PinRow): ImageData {
   const ctx = chipContext();
   ctx.beginPath();
   ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
   ctx.fillStyle = '#182420';
   ctx.fill();
-  strokeRing(ctx);
-  const initials =
-    name.replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2)
-      .map(w => w[0]).join('').toUpperCase() || '?';
+  strokeRing(ctx, RING[row.kind ?? 'startup']);
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 34px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(initials, CHIP_PX / 2, CHIP_PX / 2 + 2);
+  if (row.kind === 'spot') {
+    ctx.font = '44px system-ui, sans-serif';
+    ctx.fillText(row.category === 'cafe' ? '\u2615' : '\u{1F37A}', CHIP_PX / 2, CHIP_PX / 2 + 2);
+  } else {
+    const initials =
+      row.name.replace(/[^a-zA-Z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2)
+        .map(w => w[0]).join('').toUpperCase() || '?';
+    ctx.font = '700 34px Inter, system-ui, sans-serif';
+    ctx.fillText(initials, CHIP_PX / 2, CHIP_PX / 2 + 2);
+  }
   return chipPixels(ctx);
 }
 
@@ -380,13 +436,14 @@ function checkChip(): ImageData {
   return chipPixels(ctx);
 }
 
-async function logoChip(slug: string): Promise<ImageData> {
+async function logoChip(row: PinRow): Promise<ImageData> {
+  const slug = slugOf(row);
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image();
     el.onload = () => resolve(el);
     el.onerror = () => reject(new Error(slug));
     // Same origin, so the canvas is never tainted and no CORS header is needed.
-    // Vendored by scripts/fetch-logos.sh; a missing file falls back to initials.
+    // Vendored by scripts/fetch-logos.sh; a missing file falls back to a chip.
     el.src = `/logos/${slug}.png`;
     setTimeout(() => reject(new Error(`timeout ${slug}`)), 8000);
   });
@@ -400,41 +457,60 @@ async function logoChip(slug: string): Promise<ImageData> {
   ctx.clip();
   ctx.drawImage(img, 6, 6, CHIP_PX - 12, CHIP_PX - 12);
   ctx.restore();
-  strokeRing(ctx);
+  strokeRing(ctx, RING[row.kind ?? 'startup']);
   return chipPixels(ctx);
 }
 
 /**
- * Six at a time, never awaited by the caller: the map paints immediately and
- * each pin sharpens from its initials placeholder as its logo lands.
+ * Demand-driven, so 800 favicons never start on load. MapLibre raises
+ * styleimagemissing only for an image a currently visible feature needs, which
+ * is the in-view rule for free; the browser's own six-per-origin cap is the
+ * batch size. The chip is drawn at once so the pin is never empty and the
+ * console never logs a missing image, then the logo replaces it if there is one.
  */
-async function loadCompanyImages(map: maplibregl.Map, alive: () => boolean): Promise<void> {
-  let next = 0;
-  const worker = async () => {
-    while (next < COMPANY_ROWS.length && alive()) {
-      const row = COMPANY_ROWS[next++];
-      const slug = companySlug(row.domain);
-      const id = logoImageId(slug);
-      let data: ImageData;
-      try {
-        data = await logoChip(slug);
-      } catch {
-        data = initialsChip(row.name);
-      }
-      if (!alive()) return;
-      try {
-        if (map.hasImage(id)) map.updateImage(id, data);
-        else map.addImage(id, data, { pixelRatio: 2 });
-      } catch {
-        // The map went away between the check and the write. Nothing to do.
-        return;
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: 6 }, worker));
+async function serveMissingImage(map: maplibregl.Map, id: string, alive: () => boolean): Promise<void> {
+  const row = ROW_BY_IMAGE_ID.get(id);
+  if (!row || map.hasImage(id)) return;
+  // Awaited by MapLibre, so nothing is ever reported missing: try the vendored
+  // logo first and fall back to a drawn chip.
+  let data: ImageData;
+  try {
+    data = row.logo ? await logoChip(row) : fallbackChip(row);
+  } catch {
+    data = fallbackChip(row);
+  }
+  if (!alive() || map.hasImage(id)) return;
+  map.addImage(id, data, { pixelRatio: 2 });
 }
 
-export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activePlaceId }: BengaluruMapProps) {
+const ALL_KINDS: PinKind[] = ['startup', 'vc', 'spot', 'place'];
+
+/**
+ * Filters the pin layers in place, never rebuilding a source. 'place' means the
+ * ten landmark chips, which are DOM markers, so they take a class instead.
+ * A cluster carries no kind, so the cluster layers are toggled whole. That is
+ * exact because pins-rest holds startups only.
+ */
+function applyPinKinds(map: maplibregl.Map, kinds: PinKind[], pins: Record<string, HTMLElement>): void {
+  const symbolKinds = kinds.filter(k => k !== 'place');
+  const kindFilter = symbolKinds.length
+    ? ['match', ['get', 'kind'], symbolKinds, true, false]
+    : ['==', ['get', 'kind'], '\u0000'];
+
+  if (map.getLayer('pin-featured')) map.setFilter('pin-featured', ['all', ['!=', ['get', 'kind'], 'spot'], kindFilter] as never);
+  if (map.getLayer('pin-spots')) map.setFilter('pin-spots', ['all', ['==', ['get', 'kind'], 'spot'], kindFilter] as never);
+  if (map.getLayer('pin-rest')) map.setFilter('pin-rest', ['all', ['!', ['has', 'point_count']], kindFilter] as never);
+
+  const clustersOn = kinds.includes('startup');
+  for (const id of ['pin-clusters', 'pin-cluster-count']) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', clustersOn ? 'visible' : 'none');
+  }
+
+  const placesOn = kinds.includes('place');
+  for (const el of Object.values(pins)) el.classList.toggle('map-pin--off', !placesOn);
+}
+
+export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activePlaceId, pinKinds = ALL_KINDS }: BengaluruMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const agentsRef = useRef<AgentSpec[]>(agents);
@@ -444,9 +520,11 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
   // The map is built once, so the handlers it closes over would be frozen at
   // their first-render values. This keeps the live ones reachable.
   const handlersRef = useRef({ onPlaceTap, onCompanyTap });
+  const kindsRef = useRef(pinKinds);
 
   agentsRef.current = agents;
   handlersRef.current = { onPlaceTap, onCompanyTap };
+  kindsRef.current = pinKinds;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -639,66 +717,109 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         );
       }
 
-      // Company logo pins, under the agents so a live Echoe always reads on top.
+      // Pins sit under the agents so a live Echoe always reads on top.
       if (!map.hasImage(BADGE_CHECK)) map.addImage(BADGE_CHECK, checkChip(), { pixelRatio: 2 });
-      // A layer referencing an image that has not arrived logs "image not
-      // found" per feature. Answering the event with the initials chip gives
-      // the pin something to draw immediately and keeps the console clean;
-      // loadCompanyImages then swaps in the real logo with updateImage.
-      map.on('styleimagemissing', (e: { id: string }) => {
-        const row = ROW_BY_IMAGE_ID.get(e.id);
-        if (!row || map.hasImage(e.id)) return;
-        map.addImage(e.id, initialsChip(row.name), { pixelRatio: 2 });
+      // The resolver is awaited before MapLibre calls an image missing, so this
+      // is silent where a styleimagemissing listener logs a warning per pin.
+      map.setMissingStyleImageResolver(id => serveMissingImage(map, id, () => alive));
+
+      map.addSource('pins', { type: 'geojson', data: PINS_MAIN });
+      map.addSource('pins-rest', {
+        type: 'geojson',
+        data: PINS_REST,
+        cluster: true,
+        clusterRadius: 40,
+        clusterMaxZoom: 14,
       });
 
-      map.addSource('companies', { type: 'geojson', data: COMPANIES_GEOJSON });
-
-      // 0.45 at 12.5 and 0.8 at 15 as specified; the low end reaches down to
+      // 0.45 at 12.5 and 0.8 at 15 as asked; the low end reaches down to
       // CITY_ZOOM because the city view is 11.95, not the 12.5 the spec assumed.
-      const companyIconSize = [
+      const pinIconSize = [
         'interpolate', ['linear'], ['zoom'], CITY_ZOOM, 0.4, 12.5, 0.45, 15, 0.8,
       ];
+      // The VC tag hangs under the name; an empty text-field places nothing, so
+      // labels simply begin at 14.
+      const pinLabel = [
+        'step', ['zoom'], '',
+        14, ['case', ['==', ['get', 'kind'], 'vc'], ['concat', ['get', 'name'], '\nVC'], ['get', 'name']],
+      ];
+      const pinText = {
+        'text-field': pinLabel as never,
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 10,
+        'text-offset': [0, 1.4] as [number, number],
+        'text-anchor': 'top' as const,
+        'text-optional': true,
+      };
+      const pinPaint = {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(2,6,4,0.95)',
+        'text-halo-width': 1.4,
+      };
 
+      // Featured startups, every VC and featured spots. Spots hold back to 13
+      // so the city view stays about companies.
       map.addLayer({
-        id: 'company-pins-featured',
+        id: 'pin-featured',
         type: 'symbol',
-        source: 'companies',
+        source: 'pins',
         minzoom: CITY_ZOOM - 0.05,
-        maxzoom: 13.5,
-        filter: ['==', ['get', 'featured'], true],
-        layout: {
-          'icon-image': ['get', 'logoId'],
-          'icon-size': companyIconSize as never,
-          // Only twelve, and they are the point of the city view, so they draw
-          // whatever else is in the way.
-          'icon-allow-overlap': true,
+        filter: ['!=', ['get', 'kind'], 'spot'],
+        layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, 'icon-allow-overlap': true, ...pinText },
+        paint: pinPaint,
+      });
+
+      map.addLayer({
+        id: 'pin-spots',
+        type: 'symbol',
+        source: 'pins',
+        minzoom: 13,
+        filter: ['==', ['get', 'kind'], 'spot'],
+        layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, ...pinText },
+        paint: pinPaint,
+      });
+
+      // Everything unfeatured, clustered. Glass to match the sheet, without a
+      // blur: this is a WebGL circle, so the fill and ring do the work.
+      map.addLayer({
+        id: 'pin-clusters',
+        type: 'circle',
+        source: 'pins-rest',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': 'rgba(16,22,18,0.82)',
+          'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 50, 24],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': 'rgba(255,255,255,0.3)',
         },
       });
 
       map.addLayer({
-        id: 'company-pins-all',
+        id: 'pin-cluster-count',
         type: 'symbol',
-        source: 'companies',
-        minzoom: 13.5,
+        source: 'pins-rest',
+        filter: ['has', 'point_count'],
         layout: {
-          'icon-image': ['get', 'logoId'],
-          'icon-size': companyIconSize as never,
-          // An empty text-field places no label, so the name simply starts at 14.
-          'text-field': ['step', ['zoom'], '', 14, ['get', 'name']],
+          'text-field': ['get', 'point_count_abbreviated'],
           'text-font': ['Noto Sans Regular'],
-          'text-size': 10,
-          'text-offset': [0, 1.4],
-          'text-anchor': 'top',
-          'text-optional': true,
+          'text-size': 11,
         },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(2,6,4,0.95)',
-          'text-halo-width': 1.4,
-        },
+        paint: { 'text-color': '#ffffff' },
       });
 
-      map.on('click', ['company-pins-featured', 'company-pins-all'], (e) => {
+      map.addLayer({
+        id: 'pin-rest',
+        type: 'symbol',
+        source: 'pins-rest',
+        minzoom: 13.5,
+        filter: ['!', ['has', 'point_count']],
+        layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, ...pinText },
+        paint: pinPaint,
+      });
+
+      const PIN_LAYERS = ['pin-featured', 'pin-spots', 'pin-rest'];
+
+      map.on('click', PIN_LAYERS, (e) => {
         const feature = e.features?.[0];
         if (!feature) return;
         const [lng, lat] = (feature.geometry as Point).coordinates as [number, number];
@@ -712,8 +833,16 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         handlersRef.current.onCompanyTap?.(String(feature.properties?.slug ?? ''));
       });
 
-      // Deliberately not awaited: first paint must not wait on 39 logo fetches.
-      void loadCompanyImages(map, () => alive);
+      // Documented cluster tap: expand to the zoom that breaks it apart.
+      map.on('click', 'pin-clusters', async (e) => {
+        const [feature] = map.queryRenderedFeatures(e.point, { layers: ['pin-clusters'] });
+        if (!feature) return;
+        const source = map.getSource('pins-rest') as maplibregl.GeoJSONSource;
+        const zoom = await source.getClusterExpansionZoom(feature.properties!.cluster_id as number);
+        map.easeTo({ center: (feature.geometry as Point).coordinates as [number, number], zoom });
+      });
+
+      applyPinKinds(map, kindsRef.current, pinsRef.current);
 
       map.addSource(AGENTS_SOURCE_ID, {
         type: 'geojson',
@@ -838,7 +967,9 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
             let badgeIcon: string | undefined;
             if (agent.badge === 'domain') badgeIcon = BADGE_CHECK;
             else if (agent.badge) {
-              const id = logoImageId(agent.badge);
+              // Reuses the pin sprite when that company is on the map, so the
+              // badge is the real logo rather than a second copy of it.
+              const id = `pin-startup-${agent.badge}`;
               badgeIcon = map.hasImage(id) ? id : BADGE_CHECK;
             }
             return {
@@ -878,6 +1009,14 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
   // Lime ring on the place the player is at. classList.toggle with an explicit
   // force is a no-op when the class is already in the right state, so this is
   // free on the renders where nothing moved.
+  // Re-filter when the World filter row changes. Keyed on the joined value so a
+  // fresh array with the same kinds does not re-run it.
+  const kindsKey = pinKinds.join(',');
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && map.getLayer('pin-featured')) applyPinKinds(map, kindsRef.current, pinsRef.current);
+  }, [kindsKey]);
+
   useEffect(() => {
     const here = activePlaceId ?? agents.find(a => a.isMine)?.toPlace;
     for (const [id, el] of Object.entries(pinsRef.current)) {

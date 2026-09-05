@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react';
-import BengaluruMap, { type AgentSpec } from '../map/BengaluruMap';
+import BengaluruMap, { type AgentSpec, type PinKind } from '../map/BengaluruMap';
 import { MapPins } from './MapPins';
 
 /**
@@ -18,7 +18,7 @@ class MapBoundary extends Component<{ fallback: ReactNode; children: ReactNode }
   }
 }
 
-export type PinKind = 'startup' | 'vc' | 'spot' | 'place';
+export type { PinKind } from '../map/BengaluruMap';
 
 interface MapSlotProps {
   agents: AgentSpec[];
@@ -27,8 +27,7 @@ interface MapSlotProps {
   onPlaceTap?: (placeId: string) => void;
 }
 
-// pinKinds is accepted and not yet forwarded; see the TODO below.
-export function MapSlot({ agents, activePlaceId, onPlaceTap }: MapSlotProps) {
+export function MapSlot({ agents, activePlaceId, pinKinds, onPlaceTap }: MapSlotProps) {
   return (
     <div id="map-slot">
       <MapBoundary
@@ -39,8 +38,7 @@ export function MapSlot({ agents, activePlaceId, onPlaceTap }: MapSlotProps) {
           </>
         }
       >
-        {/* TODO: pass pinKinds={pinKinds} once BengaluruMap accepts the prop. */}
-        <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} activePlaceId={activePlaceId} />
+        <BengaluruMap agents={agents} onPlaceTap={onPlaceTap} activePlaceId={activePlaceId} pinKinds={pinKinds} />
       </MapBoundary>
       {/* The OpenFreeMap "liberty" basemap is light. This sinks it to obsidian
           without touching the map component. */}

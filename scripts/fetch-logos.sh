@@ -15,19 +15,36 @@ set -euo pipefail
 CURL=/usr/bin/curl
 JQ=/usr/bin/jq
 ROOT="$(dirname "$0")/.."
-SRC="$ROOT/src/data/companies.json"
 OUT="$ROOT/public/logos"
+
+# Every pin source. Missing files are skipped, so this stays runnable while
+# spots.json is still being generated.
+SRCS="companies.json vcs.json companies-osm.json spots.json"
 
 mkdir -p "$OUT"
 
 ok=0
 missing=0
+skipped=0
+
+domains() {
+  for f in $SRCS; do
+    [ -f "$ROOT/src/data/$f" ] || continue
+    "$JQ" -r '.[] | select(.domain != null and .domain != "") | [.domain, .name] | @tsv' "$ROOT/src/data/$f"
+  done | sort -u -t$'\t' -k1,1
+}
 
 while IFS=$'\t' read -r domain name; do
   [ -z "$domain" ] && continue
   slug=$(echo "${domain%%.*}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '-')
   slug=${slug%-}
   dest="$OUT/${slug}.png"
+
+  # Already vendored on an earlier run.
+  if [ -f "$dest" ]; then
+    skipped=$((skipped + 1))
+    continue
+  fi
 
   # Google 404s an unknown domain rather than serving a generic globe, so -f is
   # the whole check. Do not filter on file size: a simple mark like Zerodha's
@@ -41,6 +58,6 @@ while IFS=$'\t' read -r domain name; do
     echo "  no favicon, falls back to initials: $name ($domain)" >&2
     missing=$((missing + 1))
   fi
-done < <("$JQ" -r '.[] | [.domain, .name] | @tsv' "$SRC")
+done < <(domains)
 
-echo "wrote $ok logos to $OUT ($missing fall back to an initials chip)" >&2
+echo "wrote $ok logos to $OUT ($skipped already there, $missing fall back to an initials chip)" >&2
