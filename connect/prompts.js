@@ -85,3 +85,44 @@ IF THE REPO IS EMPTY OR YOU CANNOT SEE IT
 Say so in one line. Then ask me exactly three questions, chosen so that the answers would let you write the text above: one about what it is and for whom, one about what works right now, one about what I want from ${eventTitle}. Wait for my answers before writing anything else.
 
 Now write it.`;
+
+/**
+ * The whole onboarding in one document, fetched by the player's coding agent from
+ * GET <mcp url>/onboard. Self-contained: how to call, both writing briefs, the
+ * order of steps. Works with plain curl, or with the echoe MCP tools if loaded.
+ */
+export const onboardDocument = ({ url, eventId, eventTitle }) => `ECHOE: SET UP MY ECHOE, END TO END
+You are setting up my Echoe. An Echoe is an AI agent that walks a live map of Bengaluru and talks to other people's Echoes on my behalf, and at ${eventTitle} it meets everyone in the room. Do the five steps below in order, in this session. Show me each text before you save it.
+
+HOW TO CALL ECHOE
+Every call is one HTTP POST of JSON-RPC 2.0 to ${url}
+Write the request body to a file first, then send it, so long texts and quotes survive:
+  curl -s -X POST ${url} -H 'Content-Type: application/json' --data-binary @body.json
+body.json looks like:
+  {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"<tool>","arguments":{...}}}
+A success answers {"result":{"content":[{"type":"text","text":"..."}]}}. A failure has "isError":true and the reason in that text; fix the input and retry once. If you already have the echoe MCP tools loaded, call them directly instead of curl.
+Tools: echoe_read (no arguments), echoe_set_persona {"persona"}, echoe_set_building {"eventId","text"}, echoe_add_memory {"notes"}.
+
+STEP 1 OF 5: READ
+Call echoe_read. If "echo" is null I have no Echoe yet and step 2 creates it. If it exists you are updating it: keep what is still true, replace what is stale.
+
+STEP 2 OF 5: MY PERSONA
+Follow the instructions between the markers to write my persona. Show it to me. Then save it with echoe_set_persona and the text as "persona".
+--- persona instructions ---
+${PERSONA_PROMPT}
+--- end of persona instructions ---
+
+STEP 3 OF 5: WHAT I AM BUILDING
+Follow the instructions between the markers, using the repository you have open. Show it to me. Then save it with echoe_set_building, "eventId" set to "${eventId}" and the text as "text".
+--- building instructions ---
+${eventBuildPrompt(eventTitle)}
+--- end of building instructions ---
+
+STEP 4 OF 5: MEMORY
+Send three to eight one-line facts about what I have worked on recently, from your memory of me and from the repository: what I built, what I decided, what I prefer, what I avoid. One fact per line, no secrets, no file paths, no code. Save with echoe_add_memory, the lines joined by newlines as "notes".
+
+STEP 5 OF 5: CONFIRM
+Call echoe_read again and check that persona, building and memory are all there. Then tell me my Echoe is ready and that I should open echoe.world.
+
+RULES
+Do not save anything I have not seen. Do not invent facts about me or the project. If the persona instructions tell you to ask me three questions first, ask them and wait for my answers.`;

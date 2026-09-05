@@ -75,35 +75,16 @@ export const FREE_CONVERSATIONS = 5;
 /** localStorage key for the client-generated coding-agent link token. */
 export const AGENT_TOKEN_KEY = 'echoe/agent-token';
 
-export const AGENT_CONNECT_WHY =
-  'Every night your own Claude Code or Codex writes 3 to 8 lines about what you built. Only ' +
-  'those lines reach your Echoe. Transcripts never leave your machine.';
-
-export const agentConnectCommand = (token: string): string => `npx echoe-connect ${token}`;
-
-/** Exact text to paste into a coding agent's chat, token substituted. */
-export const agentConnectPaste = (token: string): string =>
-  `Run \`npx echoe-connect ${token}\` in this shell. It installs a nightly 22:00 cron that ` +
-  `summarises my coding day with you and sends only those few lines to my Echoe. Then run ` +
-  `\`crontab -l | grep echoe-connect\` and show me the line. Do not read, change, or send ` +
-  `anything else.`;
-
 export const AGENT_MCP_WHY =
-  'Your Claude Code or Codex already knows you and has your repo open. Let it write your ' +
-  'persona and what you are building, then keep your Echoe updated.';
+  'Your Claude Code or Codex already knows you and has your repo open. Paste one line into it ' +
+  'and it writes your persona and what you are building, saves both, and keeps your Echoe updated.';
 
 /** Hosted MCP: api/mcp/[token].js speaks the same JSON-RPC as `npx echoe-connect mcp`, nothing to install. */
 export const MCP_BASE = 'https://www.echoe.world/mcp'; // the apex 308s to www, and MCP clients do not follow redirects on POST
 
-export const claudeMcpCommand = (token: string): string =>
-  `claude mcp add --transport http echoe ${MCP_BASE}/${token}`;
-
-export const codexMcpCommand = (token: string): string =>
-  `codex mcp add echoe --url ${MCP_BASE}/${token}`;
-
-export const AGENT_MCP_PASTE =
-  'Use the echoe MCP onboard prompt for Midnight Moonshot and do what it says. Show me each ' +
-  'text before you save it.';
+/** The one thing a player pastes into their agent. The document at that URL carries every step. */
+export const agentOnboardPaste = (token: string): string =>
+  `Fetch ${MCP_BASE}/${token}/onboard and follow it exactly, step by step. Show me each text before you save it.`;
 
 export const AGENT_SOURCE_LABEL: Record<string, string> = {
   'claude-code': 'Claude Code',

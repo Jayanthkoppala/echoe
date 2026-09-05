@@ -335,3 +335,16 @@ console.log('\nall passed');
   assert.equal(bad.error.code, -32601);
   console.log('ok  hosted dispatch: single, batch, notification, unknown method');
 }
+
+// ---- the one-paste onboarding document ---------------------------------------
+{
+  const { onboardDocument, PERSONA_PROMPT } = await import('./prompts.js');
+  const doc = onboardDocument({ url: 'https://www.echoe.world/mcp/abc', eventId: 'spacetimedb-midnight-moonshot', eventTitle: 'Midnight Moonshot' });
+  assert.ok(doc.includes('https://www.echoe.world/mcp/abc'));
+  assert.ok(doc.includes(PERSONA_PROMPT));
+  assert.ok(doc.includes('for the people my Echoe meets at Midnight Moonshot'));
+  assert.ok(doc.includes('"spacetimedb-midnight-moonshot"'));
+  for (const tool of ['echoe_read', 'echoe_set_persona', 'echoe_set_building', 'echoe_add_memory']) assert.ok(doc.includes(tool), tool);
+  assert.ok(doc.split(/\s+/).length > 2300, 'carries both briefs in full');
+  console.log('ok  onboard document carries url, both briefs, the event id and all four tools');
+}

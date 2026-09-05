@@ -3,6 +3,7 @@
 //   claude mcp add --transport http echoe https://www.echoe.world/mcp/<token>
 // and nothing is installed. Stateless streamable HTTP: one request, one answer.
 import { context, handle } from '../../connect/mcp.js';
+import { onboardDocument } from '../../connect/prompts.js';
 
 const HOST = (process.env.SPACETIMEDB_HTTP_HOST || 'https://maincloud.spacetimedb.com').replace(/\/+$/, '');
 const DB = process.env.SPACETIMEDB_DB_NAME || process.env.VITE_SPACETIMEDB_DB_NAME || 'echoe';
@@ -12,6 +13,8 @@ const DB = process.env.SPACETIMEDB_DB_NAME || process.env.VITE_SPACETIMEDB_DB_NA
 const OWNER_TOKEN = process.env.SPACETIMEDB_TOKEN;
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{16,128}$/;
+const MCP_BASE = 'https://www.echoe.world/mcp';
+const EVENT = { id: 'spacetimedb-midnight-moonshot', title: 'Midnight Moonshot' }; // ponytail: one event; take ?event= when there are two
 
 /** Identities come back from the SQL endpoint as ["0x…"]; unwrap one row. */
 export const ownerFromRows = rows => rows[0]?.[0]?.[0] ?? null;
@@ -43,9 +46,10 @@ export async function dispatch(body, ctx) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
+  const wantsDoc = req.method === 'GET' && req.query?.doc === 'onboard';
+  if (req.method !== 'POST' && !wantsDoc) {
     res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'POST JSON-RPC to this URL' });
+    return res.status(405).json({ error: 'POST JSON-RPC to this URL, or GET <url>/onboard for the instructions' });
   }
   const token = String(req.query?.token ?? '');
   if (!TOKEN_RE.test(token)) return res.status(404).json({ error: 'bad_token' });
@@ -58,6 +62,12 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: error.message });
   }
   if (!owner) return res.status(404).json({ error: 'bad_token' });
+
+  if (wantsDoc) {
+    // The one paste a player gives their agent points here; the document carries everything else.
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.status(200).send(onboardDocument({ url: `${MCP_BASE}/${token}`, eventId: EVENT.id, eventTitle: EVENT.title }));
+  }
 
   let body = req.body;
   if (typeof body === 'string') {

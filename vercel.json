@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/mcp/:token/onboard",
+      "destination": "/api/mcp/:token?doc=onboard"
+    },
+    {
       "source": "/mcp/:token",
       "destination": "/api/mcp/:token"
     },
@@ -9,4 +13,4 @@
       "destination": "/index.html"
     }
   ]
-}
+}\n
