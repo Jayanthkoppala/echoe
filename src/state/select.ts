@@ -6,6 +6,7 @@ import type { AgentSpec } from '../map/BengaluruMap';
 import { LANDMARKS } from '../data/landmarks';
 import spotsJson from '../data/spots.json';
 
+import AgentMemorySchema from '../module_bindings/agent_memory_table';
 import AgentTravelSchema from '../module_bindings/agent_travel_table';
 import CompanySchema from '../module_bindings/company_table';
 import ConversationSchema from '../module_bindings/conversation_table';
@@ -17,8 +18,9 @@ import ReceiptSchema from '../module_bindings/receipt_table';
 import RunSchema from '../module_bindings/run_table';
 import TranscriptLineSchema from '../module_bindings/transcript_line_table';
 
-import { AVATAR_COLOUR, behaviourFrom } from './copy';
+import { avatarColour, behaviourFrom } from './copy';
 import type {
+  AgentNote,
   Badge,
   MeetAt,
   Correction,
@@ -32,6 +34,7 @@ import type {
   TranscriptLine,
 } from './types';
 
+export type AgentMemoryRow = Infer<typeof AgentMemorySchema>;
 export type AgentTravelRow = Infer<typeof AgentTravelSchema>;
 export type CompanyRow = Infer<typeof CompanySchema>;
 export type ConversationRow = Infer<typeof ConversationSchema>;
@@ -100,14 +103,19 @@ export function meetAtFor(placeA: number, placeB: number): MeetAt | undefined {
   };
 }
 
-function nearestLandmarkName(lat: number, lng: number): string {
+/** Closest of the ten landmarks, with the distance so callers can gate on it. */
+export function nearestLandmark(lat: number, lng: number) {
   let best = LANDMARKS[0];
   let bestKm = Infinity;
   for (const mark of LANDMARKS) {
     const km = haversineKm(lat, lng, mark.lat, mark.lng);
     if (km < bestKm) { bestKm = km; best = mark; }
   }
-  return best.name;
+  return { ...best, km: bestKm };
+}
+
+function nearestLandmarkName(lat: number, lng: number): string {
+  return nearestLandmark(lat, lng).name;
 }
 
 /** Timestamps arrive as microseconds since the epoch, in a bigint. */
@@ -122,7 +130,7 @@ export const placeIndexOf = (landmarkId: string): number => {
   return index < 0 ? 0 : index;
 };
 
-export const avatarColour = (avatar: string): string => AVATAR_COLOUR[avatar] ?? '#f4b857';
+export { avatarColour };
 
 /** The one join from a player to their company, used by every badge surface. */
 export function badgeOf(
@@ -176,7 +184,7 @@ export function hostCardFrom(
   const daysLeft = Math.max(0, Math.ceil((msOf(intent.expiresAt) - nowMs) / 86_400_000));
   return {
     name: host?.name ?? 'Someone',
-    avatar: host?.avatar ?? 'circle',
+    avatar: host?.avatar ?? '',
     intent: intent.text,
     expiresInDays: daysLeft,
     badge: badgeOf(host, companies),
@@ -214,7 +222,8 @@ export function agentsFrom(
       id: `${leg.echoId}-${leg.id}`,
       label: player?.name ?? 'Echoe',
       colour:
-        leg.echoId === hostEchoId ? '#d7f06c' : avatarColour(player?.avatar ?? 'circle'),
+        leg.echoId === hostEchoId ? '#d7f06c' : avatarColour(player?.avatar),
+      avatar: player?.avatar ?? '',
       fromPlace: landmarkOf(leg.fromPlace).id,
       toPlace: landmarkOf(leg.toPlace).id,
       departMs: msOf(leg.departTs),
@@ -246,7 +255,7 @@ export function rankedMatches(
       return {
         conversationId: String(row.id),
         name: other?.name ?? 'An Echoe',
-        avatar: other?.avatar ?? 'circle',
+        avatar: other?.avatar ?? '',
         score: row.score,
         why: row.why,
         placeName: landmarkOf(row.placeId).name,
@@ -319,6 +328,18 @@ export function correctionsFor(
       typedRule: row.behaviourChange.trim() !== behaviourFrom(row.shouldHaveSaid),
       at: msOf(row.appliedAt),
     }));
+}
+
+/** What a connected coding agent has told this Echoe, newest first. */
+export function agentMemoryFrom(
+  rows: readonly AgentMemoryRow[],
+  echoId: bigint | undefined,
+): AgentNote[] {
+  if (echoId === undefined) return [];
+  return rows
+    .filter(row => row.echoId === echoId)
+    .sort((a, b) => (a.id < b.id ? 1 : -1))
+    .map(row => ({ id: String(row.id), day: row.day, source: row.source, note: row.note }));
 }
 
 /**

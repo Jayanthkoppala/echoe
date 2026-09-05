@@ -11,6 +11,7 @@ export type ScreenName =
   | 'review'
   | 'correct'
   | 'profile'
+  | 'events'
   | 'connect'
   | 'talks'
   | 'done';

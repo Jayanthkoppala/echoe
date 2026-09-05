@@ -10,6 +10,7 @@ import type { HostCard, Player, Run, ScreenProps } from '../state/types';
 
 interface WorldScreenProps extends ScreenProps {
   onAdjustLimits: () => void;
+  onTalks: () => void;
   hostCard?: HostCard;
   player?: Player;
   run?: Run;
@@ -38,6 +39,7 @@ export function WorldScreen({
   actions,
   go,
   onAdjustLimits,
+  onTalks,
   hostCard,
   player,
   run,
@@ -67,9 +69,12 @@ export function WorldScreen({
             <span className="brand-mark">E</span> Bengaluru
           </div>
           <span className="step-count">{onlineCount} online</span>
+          <button className="pin-pill glass events-btn" onClick={() => go('events')}>
+            Events
+          </button>
           <ProfileButton
             name={player?.name ?? '?'}
-            avatar={player?.avatar ?? 'circle'}
+            avatar={player?.avatar ?? ''}
             onClick={onProfile}
           />
         </header>
@@ -84,6 +89,9 @@ export function WorldScreen({
         ) : (
           <ShareCard intent={intent} shareId={shareId} mission={mission} variant="pinned" />
         )}
+        <button className="talks-fab glass" onClick={onTalks} aria-label="Conversations" title="Conversations">
+          💬
+        </button>
 
         <div className="map-bottom">
         <div className="pin-filter">
