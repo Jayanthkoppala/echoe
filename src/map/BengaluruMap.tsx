@@ -10,6 +10,13 @@
 //    with `curl -sI` (both return HTTP 200)
 import { useEffect, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
+// MapLibre 6 spawns its tile worker from a URL relative to its own module, which
+// a bundler cannot resolve (see the v5 to v6 migration guide). Under Vite the
+// documented fix is to bundle the worker with ?worker&url and register it once.
+// Without this the worker 404s, no tile is ever requested, and the map is black.
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+
+maplibregl.setWorkerUrl(workerUrl);
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { LANDMARKS } from '../data/landmarks';
 import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
