@@ -1,7 +1,6 @@
 import { MapSlot } from '../components/MapSlot';
 import { ProfileButton } from '../components/ProfileButton';
 import type { AgentSpec } from '../map/BengaluruMap';
-import { usd } from '../state/copy';
 import type { Player, Run, ScreenProps } from '../state/types';
 
 interface RoamingScreenProps extends ScreenProps {
@@ -24,7 +23,6 @@ export function RoamingScreen({
   agents,
 }: RoamingScreenProps) {
   const paused = run?.status === 'paused';
-  const spent = usd(run?.spentUsd ?? 0);
 
   const met = run?.peopleMet ?? 0;
   const places = run?.placesVisited ?? 0;
@@ -63,7 +61,7 @@ export function RoamingScreen({
                 {met === 1 ? 'Echoe' : 'Echoes'} met
               </p>
             </div>
-            <span className="credit-pill">{spent}</span>
+            <span className="credit-pill">{met} met</span>
           </div>
 
           <div className="roam-stats">

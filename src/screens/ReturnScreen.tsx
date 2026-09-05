@@ -2,7 +2,7 @@ import { ShareCard } from '../components/ShareCard';
 import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { TopBar } from '../components/TopBar';
-import { avatarColour, avatarGlyph, RECEIPT_ICON, usd } from '../state/copy';
+import { avatarColour, avatarGlyph, RECEIPT_ICON } from '../state/copy';
 import { useMounted } from '../state/useMounted';
 import type { Badge, Match, Player, Receipt, Run, ScreenProps } from '../state/types';
 
@@ -156,7 +156,6 @@ export function ReturnScreen({
                 <strong>{receipt.text}</strong>
                 <span>{receipt.placeName}</span>
               </div>
-              <b className="event-cost">{receipt.costUsd > 0 ? usd(receipt.costUsd) : 'free'}</b>
             </div>
           ))}
         </div>
