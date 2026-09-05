@@ -7,10 +7,13 @@ import type { AgentSpec } from '../map/BengaluruMap';
 import { landmarkById } from '../data/landmarks';
 import { useMounted } from '../state/useMounted';
 import { dayLabel } from './EventsScreen';
-import type { HostCard, Player, Run, ScreenProps } from '../state/types';
+import { nearestLandmark } from '../state/select';
+import type { HostCard, Player, Run, ScreenName, ScreenProps } from '../state/types';
 
 interface WorldScreenProps extends ScreenProps {
+  /** Opens the Start page (the old Limits screen). */
   onAdjustLimits: () => void;
+  onJoinEvent: (eventId: string, title: string, from: ScreenName) => void;
   onTalks: () => void;
   hostCard?: HostCard;
   player?: Player;
@@ -20,6 +23,9 @@ interface WorldScreenProps extends ScreenProps {
   shareId: string;
   mission: string;
   onlineCount: number;
+  /** Echoes joined per event id, and the ids this player joined. */
+  eventCounts: Record<string, number>;
+  myEvents: Set<string>;
   onProfile: () => void;
 }
 
@@ -41,6 +47,7 @@ export function WorldScreen({
   actions,
   go,
   onAdjustLimits,
+  onJoinEvent,
   onTalks,
   hostCard,
   player,
@@ -50,6 +57,8 @@ export function WorldScreen({
   shareId,
   mission,
   onlineCount,
+  eventCounts,
+  myEvents,
   onProfile,
 }: WorldScreenProps) {
   const mounted = useMounted();
@@ -57,7 +66,7 @@ export function WorldScreen({
   // What and where, for the event pin last tapped.
   const [eventPin, setEventPin] = useState<EventPin | null>(null);
   // "Watch it roam" follows my Echoe on this map; the status page is for pausing and coming home.
-  const [follow, setFollow] = useState(0);
+  const [follow, setFollow] = useState(1); // follow my Echoe from the first frame
   const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
   // HostCard exposes no live/online field, so approximate "host is home" using
   // this run's own state: still walking only while the run is running and
@@ -65,6 +74,8 @@ export function WorldScreen({
   // from the host's own run) would let this reflect the host directly.
   const hostLive = run?.status === 'running' && !run?.hostMet;
   const justArrived = !run || (run.peopleMet === 0 && run.placesVisited === 0);
+  // No run, or a finished one, means the sheet is a launcher, not a controller.
+  const live = Boolean(run) && run?.status !== 'ended';
 
   return (
     <div className="screen screen--map">
@@ -132,7 +143,31 @@ export function WorldScreen({
               {eventPin.address ? `, ${eventPin.address}` : `, ${eventPin.area}`}
               {eventPin.approx ? ' (area only)' : ''}
             </p>
+            <p className="event-where">
+              <strong>{eventCounts[eventPin.id] ?? 0}</strong>{' '}
+              {(eventCounts[eventPin.id] ?? 0) === 1 ? 'Echoe has' : 'Echoes have'} joined
+            </p>
             <div className="event-actions">
+              {myEvents.has(eventPin.id) ? (
+                <button className="share-btn" onClick={() => actions.onLeaveEvent(eventPin.id)}>
+                  Joined ✓
+                </button>
+              ) : (
+                <button
+                  className="handoff-btn"
+                  onClick={() => onJoinEvent(eventPin.id, eventPin.title, 'world')}
+                >
+                  Join with my Echoe
+                </button>
+              )}
+              {nearestLandmark(eventPin.lat, eventPin.lng).km <= 6 ? (
+                <button
+                  className="share-btn"
+                  onClick={() => { actions.onTravel(nearestLandmark(eventPin.lat, eventPin.lng).id); setEventPin(null); }}
+                >
+                  Send my Echoe
+                </button>
+              ) : null}
               <a className="share-btn" href={eventPin.url} target="_blank" rel="noreferrer noopener">
                 Open
               </a>
@@ -159,12 +194,14 @@ export function WorldScreen({
               <h3 className="location-name">{placeName}</h3>
               <VerifiedBadge badge={player?.badge} />
             </div>
-            <span className="credit-pill">
-              {run?.peopleMet ?? 0} {(run?.peopleMet ?? 0) === 1 ? 'person' : 'people'} met
-            </span>
+            {live ? (
+              <span className="credit-pill">
+                {run?.placesVisited ?? 0} places · {run?.peopleMet ?? 0} people
+              </span>
+            ) : null}
           </div>
 
-          {justArrived ? (
+          {live && justArrived ? (
             <p className="connect-status">
               Your Echoe is out. It walks the city, talks to other Echoes, and comes back with
               names. Follow it, or come back in three minutes.
@@ -175,25 +212,33 @@ export function WorldScreen({
             <ShareCard intent={intent} shareId={shareId} variant="inline" />
           ) : null}
 
-          <div className="sheet-cta">
-            <button className="handoff-btn" onClick={() => setFollow(n => n + 1)}>
-              {hostCard ? 'Watch them meet →' : 'Watch it roam →'}
-            </button>
-            <button className="ghost-btn" onClick={onAdjustLimits}>
-              Adjust limits
-            </button>
-            {run && run.status !== 'ended' ? (
-              <button
-                className="ghost-btn"
-                onClick={() => {
-                  actions.onPause();
-                  go('roaming');
-                }}
-              >
-                {run.status === 'paused' ? 'Resume' : 'Pause'}
+          {live ? (
+            <div className={run?.status === 'paused' ? 'sheet-cta sheet-cta--three' : 'sheet-cta'}>
+              <button className="handoff-btn" onClick={() => setFollow(n => n + 1)}>
+                {hostCard ? 'Watch them meet →' : 'Watch it roam →'}
               </button>
-            ) : null}
-          </div>
+              {run?.status === 'paused' ? (
+                <>
+                  <button className="ghost-btn" onClick={() => actions.onResume()}>
+                    Resume
+                  </button>
+                  <button className="ghost-btn ghost-btn--small" onClick={() => actions.onEndRun()}>
+                    Stop
+                  </button>
+                </>
+              ) : (
+                <button className="ghost-btn" onClick={() => actions.onPause()}>
+                  Pause
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="sheet-cta sheet-cta--one">
+              <button className="handoff-btn" onClick={onAdjustLimits}>
+                Start
+              </button>
+            </div>
+          )}
         </div>
         </div>
       </div>

@@ -10,8 +10,9 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  goal: __t.string(),
-  avoid: __t.string(),
-  hostShareId: __t.string(),
-};
+export default __t.row({
+  key: __t.string().primaryKey(),
+  conversationId: __t.u64().name("conversation_id"),
+  identity: __t.identity(),
+  revealedAt: __t.timestamp().name("revealed_at"),
+});

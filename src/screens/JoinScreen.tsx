@@ -41,8 +41,8 @@ export function JoinScreen({ actions, connected, hostCard, hostLinkExpired }: Jo
             {hostCard ? 'Send your Echoe to meet theirs.' : 'Send an Echoe into Bengaluru.'}
           </h2>
           <p className="join-pitch">
-            For everyone in this hall who wants to meet the right person tonight without a
-            single cold DM.
+            For founders and builders new to Bengaluru who want to meet the right person tonight,
+            without a single cold DM.
           </p>
           <p className="join-pitch">
             It walks the city, talks to other Echoes, comes back with names.

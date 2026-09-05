@@ -52,7 +52,15 @@ export const dayLabel = (date: string): string => {
 
 const isFree = (price: string) => /free/i.test(price.trim()) || price.trim() === '';
 
-export function EventsScreen({ actions, go, backTo }: ScreenProps & { backTo: ScreenName }) {
+interface EventsScreenProps extends ScreenProps {
+  backTo: ScreenName;
+  onJoinEvent: (eventId: string, title: string, from: ScreenName) => void;
+  /** Echoes joined per event id, and the ids this player joined. */
+  eventCounts: Record<string, number>;
+  myEvents: Set<string>;
+}
+
+export function EventsScreen({ actions, go, backTo, onJoinEvent, eventCounts, myEvents }: EventsScreenProps) {
   const [filter, setFilter] = useState('All');
 
   const wanted = FILTERS[filter];
@@ -89,6 +97,8 @@ export function EventsScreen({ actions, go, backTo }: ScreenProps & { backTo: Sc
               {shown
                 .filter(e => e.date === day)
                 .map(event => {
+                  const joined = eventCounts[event.id] ?? 0;
+                  const mine = myEvents.has(event.id);
                   const near = nearestLandmark(event.lat, event.lng);
                   const reachable = near.km <= 6;
                   return (
@@ -116,6 +126,9 @@ export function EventsScreen({ actions, go, backTo }: ScreenProps & { backTo: Sc
                       </p>
                       {event.summary ? <p className="event-summary">{event.summary}</p> : null}
 
+                      <p className="event-where">
+                        <strong>{joined}</strong> {joined === 1 ? 'Echoe has' : 'Echoes have'} joined
+                      </p>
                       <div className="event-actions">
                         <a
                           className="share-btn"
@@ -127,11 +140,18 @@ export function EventsScreen({ actions, go, backTo }: ScreenProps & { backTo: Sc
                         </a>
                         <button
                           className="share-btn share-btn--main"
-                          onClick={() => actions.onTravel(near.id)}
-                          disabled={!reachable}
+                          onClick={() =>
+                            mine ? actions.onLeaveEvent(event.id) : onJoinEvent(event.id, event.title, 'events')
+                          }
+                          aria-pressed={mine}
                         >
-                          {reachable ? 'Send my Echoe' : 'Out of town'}
+                          {mine ? 'Joined ✓' : 'Join with my Echoe'}
                         </button>
+                        {reachable ? (
+                          <button className="share-btn" onClick={() => actions.onTravel(near.id)}>
+                            Send my Echoe
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );

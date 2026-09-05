@@ -15,6 +15,7 @@ export default __t.row({
   owner: __t.identity(),
   echoId: __t.u64().name("echo_id"),
   goal: __t.string(),
+  avoid: __t.string(),
   status: __t.string(),
   startedAt: __t.timestamp().name("started_at"),
   peopleMet: __t.u32().name("people_met"),

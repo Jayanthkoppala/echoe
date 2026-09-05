@@ -40,14 +40,19 @@ import CreateEchoReducer from "./create_echo_reducer";
 import EndRunReducer from "./end_run_reducer";
 import IngestAgentMemoryReducer from "./ingest_agent_memory_reducer";
 import JoinReducer from "./join_reducer";
+import JoinEventReducer from "./join_event_reducer";
+import LeaveEventReducer from "./leave_event_reducer";
 import PauseRunReducer from "./pause_run_reducer";
 import RateLineReducer from "./rate_line_reducer";
 import ResumeRunReducer from "./resume_run_reducer";
+import RevealToReducer from "./reveal_to_reducer";
 import SeedCompaniesReducer from "./seed_companies_reducer";
+import SeedPlacesReducer from "./seed_places_reducer";
 import SetAgentLinkReducer from "./set_agent_link_reducer";
 import SetGoogleAuthReducer from "./set_google_auth_reducer";
 import SetLlmConfigReducer from "./set_llm_config_reducer";
 import SetMissionReducer from "./set_mission_reducer";
+import SetRevealReducer from "./set_reveal_reducer";
 import SetSecretReducer from "./set_secret_reducer";
 import StartRunReducer from "./start_run_reducer";
 import TravelReducer from "./travel_reducer";
@@ -58,8 +63,8 @@ import UnverifyReducer from "./unverify_reducer";
 // Import all procedure arg schemas
 import * as LinkGoogleProcedure from "./link_google_procedure";
 import * as LinkOpenRouterProcedure from "./link_open_router_procedure";
+import * as ReadRevealProcedure from "./read_reveal_procedure";
 import * as RequestVerificationProcedure from "./request_verification_procedure";
-import * as SuggestIntentsProcedure from "./suggest_intents_procedure";
 import * as VerifyCodeProcedure from "./verify_code_procedure";
 
 // Import all table schema definitions
@@ -67,14 +72,17 @@ import AgentMemoryRow from "./agent_memory_table";
 import AgentTravelRow from "./agent_travel_table";
 import CompanyRow from "./company_table";
 import ConversationRow from "./conversation_table";
+import ConversationSummaryRow from "./conversation_summary_table";
 import CorrectionRow from "./correction_table";
 import EchoRow from "./echo_table";
+import EventJoinRow from "./event_join_table";
 import IntentRow from "./intent_table";
 import LinkedAccountRow from "./linked_account_table";
 import MissionRow from "./mission_table";
 import PlaceRow from "./place_table";
 import PlayerRow from "./player_table";
 import ReceiptRow from "./receipt_table";
+import RevealRow from "./reveal_table";
 import RunRow from "./run_table";
 import TranscriptLineRow from "./transcript_line_table";
 
@@ -143,6 +151,20 @@ const tablesSchema = __schema({
       { name: 'conversation_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ConversationRow),
+  conversationSummary: __table({
+    name: 'conversation_summary',
+    indexes: [
+      { accessor: 'conversationId', name: 'conversation_summary_conversation_id_idx_btree', algorithm: 'btree', columns: [
+        'conversationId',
+      ] },
+      { accessor: 'key', name: 'conversation_summary_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'conversation_summary_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, ConversationSummaryRow),
   correction: __table({
     name: 'correction',
     indexes: [
@@ -175,6 +197,20 @@ const tablesSchema = __schema({
       { name: 'echo_owner_key', constraint: 'unique', columns: ['owner'] },
     ],
   }, EchoRow),
+  eventJoin: __table({
+    name: 'event_join',
+    indexes: [
+      { accessor: 'eventId', name: 'event_join_event_id_idx_btree', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+      { accessor: 'key', name: 'event_join_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'event_join_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, EventJoinRow),
   intent: __table({
     name: 'intent',
     indexes: [
@@ -259,6 +295,20 @@ const tablesSchema = __schema({
       { name: 'receipt_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ReceiptRow),
+  reveal: __table({
+    name: 'reveal',
+    indexes: [
+      { accessor: 'conversationId', name: 'reveal_conversation_id_idx_btree', algorithm: 'btree', columns: [
+        'conversationId',
+      ] },
+      { accessor: 'key', name: 'reveal_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'reveal_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, RevealRow),
   run: __table({
     name: 'run',
     indexes: [
@@ -301,14 +351,19 @@ const reducersSchema = __reducers(
   __reducerSchema("end_run", EndRunReducer),
   __reducerSchema("ingest_agent_memory", IngestAgentMemoryReducer),
   __reducerSchema("join", JoinReducer),
+  __reducerSchema("join_event", JoinEventReducer),
+  __reducerSchema("leave_event", LeaveEventReducer),
   __reducerSchema("pause_run", PauseRunReducer),
   __reducerSchema("rate_line", RateLineReducer),
   __reducerSchema("resume_run", ResumeRunReducer),
+  __reducerSchema("reveal_to", RevealToReducer),
   __reducerSchema("seed_companies", SeedCompaniesReducer),
+  __reducerSchema("seed_places", SeedPlacesReducer),
   __reducerSchema("set_agent_link", SetAgentLinkReducer),
   __reducerSchema("set_google_auth", SetGoogleAuthReducer),
   __reducerSchema("set_llm_config", SetLlmConfigReducer),
   __reducerSchema("set_mission", SetMissionReducer),
+  __reducerSchema("set_reveal", SetRevealReducer),
   __reducerSchema("set_secret", SetSecretReducer),
   __reducerSchema("start_run", StartRunReducer),
   __reducerSchema("travel", TravelReducer),
@@ -321,8 +376,8 @@ const reducersSchema = __reducers(
 const proceduresSchema = __procedures(
   __procedureSchema("link_google", LinkGoogleProcedure.params, LinkGoogleProcedure.returnType),
   __procedureSchema("link_open_router", LinkOpenRouterProcedure.params, LinkOpenRouterProcedure.returnType),
+  __procedureSchema("read_reveal", ReadRevealProcedure.params, ReadRevealProcedure.returnType),
   __procedureSchema("request_verification", RequestVerificationProcedure.params, RequestVerificationProcedure.returnType),
-  __procedureSchema("suggest_intents", SuggestIntentsProcedure.params, SuggestIntentsProcedure.returnType),
   __procedureSchema("verify_code", VerifyCodeProcedure.params, VerifyCodeProcedure.returnType),
 );
 

@@ -66,6 +66,8 @@ export const Conversation = __t.object("Conversation", {
   echoA: __t.u64(),
   echoB: __t.u64(),
   placeId: __t.u8(),
+  eventId: __t.string(),
+  closedAt: __t.timestamp(),
   replies: __t.u8(),
   score: __t.u8(),
   why: __t.string(),
@@ -75,6 +77,19 @@ export const Conversation = __t.object("Conversation", {
   createdAt: __t.timestamp(),
 });
 export type Conversation = __Infer<typeof Conversation>;
+
+export const ConversationSummary = __t.object("ConversationSummary", {
+  key: __t.string(),
+  conversationId: __t.u64(),
+  identity: __t.identity(),
+  summary: __t.string(),
+  scoresJson: __t.string(),
+  corrective: __t.u8(),
+  correctiveNotesJson: __t.string(),
+  match: __t.u8(),
+  createdAt: __t.timestamp(),
+});
+export type ConversationSummary = __Infer<typeof ConversationSummary>;
 
 export const Correction = __t.object("Correction", {
   id: __t.u64(),
@@ -105,6 +120,25 @@ export const EchoMemory = __t.object("EchoMemory", {
   updatedAt: __t.timestamp(),
 });
 export type EchoMemory = __Infer<typeof EchoMemory>;
+
+export const EventContact = __t.object("EventContact", {
+  key: __t.string(),
+  eventId: __t.string(),
+  identity: __t.identity(),
+  linkedin: __t.string(),
+  twitter: __t.string(),
+  givenAt: __t.timestamp(),
+});
+export type EventContact = __Infer<typeof EventContact>;
+
+export const EventJoin = __t.object("EventJoin", {
+  key: __t.string(),
+  eventId: __t.string(),
+  identity: __t.identity(),
+  goal: __t.string(),
+  joinedAt: __t.timestamp(),
+});
+export type EventJoin = __Infer<typeof EventJoin>;
 
 export const GoogleAuth = __t.object("GoogleAuth", {
   id: __t.u8(),
@@ -198,11 +232,27 @@ export const Receipt = __t.object("Receipt", {
 });
 export type Receipt = __Infer<typeof Receipt>;
 
+export const Reveal = __t.object("Reveal", {
+  key: __t.string(),
+  conversationId: __t.u64(),
+  identity: __t.identity(),
+  revealedAt: __t.timestamp(),
+});
+export type Reveal = __Infer<typeof Reveal>;
+
+export const RevealSecret = __t.object("RevealSecret", {
+  identity: __t.identity(),
+  text: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type RevealSecret = __Infer<typeof RevealSecret>;
+
 export const Run = __t.object("Run", {
   id: __t.u64(),
   owner: __t.identity(),
   echoId: __t.u64(),
   goal: __t.string(),
+  avoid: __t.string(),
   status: __t.string(),
   startedAt: __t.timestamp(),
   peopleMet: __t.u32(),
@@ -218,6 +268,13 @@ export const Secret = __t.object("Secret", {
   value: __t.string(),
 });
 export type Secret = __Infer<typeof Secret>;
+
+export const SummaryJob = __t.object("SummaryJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  conversationId: __t.u64(),
+});
+export type SummaryJob = __Infer<typeof SummaryJob>;
 
 export const TalkJob = __t.object("TalkJob", {
   scheduledId: __t.u64(),

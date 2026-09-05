@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetches driving routes between unordered pairs of the 10 Bengaluru
+# Fetches driving routes between unordered pairs of the Bengaluru
 # landmarks from the public OSRM demo server (router.project-osrm.org).
 # OSRM demo usage policy: max 1 req/sec, non-commercial use only.
 # Falls back to a straight two-point line if a pair's request fails.
@@ -31,6 +31,7 @@ lalbagh 77.5900 12.9500
 mg-road 77.6119 12.9738
 koramangala 77.6112 12.9346
 commercial-street 77.6084 12.9822
+the-spark-whitefield 77.72065 12.99116
 '
 
 ids=()

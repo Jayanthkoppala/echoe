@@ -11,6 +11,7 @@ import CompanySchema from '../module_bindings/company_table';
 import ConversationSchema from '../module_bindings/conversation_table';
 import CorrectionSchema from '../module_bindings/correction_table';
 import EchoSchema from '../module_bindings/echo_table';
+import EventJoinSchema from '../module_bindings/event_join_table';
 import IntentSchema from '../module_bindings/intent_table';
 import PlayerSchema from '../module_bindings/player_table';
 import ReceiptSchema from '../module_bindings/receipt_table';
@@ -21,6 +22,7 @@ import { avatarColour, behaviourFrom } from './copy';
 import type {
   AgentNote,
   Badge,
+  ConversationSummary,
   Correction,
   HostCard,
   JoinedEvent,
@@ -29,6 +31,7 @@ import type {
   Player,
   PlaceVisit,
   Receipt,
+  RubricScores,
   Run,
   RunStatus,
   TranscriptLine,
@@ -40,6 +43,7 @@ export type CompanyRow = Infer<typeof CompanySchema>;
 export type ConversationRow = Infer<typeof ConversationSchema>;
 export type CorrectionRow = Infer<typeof CorrectionSchema>;
 export type EchoRow = Infer<typeof EchoSchema>;
+export type EventJoinRow = Infer<typeof EventJoinSchema>;
 export type IntentRow = Infer<typeof IntentSchema>;
 export type PlayerRow = Infer<typeof PlayerSchema>;
 export type ReceiptRow = Infer<typeof ReceiptSchema>;
@@ -117,6 +121,7 @@ export function toPlayer(row: PlayerRow, companies: readonly CompanyRow[] = []):
 export function toRun(row: RunRow): Run {
   return {
     goal: row.goal,
+    avoid: row.avoid,
     status: row.status as RunStatus,
     placesVisited: row.placesVisited,
     peopleMet: row.peopleMet,
@@ -231,6 +236,8 @@ export function rankedMatches(
   players: readonly PlayerRow[],
   companies: readonly CompanyRow[] = [],
   myPlace = 0,
+  /** Only conversations that started at or after this moment (the current run). */
+  since?: ConversationRow['createdAt'],
 ): Match[] {
   if (myEchoId === undefined) return [];
   const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
@@ -238,6 +245,7 @@ export function rankedMatches(
 
   return conversations
     .filter(row => row.echoA === myEchoId || row.echoB === myEchoId)
+    .filter(row => !since || msOf(row.createdAt) >= msOf(since))
     .map(row => {
       const otherEchoId = row.echoA === myEchoId ? row.echoB : row.echoA;
       const other = playerBy.get(ownerOf.get(otherEchoId) ?? '');
@@ -256,69 +264,55 @@ export function rankedMatches(
     .sort((a, b) => (a.isHost === b.isHost ? b.score - a.score : a.isHost ? -1 : 1));
 }
 
-const HOSTING = 'Hosting ';
-const eventName = (intent: string | undefined): string | null =>
-  intent && intent.startsWith(HOSTING) ? intent.slice(HOSTING.length).trim() || null : null;
+/** The seed file lands later; glob keeps the build green until it does. */
+const EVENTS = Object.values(
+  import.meta.glob("../data/events.json", { eager: true, import: "default" }),
+).flat() as { id: string; title: string; venue: string; date: string }[];
 
 /**
- * Events are players whose line reads "Hosting <name>"; joining one is a run
- * started from that host's share link. There is no events table, so this is
- * derived: the event I host, the host my current run is walking to, and every
- * host my Echoe has actually talked to. One row per host, newest talk first.
+ * The events this player joined, newest join first, each carrying the talks my
+ * Echoe had there. Joining is the event_join table; the title and venue come
+ * from the same events.json the map reads.
  */
 export function eventsFrom(
-  myRun: RunRow | undefined,
-  myIntent: IntentRow | undefined,
+  eventJoins: readonly EventJoinRow[],
   conversations: readonly ConversationRow[],
-  intents: readonly IntentRow[],
   echoes: readonly EchoRow[],
   players: readonly PlayerRow[],
   myEchoId: bigint | undefined,
+  identityHex: string | undefined,
   companies: readonly CompanyRow[] = [],
+  myPlace = 0,
 ): JoinedEvent[] {
-  if (myEchoId === undefined) return [];
-  const ownerOf = new Map(echoes.map(echo => [echo.id, echo.owner.toHexString()]));
-  const playerBy = new Map(players.map(player => [player.identity.toHexString(), player]));
-  const intentByEcho = new Map(intents.map(row => [row.echoId, row]));
-  const out: JoinedEvent[] = [];
+  if (!identityHex || myEchoId === undefined) return [];
 
-  const mine = eventName(myIntent?.text);
-  if (mine) {
-    out.push({ key: 'mine', name: mine, hostName: 'You', hostAvatar: playerBy.get(myIntent!.owner.toHexString())?.avatar ?? '', status: 'hosting', placeName: '' });
+  const joinedCount = new Map<string, number>();
+  for (const row of eventJoins) joinedCount.set(row.eventId, (joinedCount.get(row.eventId) ?? 0) + 1);
+
+  const eventOf = new Map(conversations.map(row => [String(row.id), row.eventId]));
+  const byEvent = new Map<string, Match[]>();
+  for (const talk of rankedMatches(conversations, myEchoId, undefined, echoes, players, companies, myPlace)) {
+    const eventId = eventOf.get(talk.conversationId);
+    if (!eventId) continue;
+    const list = byEvent.get(eventId);
+    if (list) list.push(talk);
+    else byEvent.set(eventId, [talk]);
   }
 
-  const seen = new Set<bigint>();
-  const push = (hostEchoId: bigint, status: 'walking' | 'met', conversationId?: string, placeName = '') => {
-    if (seen.has(hostEchoId)) return;
-    seen.add(hostEchoId);
-    const host = playerBy.get(ownerOf.get(hostEchoId) ?? '');
-    const line = intentByEcho.get(hostEchoId)?.text;
-    out.push({
-      key: String(hostEchoId),
-      name: eventName(line) ?? line ?? 'An event',
-      hostName: host?.name ?? 'Someone',
-      hostAvatar: host?.avatar ?? '',
-      status,
-      placeName,
-      conversationId,
-      badge: badgeOf(host, companies),
+  return eventJoins
+    .filter(row => row.identity.toHexString() === identityHex)
+    .sort((a, b) => msOf(b.joinedAt) - msOf(a.joinedAt))
+    .map(row => {
+      const meta = EVENTS.find(e => e.id === row.eventId);
+      return {
+        key: row.eventId,
+        name: meta?.title ?? row.eventId,
+        venue: meta?.venue ?? "",
+        date: meta?.date ?? "",
+        joined: joinedCount.get(row.eventId) ?? 0,
+        people: byEvent.get(row.eventId) ?? [],
+      };
     });
-  };
-
-  const talks = [...conversations]
-    .filter(row => row.echoA === myEchoId || row.echoB === myEchoId)
-    .sort((a, b) => (a.id < b.id ? 1 : -1));
-  const talkWith = (echoId: bigint) => talks.find(row => row.echoA === echoId || row.echoB === echoId);
-
-  if (myRun && myRun.hostEchoId !== 0n) {
-    const talk = talkWith(myRun.hostEchoId);
-    push(myRun.hostEchoId, myRun.hostMet ? 'met' : 'walking', talk ? String(talk.id) : undefined, talk ? landmarkOf(talk.placeId).name : '');
-  }
-  for (const row of talks) {
-    const other = row.echoA === myEchoId ? row.echoB : row.echoA;
-    if (eventName(intentByEcho.get(other)?.text)) push(other, 'met', String(row.id), landmarkOf(row.placeId).name);
-  }
-  return out;
 }
 
 export function toTranscript(
@@ -409,4 +403,64 @@ export function notesFrom(
     .split('\n')
     .map(line => line.replace(/^-\s*/, '').trim())
     .filter(line => line.length > 0 && !rules.has(line) && ![...rules].some(r => line.startsWith(r)));
+}
+
+/**
+ * A conversation_summary row. Typed structurally, not off the generated table,
+ * so the client compiles against the contract before the bindings catch up.
+ */
+export interface ConversationSummaryLike {
+  conversationId: bigint;
+  identity: { toHexString(): string };
+  summary: string;
+  scoresJson: string;
+  corrective: number;
+  correctiveNotesJson: string;
+  match: number;
+}
+
+/** The module writes JSON strings; a half-written one must not blank the screen. */
+function parseJson<T>(text: string, fallback: T): T {
+  try {
+    const value: unknown = JSON.parse(text);
+    return value === null || value === undefined ? fallback : (value as T);
+  } catch {
+    return fallback;
+  }
+}
+
+const num = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
+export function toSummary(row: ConversationSummaryLike): ConversationSummary {
+  const scores = parseJson<Partial<RubricScores>>(row.scoresJson, {});
+  return {
+    summary: row.summary,
+    scores: {
+      goalFit: num(scores.goalFit),
+      personaFit: num(scores.personaFit),
+      depth: num(scores.depth),
+      reciprocity: num(scores.reciprocity),
+      nextStep: num(scores.nextStep),
+      avoidPenalty: num(scores.avoidPenalty),
+    },
+    corrective: num(row.corrective),
+    correctiveNotes: parseJson<unknown[]>(row.correctiveNotesJson, []).filter(
+      (note): note is string => typeof note === 'string' && note.trim().length > 0,
+    ),
+    match: num(row.match),
+  };
+}
+
+/** conversationId -> the rubric match number, for the rows that have one. */
+export function matchByConversation(rows: readonly ConversationSummaryLike[]): Map<string, number> {
+  return new Map(rows.map(row => [String(row.conversationId), row.match]));
+}
+
+/** The rubric match replaces the deterministic score wherever a summary exists. */
+export function withMatch(list: readonly Match[], byConversation: Map<string, number>): Match[] {
+  return list.map(item => {
+    const match = byConversation.get(item.conversationId);
+    return match === undefined ? item : { ...item, score: match };
+  });
 }

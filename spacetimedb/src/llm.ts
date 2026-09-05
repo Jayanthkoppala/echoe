@@ -50,7 +50,8 @@ export function chat(
   apiKey: string,
   model: string,
   messages: ChatMessage[],
-  endpoint: string = OPENROUTER_ENDPOINT
+  endpoint: string = OPENROUTER_ENDPOINT,
+  maxTokens: number = 220
 ): ChatResult {
   // For Google, `apiKey` is an OAuth access token (see refreshGoogleToken);
   // Vertex refuses API keys outside express mode.
@@ -63,8 +64,8 @@ export function chat(
     'Content-Type': 'application/json',
   };
   const payload = google
-    ? geminiBody(messages)
-    : { model, messages, max_tokens: 220, usage: { include: true } };
+    ? geminiBody(messages, maxTokens)
+    : { model, messages, max_tokens: maxTokens, usage: { include: true } };
 
   let res: { status: number; text(): string };
   try {
@@ -109,7 +110,7 @@ export function chat(
 }
 
 /** OpenAI-style messages to Gemini's request shape: system text apart, the rest as user turns. */
-function geminiBody(messages: ChatMessage[]) {
+function geminiBody(messages: ChatMessage[], maxTokens: number) {
   const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
   const turns = messages
     .filter(m => m.role !== 'system')
@@ -117,7 +118,7 @@ function geminiBody(messages: ChatMessage[]) {
   return {
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
     contents: turns.length > 0 ? turns : [{ role: 'user', parts: [{ text: 'Begin.' }] }],
-    generationConfig: { maxOutputTokens: 220 },
+    generationConfig: { maxOutputTokens: maxTokens },
   };
 }
 
@@ -224,6 +225,24 @@ export function splitLines(text: string, max: number): string[] {
     .map(l => l.replace(/^\s*(?:[-*]|\d+[.)])?\s*(?:[A-Z]:|\w+:)?\s*/, '').trim())
     .filter(l => l.length > 0);
   return (lines.length > 0 ? lines : [text.trim()]).slice(0, max);
+}
+
+/** What a model appends to close a conversation. Never shown to a player. */
+export const END_MARKER = '[END]';
+
+/**
+ * Strips `[END]` from a reply in place and says whether it was there. The
+ * marker is how the model ends a conversation early; a line that carries it is
+ * still a real line, so it is kept, minus the token.
+ */
+export function takeEndMarker(lines: string[]): boolean {
+  let found = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!lines[i].includes(END_MARKER)) continue;
+    found = true;
+    lines[i] = lines[i].split(END_MARKER).join(' ').replace(/\s+/g, ' ').trim();
+  }
+  return found;
 }
 
 function errText(err: unknown): string {

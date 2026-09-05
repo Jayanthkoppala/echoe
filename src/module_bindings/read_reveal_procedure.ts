@@ -10,8 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  goal: __t.string(),
-  avoid: __t.string(),
-  hostShareId: __t.string(),
+export const params = {
+  conversationId: __t.u64(),
 };
+export const returnType = __t.string()

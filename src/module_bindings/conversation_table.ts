@@ -15,6 +15,8 @@ export default __t.row({
   echoA: __t.u64().name("echo_a"),
   echoB: __t.u64().name("echo_b"),
   placeId: __t.u8().name("place_id"),
+  eventId: __t.string().name("event_id"),
+  closedAt: __t.timestamp().name("closed_at"),
   replies: __t.u8(),
   score: __t.u8(),
   why: __t.string(),

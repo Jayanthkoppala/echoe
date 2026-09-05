@@ -27,9 +27,14 @@ bindings. Private tables do not, and are excluded from codegen.
 | `echo` | public | The player's agent. `owner` is unique per identity. `persona` is authored on screen 2; `behaviour_notes` accumulates from corrections and is fed into every later prompt. |
 | `place` | public | The ten Bengaluru landmarks, seeded once in `init`. Read-only afterwards. Array index is the place id. |
 | `agent_travel` | public | One row per leg, written only at leg boundaries. A roaming Echoe costs two rows per landmark rather than a position update per frame; the client interpolates between `depart_ts` and `arrive_ts`. |
-| `run` | public | The session started by "Send my Echoe out". Goal, status (running, paused, ended), counters, and `spent_usd`, the USD this run has spent on OpenRouter-funded exchanges (stays `0` for house-funded Vertex Gemini exchanges; see Credits). `owner` is unique, so a player has exactly one run row that is reused across nights. |
+| `run` | public | The session started from the Start page. `goal` is who the player wants to meet and is also copied into `intent.text`; `avoid` is who they do not want to meet and is `''` when they did not say. Status (running, paused, ended), counters, and `spent_usd`, the USD this run has spent on OpenRouter-funded exchanges (stays `0` for house-funded Vertex Gemini exchanges; see Credits). `owner` is unique, so a player has exactly one run row that is reused across nights. |
 | `receipt` | public | Append-only. Nothing in the module ever updates or deletes a receipt. This is what screen 6 renders and what makes a correction honest. |
-| `conversation` | public | One row per talking pair. `echo_a` is always the numerically smaller id, which makes the pair a stable key. `replies` counts exchanges; it is a counter, not a cap. |
+| `conversation` | public | One row per talking pair. `echo_a` is always the numerically smaller id, which makes the pair a stable key. `replies` counts exchanges; it is a counter, not a cap. `event_id` is `''` for a street meeting and names the event for a pairing made by `joinEvent`. `closed_at` is epoch 0 while the meeting is open and stamped once it ends; `created_at` is when the pair started talking, which for an event pairing is when it was given a slot rather than when the row appeared. |
+| `event_join` | public | Who has joined a city event, one row per player per event, keyed `${event_id}:${identity hex}`. `goal` is what they want out of that event, at most 160 characters and required, and is the only thing an event conversation is matched and prompted on. Public so every map can show the count live. The event ids come from the client's `events.json`; the module only stores the string. |
+| `event_contact` | **private** | The LinkedIn and X links a player gave at join time. Never subscribable and never read by `echoTalk` or any prompt builder, so no Echoe can say them. The one reader is `readReveal`, and only after both sides of that conversation have revealed. |
+| `reveal` | public | Who has pressed Reveal on which conversation, keyed `${conversation_id}:${identity hex}`, and nothing else. Both rows existing is the condition `readReveal` checks; the payload is not here. |
+| `reveal_secret` | **private** | One row per player: what they hand over when they like someone (a meet link, an Instagram, a phone number), at most 200 characters. Written by `setReveal`, cleared by passing `''`. Never read by `echoTalk` or any prompt builder; only `readReveal` returns it, and only to the other side of a mutually revealed conversation. |
+| `conversation_summary` | public | What a finished conversation was worth, **one row per side**, keyed `${conversation_id}:${identity hex}`: "did they give me what I came for" has a different answer for each person in the room, so `summary`, `scores_json`, `corrective` and `match` are always from `identity`'s point of view. Written once by the `summarize` procedure when a conversation closes, and never updated. `scores_json` is a `RubricScores` object, `corrective_notes_json` a JSON array of at most three lines for the correction loop. |
 | `transcript_line` | public | The lines themselves. `is_ai` is always true so the client can label every line. `feedback` is `none`, `like` or `not_me`. |
 | `correction` | public | One row per correction on screen 8. Keeps the original text alongside the replacement, so the record of what was actually said survives. |
 | `mission` | public | Single row, id 0. The shared "tonight's mission" line on screen 3. |
@@ -39,6 +44,7 @@ bindings. Private tables do not, and are excluded from codegen.
 | `google_auth` | **private** | Single row: Google OAuth client id, secret, refresh token and the cached access token with its expiry. Written by `setGoogleAuth`, refreshed by the procedures, never readable by clients. |
 | `world_tick` | **private** | Drives the `tick` reducer on a 5 second interval. |
 | `talk_job` | **private** | One-shot jobs carrying a conversation and its `payer` into the `echoTalk` procedure. Rows are deleted automatically once the procedure returns. |
+| `summary_job` | **private** | One-shot jobs carrying a closed conversation into the `summarize` procedure. Queued by `closeConversation`, deleted automatically once the procedure returns. |
 
 ### Places
 
@@ -66,9 +72,9 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | Reducer | Arguments | Preconditions, all enforced with `SenderError` |
 | --- | --- | --- |
 | `join` | `name`, `email` | Name is non-empty after trimming and at most 40 characters. `email` is optional; when present it must look like an address and is upserted into a private `contact` row (`email`, `welcomed: false`) as a hook for a future welcome mail that nothing sends yet. Called again by an existing player, it renames and marks them online rather than failing. |
-| `createEcho` | `persona`, `intent` | Caller has joined. Persona is non-empty and at most 2000 characters. No avatar argument: the face follows the identity seed written at join. Called again, it replaces the persona and keeps the accumulated behaviour notes. |
+| `createEcho` | `persona` | Caller has joined. Persona is at most 2000 characters and is the whole of screen 2: there is no intent argument any more. Creates the player's `intent` row with a share id and an empty `text`, which `startRun` fills. No avatar argument: the face follows the identity seed written at join. Called again, it replaces the persona and keeps the share id, the intent line and the accumulated behaviour notes. |
 | `travel` | `placeId` | Caller has joined and has an Echoe. The place exists. The player is not already there. Writes a leg and a receipt. |
-| `startRun` | `goal`, `hostShareId` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `hostShareId` is empty or names a live intent that is not the caller's own. No caps: the run is bounded by the clock and by the free-conversation allowance, then whatever the player's own linked OpenRouter key allows. |
+| `startRun` | `goal`, `avoid`, `hostShareId` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters; its first 120 characters are also written to `intent.text`, which is the line a share link carries. `avoid` is optional and may be `''`. `hostShareId` is empty or names a live intent that is not the caller's own. No caps: the run is bounded by the clock and by the free-conversation allowance, then whatever the player's own linked OpenRouter key allows. |
 | `pauseRun` | none | A run exists and is running. |
 | `resumeRun` | none | A run exists and is paused. |
 | `endRun` | none | A run exists and is not already ended. Writes a `run_end` receipt. |
@@ -78,6 +84,10 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | `setLlmConfig` | `apiKey`, `model`, `endpoint` | Key and model non-empty; endpoint empty or `https://`. Admin only: `init` makes the publishing identity the owner of `llm_config`, and only that identity may call this afterwards, so a later caller cannot take over the house key. Writes the single private config row. |
 | `unlinkOpenRouter` | none | Caller has joined. Deletes the caller's private `player_key` row and clears `player.openrouter_linked`. |
 | `setMission` | `text` | Admin only (same owner as `llm_config`). Non-empty, at most 200 characters. |
+| `joinEvent` | `eventId`, `goal`, `linkedin`, `twitter` | Caller has joined. `goal` is non-empty and at most 160 characters: what they want out of this event. Writes the public `event_join` row and the private `event_contact` links, whatever shape the handles were pasted in. Joining again replaces the goal and the links and keeps the first timestamp. On a first join it also introduces the caller to the room: see the event fan-out below. |
+| `leaveEvent` | `eventId` | Caller has joined. Drops the public row and the private links together. Conversations already created are left alone. |
+| `setReveal` | `text` | Caller has joined. Upserts the caller's private `reveal_secret`, at most 200 characters; `''` deletes the row. |
+| `revealTo` | `conversationId` | Caller has an Echoe and is `echo_a` or `echo_b` of that conversation. Inserts the caller's `reveal` row; calling again is a no-op. Marks only the caller's side, and shows the other side nothing on its own. |
 | `tick` | scheduled | Not callable by clients. See below. |
 
 Presence is handled by `clientConnected` and `clientDisconnected`, which flip
@@ -130,8 +140,8 @@ previous night and a new one is started, otherwise `people_met` would stay at
 zero while a transcript kept growing.
 
 Once a conversation exists, each side may add one more exchange per tick until
-it reaches `MAX_EXCHANGES` (4, a module constant, not a setting). Then it is
-closed, and the find step stops chasing that Echoe for the rest of the run.
+it closes, on the timed rule described under How a conversation ends. Then the
+find step stops chasing that Echoe for the rest of the run.
 Each exchange is billed to its initiator; see Credits below for how and how
 much.
 
@@ -145,6 +155,132 @@ Only the lower-numbered Echoe of any pair gives chase. If both chased, two Echoe
 swap landmarks every tick and never actually arrive together, which is what the
 first version did. Otherwise the destination is a uniformly random other
 landmark.
+
+### How a conversation ends
+
+A meeting is timed, not counted. It runs until `CONVERSATION_MICROS` (three
+minutes) after `conversation.created_at`, or until the model closes it, whichever
+comes first. `MAX_EXCHANGES` (40) is a safety net rather than the rule: one
+exchange per 5 second tick makes three minutes about 36 exchanges.
+
+`MIN_EXCHANGES` (12) is a floor under the model's own judgement. Left alone it
+wraps up in two or three lines, which is an introduction rather than a
+conversation, so below the floor `[END]` is stripped from the line and ignored
+and only the clock or the ceiling can close. The prompt also forbids proposing
+coffee, a call or any next step before that exchange.
+
+The model closes a conversation by ending a line with `[END]`, which the system
+prompt asks for once the pair has clearly wrapped up and forbids while anything
+is still unsettled. `echoTalk` strips the token before storing the line, so it
+never reaches a player, and stamps `closed_at`. In practice this is what ends
+almost every conversation, well inside the three minutes.
+
+Every close goes through one function, `closeConversation`. It stamps
+`closed_at` if it is still open, counts the meeting on both sides when the
+conversation carries an `event_id`, and queues a `summary_job`. Two callers
+reach it: the `[END]` path in `echoTalk`, and the clock in the tick's
+conversation scan, which now closes street meetings as well as event pairings.
+The meet loop never stamps the clock itself — the pair simply walks away — so
+without that scan a street talk stayed open forever and would never be
+summarised. `spacetimedb/reveal.check.ts` asserts that `closed_at` is stamped in
+exactly one place, so a third close site cannot appear without a summary.
+
+`closed_at` is the record; `isClosed` in `spacetimedb/src/conversation.ts` is the
+live test, because a street conversation nobody is ticking still has to read as
+closed once its clock runs out. It is the one test `doneTalking`, the meet loop,
+the `closing` flag handed to the LLM and the memory-writing step all go through,
+kept pure so `spacetimedb/reveal.check.ts` can run it. An event pairing
+still waiting for a slot has `replies` 0 and therefore no clock yet, which is
+what stops it expiring before it ever speaks.
+
+### The event fan-out
+
+Joining an event introduces you to the people already in the room rather than
+waiting for the tick to walk you into them. On a first `joinEvent`, the module
+takes the most recent other joiners of that event up to that event's cap, skips
+anyone with no Echoe and any pair that already has a conversation tagged with
+this event, and creates a `conversation` for each at place 10 (the*spark,
+Whitefield) with `event_id` set and scored by `matchIntents` over the two
+`event_join.goal` values rather than the players' street intents. Neither side
+needs a run, and no Echoe moves: the point of an event is that you meet whoever
+is there.
+
+The event goal follows through to the prompt: for a conversation with an
+`event_id`, `echoTalk` states each side's goal as `At <event title>, A wants:
+...` above the persona, and leaves the street intent out entirely.
+
+When an event conversation closes, both sides get `run.people_met + 1` (any run
+status, so a finished run's recap still names who it met) and a `talk` receipt
+at place 10 reading `Talked with <name> at <event title>`. The sticky
+`closed_at` stamp is what stops that counting twice, and it is done in the two
+places that stamp it: `tickEvents` for the clock, `echoTalk` for `[END]`.
+
+The cap is `DEFAULT_EVENT_TALK_CAP` (5) by default, overridden per event by
+`EVENT_TALK_CAP`. `spacetimedb-midnight-moonshot` is `Infinity`: everyone in the
+room meets everyone. **A 100-person moonshot is therefore 4,950 house-paid
+conversations at up to 40 exchanges each, so the organiser's key needs the
+budget before the doors open.**
+
+Two things follow from an uncapped event and are load-bearing:
+
+- Event conversations are `'house'` on both sides and do **not** count against
+  `FREE_CONVERSATIONS`. Without this, one join would spend a player's whole
+  allowance before their first night out.
+- Every pairing is created at join time, so the count and the list are right
+  immediately, but each Echoe holds at most `EVENT_PARALLEL` (3) of them open at
+  once. `tickEvents`, inside the existing 5 second tick, closes what has run out
+  of time, adds one exchange to each open conversation, then fills each Echoe's
+  free slots from its oldest unstarted pairings, stamping `created_at` as it
+  starts one. No second scheduled reducer: the tick already runs at the right
+  interval and already holds a write transaction.
+
+### Mutual reveal
+
+`setReveal` stores a payload once, on the Start page, in a private table. On a
+conversation, `revealTo` records that the caller pressed Reveal. Neither side
+learns anything until both rows exist.
+
+`readReveal({ conversationId }) -> string` is a procedure, not a table, because
+the payload must never be subscribable. It returns JSON:
+
+```json
+{ "mine": true, "theirs": true, "text": "...", "linkedin": "...", "twitter": "..." }
+```
+
+The caller must be one of the two Echoes, or it fails `not_a_participant`.
+`text` is the other party's `reveal_secret`, and `linkedin` / `twitter` their
+`event_contact` links for that event when `conversation.event_id` is set. All
+three stay `''` until both `reveal` rows exist. `echoTalk` reads none of these
+tables, so no Echoe can say any of it out loud; `spacetimedb/reveal.check.ts`
+asserts that and fails if a future prompt builder reaches for them.
+
+## The scored summary
+
+When a conversation closes, `closeConversation` queues a `summary_job` and the
+`summarize` procedure scores the finished transcript **twice**, once from each
+side. The scoring rules are pure and live in `spacetimedb/src/rubric.ts`
+(`buildSummaryPrompt`, `parseSummary`, `combine`), covered by
+`spacetimedb/rubric.check.ts`.
+
+Each side's `RubricInput` carries that side's name and persona, the other's,
+what each came for (`event_join.goal` when the conversation has an `event_id`,
+otherwise `intent.text`), that side's `run.avoid` when they have a run row, the
+full transcript with `mine` flipped to their own echo, and
+`conversation.score` as the deterministic baseline. The reply comes back as
+`summary`, six rubric numbers, a `corrective` score with up to three notes, and
+`match`, which `combine` computes rather than trusts: the rubric total mapped
+onto 0..100 and blended 70/30 with `conversation.score`.
+
+Both calls are always on the house key, whatever funded the conversation: the
+summary is the product, not a metered exchange, and a player who never linked
+OpenRouter still gets one. The procedure is idempotent by row — a side that
+already has a `conversation_summary` row is skipped — so a re-queued job costs
+nothing. On any failure it logs a warning and writes no row; there is no client
+retry, the Summary button simply reads "Summarising…" until a row exists.
+
+The scoring prompt sees the transcript, the personas and the goals. It never
+reads `reveal_secret` or `event_contact`, and `spacetimedb/reveal.check.ts`
+asserts that on `summarize` exactly as it does on `echoTalk`.
 
 ## Credits
 
@@ -181,7 +317,9 @@ The `echoTalk` procedure picks it up and:
 
 The system prompt carries both personas and, critically, both sets of behaviour
 notes, described as the strongest instruction present. That is what makes a
-correction on screen 8 visibly change what the Echoe says afterwards.
+correction on screen 8 visibly change what the Echoe says afterwards. It also
+carries each side's `run.avoid` as "Do not pursue people who ...". It carries
+neither `reveal_secret` nor `event_contact`, and never will: see Mutual reveal.
 
 On any failure at all, transport, non-2xx, an unparseable body, or a reply that
 does not split into two speaker lines, the procedure writes a fallback exchange
@@ -296,9 +434,10 @@ $ spacetime sql --no-config -s local3001 echo "SELECT id, speaker_echo_id, text 
  8  | 2               | "Let's talk Thursday, coffee by the lake."
 ```
 
-Four exchanges, the `MAX_EXCHANGES` cap, closing on the concrete next step the
-final-exchange instruction asks for. The `llm` receipts for the same run name
-the path that produced it:
+Four exchanges, captured when `MAX_EXCHANGES` was still 4 and a fixed cap,
+closing on the concrete next step the final-exchange instruction asks for. A
+conversation recorded today runs on the timed rule instead and is usually
+longer. The `llm` receipts for the same run name the path that produced it:
 
 ```
 $ spacetime sql --no-config -s local3001 echo "SELECT kind, place_id, text FROM receipt WHERE run_owner = 0xc2002d8614b6bfd9088222e54089f1ad30fa7e3864f5cb0417c4392c2f85853c AND kind = 'llm' AND place_id = 0"

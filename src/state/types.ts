@@ -12,8 +12,10 @@ export type ScreenName =
   | 'correct'
   | 'profile'
   | 'events'
+  | 'joinEvent'
   | 'connect'
   | 'talks'
+  | 'summary'
   | 'done';
 
 export type RunStatus = 'running' | 'paused' | 'ended';
@@ -37,6 +39,8 @@ export interface Player {
 
 export interface Run {
   goal: string;
+  /** Who this run should stay away from. '' when the player left it blank. */
+  avoid: string;
   status: RunStatus;
   placesVisited: number;
   peopleMet: number;
@@ -77,14 +81,46 @@ export interface HostCard {
 
 /** An event this Echoe hosts, is walking to, or has joined (met the host). */
 export interface JoinedEvent {
+  /** The events.json id, which is also the event_join key. */
   key: string;
   name: string;
-  hostName: string;
-  hostAvatar: string;
-  status: 'hosting' | 'walking' | 'met';
-  placeName: string;
-  conversationId?: string;
-  badge?: Badge;
+  venue: string;
+  date: string;
+  /** How many Echoes joined this event. */
+  joined: number;
+  /** The conversations my Echoe had at this event. */
+  people: Match[];
+}
+
+/** What readReveal answers: both sides' state, and the payload once both revealed. */
+export interface RevealState {
+  mine: boolean;
+  theirs: boolean;
+  text: string;
+  linkedin: string;
+  twitter: string;
+}
+
+/** The six rubric dimensions, each scored from MY side of the conversation. */
+export interface RubricScores {
+  /** 0..25 */ goalFit: number;
+  /** 0..20 */ personaFit: number;
+  /** 0..20 */ depth: number;
+  /** 0..15 */ reciprocity: number;
+  /** 0..10 */ nextStep: number;
+  /** 0..-20; the closer to -20, the more they match my avoid line. */ avoidPenalty: number;
+}
+
+/** One conversation_summary row for my side, ready to render. */
+export interface ConversationSummary {
+  summary: string;
+  scores: RubricScores;
+  /** 0..100: how faithfully my Echoe spoke as my persona. */
+  corrective: number;
+  /** Up to three lines it should not have said, or should have. */
+  correctiveNotes: string[];
+  /** 0..100 blended score; beats conversation.score wherever both exist. */
+  match: number;
 }
 
 /** One ranked "who to meet and why" row on the return screen. */
@@ -125,6 +161,10 @@ export interface Correction {
 
 export interface RunLimits {
   goal: string;
+  avoid: string;
+  /** Private payload shown only after both sides reveal. '' clears it. */
+  reveal: string;
+  hostShareId?: string;
 }
 
 /** One line a connected coding agent wrote about the day, from `agent_memory`. */
@@ -142,10 +182,11 @@ export interface Actions {
   onJoin(name: string, email: string): void;
   /** Sends the Echoe out again with the same line (and the same host, if any). */
   onRestart(): void;
-  onCreateEcho(persona: string, intent: string): void;
+  onCreateEcho(persona: string): void;
   onTravel(placeId: string): void;
   onStartRun(limits: RunLimits): void;
   onPause(): void;
+  onResume(): void;
   onEndRun(): void;
   onRateLine(lineId: string, soundsLikeMe: boolean): void;
   onCorrect(lineId: string, shouldHaveSaid: string, behaviourChange: string): void;
@@ -154,8 +195,13 @@ export interface Actions {
   onUnlinkOpenRouter(): void;
   /** Profile: sets the Echoe's line to "Hosting <name>" so the existing share link becomes the event link. */
   onHostEvent(name: string): void;
+  /** Map event card: join or leave a city event by its events.json id. */
+  onJoinEvent(eventId: string, goal: string, linkedin: string, twitter: string): void;
+  onLeaveEvent(eventId: string): void;
   /** Upserts the caller's coding-agent link token (Connect screen). */
   onSetAgentLink(token: string): void;
+  /** Review: marks my side of a conversation revealed. Idempotent. */
+  onReveal(conversationId: string): void;
 }
 
 export interface ScreenProps {

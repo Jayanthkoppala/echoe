@@ -164,7 +164,7 @@ export function ReturnScreen({
         <button className="primary" onClick={() => actions.onRestart()}>
           Send my Echoe out again <span aria-hidden="true">→</span>
         </button>
-        <button className="secondary" onClick={() => go('world')}>
+        <button className="link-btn" onClick={() => go('world')}>
           Back to the city
         </button>
       </div>

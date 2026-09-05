@@ -15,6 +15,7 @@ import {
 } from 'spacetimedb/server';
 import { ScheduleAt, TimeDuration, Timestamp } from 'spacetimedb';
 import {
+  END_MARKER,
   OPENROUTER_ENDPOINT,
   chat,
   exchangeCode,
@@ -22,11 +23,14 @@ import {
   refreshGoogleToken,
   sendEmail,
   splitLines,
+  takeEndMarker,
   type ChatMessage,
   type ChatResult,
   type HttpLike,
 } from './llm';
 import { COMPANIES } from './companies';
+import { MAX_EXCHANGES, MIN_EXCHANGES, OPEN, isClosed as conversationClosed } from './conversation';
+import { buildSummaryPrompt, parseSummary, type RubricInput } from './rubric';
 import { verifyGoogleToken } from './social';
 
 // ─── Tuning ──────────────────────────────────────────────────────────────────
@@ -107,12 +111,7 @@ const LLM_CONFIG_ID = 0;
 const GOOGLE_AUTH_ID = 0;
 const MISSION_ID = 0;
 
-/**
- * Exchanges per meeting. Not a user setting: after this many, the conversation
- * is closed, neither side adds to it, and the find step stops chasing that
- * Echoe so the night is spent meeting people rather than one person.
- */
-const MAX_EXCHANGES = 4;
+
 
 /**
  * Conversations the house pays for, per Echoe, for life. Counted when the Echoe
@@ -127,7 +126,7 @@ const DEFAULT_MODEL = 'openrouter/auto';
 const DEFAULT_MISSION =
   "Tonight's mission: find someone who has changed their mind about Bengaluru.";
 
-/** The ten seeded landmarks. Index in this array is the place id. */
+/** The seeded landmarks. Index in this array is the place id; append only. */
 const LANDMARKS: [string, number, number][] = [
   ['Bangalore Palace', 77.592, 12.9987],
   ['Vidhana Soudha', 77.5906, 12.9796],
@@ -139,6 +138,7 @@ const LANDMARKS: [string, number, number][] = [
   ['MG Road', 77.6119, 12.9738],
   ['Koramangala', 77.6112, 12.9346],
   ['Commercial Street', 77.6084, 12.9822],
+  ['the*spark, Whitefield', 77.72065, 12.99116], // Midnight Moonshot venue
 ];
 
 // ─── Tables ──────────────────────────────────────────────────────────────────
@@ -226,6 +226,42 @@ const linkedAccount = table(
 );
 
 /**
+ * Who has joined a city event from the map. One row per player per event; the
+ * event ids come from the client's events.json, so the module only stores the
+ * id string. Public so every map can show the count live.
+ */
+const eventJoin = table(
+  { name: 'event_join', public: true },
+  {
+    key: t.string().primaryKey(), // `${eventId}:${identity hex}`
+    eventId: t.string().index('btree'),
+    identity: t.identity(),
+    // What they want out of THIS event. Public, and the only thing an event
+    // conversation is matched and prompted on: the street intent stays out.
+    goal: t.string(),
+    joinedAt: t.timestamp(),
+  }
+);
+
+/**
+ * PRIVATE. The LinkedIn and X handles a player gave to join an event. Never
+ * subscribable, NEVER read by `echoTalk` or any prompt builder: no Echoe can
+ * reveal them. The one reader is `readReveal`, which hands them to the other
+ * side only after both sides of that conversation have revealed.
+ */
+const eventContact = table(
+  { name: 'event_contact' },
+  {
+    key: t.string().primaryKey(), // same key as event_join
+    eventId: t.string().index('btree'),
+    identity: t.identity(),
+    linkedin: t.string(), // https://www.linkedin.com/in/<handle>
+    twitter: t.string(), // https://x.com/<handle>
+    givenAt: t.timestamp(),
+  }
+);
+
+/**
  * The Bengaluru companies a work address can be verified against. Public and
  * seeded in `init` from `companies.ts`, exactly like `place`, so the client
  * renders a badge from a join instead of shipping its own copy of the list.
@@ -272,6 +308,7 @@ const run = table(
     owner: t.identity().unique(),
     echoId: t.u64().index('btree'),
     goal: t.string(),
+    avoid: t.string(), // who they do NOT want to meet; '' when they did not say
     status: t.string(), // running | paused | ended
     startedAt: t.timestamp(),
     peopleMet: t.u32(),
@@ -308,6 +345,10 @@ const conversation = table(
     echoA: t.u64().index('btree'),
     echoB: t.u64(),
     placeId: t.u8(),
+    eventId: t.string(), // '' for a street meeting; the event id for an event pairing
+    // Epoch 0 while open. Stamped once the clock runs out, the ceiling is hit,
+    // or a line closed with [END]. `isClosed` is the live test; this is the record.
+    closedAt: t.timestamp(),
     replies: t.u8(),
     score: t.u8(), // 0..100 deterministic intent match, set once at creation
     why: t.string(), // one line a human can read: why these two should meet
@@ -388,6 +429,71 @@ const playerKey = table(
     apiKey: t.string(),
     model: t.string(),
     updatedAt: t.timestamp(),
+  }
+);
+
+/**
+ * PRIVATE. What the player hands over when they like someone: a meet link, an
+ * Instagram, a phone number. NEVER read by `echoTalk` or any prompt builder, so
+ * no Echoe can say it; only `readReveal` returns it, and only to the other side
+ * of a conversation where both have revealed.
+ */
+const revealSecret = table(
+  { name: 'reveal_secret' },
+  {
+    identity: t.identity().primaryKey(),
+    text: t.string(),
+    updatedAt: t.timestamp(),
+  }
+);
+
+/**
+ * Public. Who has pressed Reveal on which conversation, and nothing else: the
+ * payload lives in the private `reveal_secret`. Never read by `echoTalk` or any
+ * prompt builder.
+ */
+const reveal = table(
+  { name: 'reveal', public: true },
+  {
+    key: t.string().primaryKey(), // `${conversationId}:${identity hex}`
+    conversationId: t.u64().index('btree'),
+    identity: t.identity(),
+    revealedAt: t.timestamp(),
+  }
+);
+
+/**
+ * Public. What a finished conversation was worth, one row PER SIDE: "did they
+ * give me what I came for" has a different answer for each person in the room,
+ * so the scores are always from the point of view of `identity`. Written once
+ * by the `summarize` procedure and never updated.
+ */
+const conversationSummary = table(
+  { name: 'conversation_summary', public: true },
+  {
+    key: t.string().primaryKey(), // `${conversationId}:${identity hex}`
+    conversationId: t.u64().index('btree'),
+    identity: t.identity(),
+    summary: t.string(),
+    scoresJson: t.string(), // RubricScores
+    corrective: t.u8(), // 0..100: how faithfully my own Echoe spoke as me
+    correctiveNotesJson: t.string(), // up to 3 lines for the correction loop
+    match: t.u8(), // 0..100, rubric blended with conversation.score
+    createdAt: t.timestamp(),
+  }
+);
+
+/**
+ * One-shot jobs carrying a closed conversation into the `summarize` procedure,
+ * for the same reason `talk_job` exists: a reducer cannot do network I/O.
+ * Queued by `closeConversation`, which is the only place a conversation ends.
+ */
+const summaryJob = table(
+  { name: 'summary_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    conversationId: t.u64(),
   }
 );
 
@@ -524,10 +630,16 @@ const spacetimedb = schema({
   place,
   company,
   linkedAccount,
+  eventJoin,
+  eventContact,
   agentTravel,
   run,
   receipt,
   conversation,
+  conversationSummary,
+  summaryJob,
+  revealSecret,
+  reveal,
   transcriptLine,
   echoMemory,
   googleAuth,
@@ -565,6 +677,296 @@ function requirePlayer(ctx: Ctx) {
   if (!row) fail('not_joined');
   return row;
 }
+
+const MAX_EVENT_ID = 80;
+
+/** "What do you want from this event?", the baseline an Echoe networks on there. */
+const MAX_EVENT_GOAL = 160;
+
+const MAX_HANDLE = 60;
+
+/** "@jay", "https://x.com/jay/", "linkedin.com/in/jay" all become "jay". */
+function handleOf(value: string, field: string): string {
+  const raw = trimmed(value, 200, field);
+  const cleaned = raw
+    .replace(/^https?:\/\/(www\.)?/i, '')
+    .replace(/^(linkedin\.com\/in\/|x\.com\/|twitter\.com\/)/i, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/^@/, '')
+    .trim();
+  if (cleaned.length === 0) fail(`${field}_required`);
+  if (cleaned.length > MAX_HANDLE) fail(`${field}_too_long:${MAX_HANDLE}`);
+  if (!/^[a-z0-9._-]+$/i.test(cleaned)) fail(`${field}_invalid`);
+  return cleaned;
+}
+
+/**
+ * Join a map event. The public row is the count everyone sees; the handles go
+ * to the private `event_contact` table and stop there. Joining again replaces
+ * the handles and the goal, and keeps the first timestamp.
+ */
+export const joinEvent = spacetimedb.reducer(
+  { eventId: t.string(), goal: t.string(), linkedin: t.string(), twitter: t.string() },
+  (ctx, { eventId, goal, linkedin, twitter }) => {
+    requirePlayer(ctx);
+    const id = trimmed(eventId, MAX_EVENT_ID, 'event_id');
+    const cleanGoal = trimmed(goal, MAX_EVENT_GOAL, 'goal');
+    // Stored as canonical profile links, whatever shape the player pasted.
+    const li = `https://www.linkedin.com/in/${handleOf(linkedin, 'linkedin')}`;
+    const tw = `https://x.com/${handleOf(twitter, 'twitter')}`;
+    const key = `${id}:${ctx.sender.toHexString()}`;
+    const contactRow = { key, eventId: id, identity: ctx.sender, linkedin: li, twitter: tw, givenAt: ctx.timestamp };
+    if (ctx.db.eventContact.key.find(key)) ctx.db.eventContact.key.update(contactRow);
+    else ctx.db.eventContact.insert(contactRow);
+    const joined = ctx.db.eventJoin.key.find(key);
+    if (joined) {
+      // Already in the room: a re-join only updates the goal it networks on.
+      ctx.db.eventJoin.key.update({ ...joined, goal: cleanGoal });
+      return;
+    }
+    ctx.db.eventJoin.insert({
+      key,
+      eventId: id,
+      identity: ctx.sender,
+      goal: cleanGoal,
+      joinedAt: ctx.timestamp,
+    });
+    fanOutEvent(ctx, id);
+  }
+);
+
+/** Pairings made per join. Five is a room, not a mailing list. */
+const DEFAULT_EVENT_TALK_CAP = 5;
+
+/**
+ * Per-event override of that default. The Midnight Moonshot is uncapped on
+ * purpose: everyone in the room meets everyone. A 100-person event is then
+ * 4,950 house-paid conversations, so the organiser's key needs the budget.
+ */
+const EVENT_TALK_CAP: Record<string, number> = {
+  'spacetimedb-midnight-moonshot': Infinity,
+};
+
+/** How many event conversations one Echoe holds open at once. The rest wait. */
+const EVENT_PARALLEL = 3;
+
+/** the*spark, Whitefield: where an event pairing is staged on the map. */
+const EVENT_PLACE = 10;
+
+/** Human titles for seeded events; anything else shows as its id. */
+const EVENT_TITLES: Record<string, string> = {
+  'spacetimedb-midnight-moonshot': 'Midnight Moonshot',
+};
+
+function eventTitle(eventId: string): string {
+  return EVENT_TITLES[eventId] ?? eventId;
+}
+
+/**
+ * Both sides of a closed event conversation met someone. Called from the two
+ * places that stamp `closedAt`, and only from those, so the sticky stamp is
+ * what stops it counting twice.
+ */
+function countEventMeeting(
+  ctx: Ctx,
+  c: { echoA: bigint; echoB: bigint; eventId: string }
+): void {
+  if (c.eventId.length === 0) return; // street meetings are counted at creation
+  const where = eventTitle(c.eventId);
+  for (const [me, them] of [
+    [c.echoA, c.echoB],
+    [c.echoB, c.echoA],
+  ] as const) {
+    const owner = ctx.db.echo.id.find(me)?.owner;
+    const other = ctx.db.echo.id.find(them)?.owner;
+    if (!owner) continue;
+    const name = other ? ctx.db.player.identity.find(other)?.name : undefined;
+    // Any status: a recap for a finished run should still say who it met.
+    const runRow = ctx.db.run.owner.find(owner);
+    if (runRow) ctx.db.run.id.update({ ...runRow, peopleMet: runRow.peopleMet + 1 });
+    writeReceipt(ctx, owner, 'talk', EVENT_PLACE, `Talked with ${name ?? 'someone'} at ${where}`, 0);
+  }
+}
+
+/**
+ * End a conversation, once. Stamps `closedAt` (the sticky record behind the
+ * live `isClosed` test), counts an event meeting on both sides, and queues the
+ * summary. Every close in the module goes through here — the `[END]` path in
+ * `echoTalk` and the clock in `tickEvents` — so there is one place where a
+ * conversation can end and therefore one place a summary can be missed from.
+ */
+function closeConversation(
+  ctx: Ctx,
+  c: { id: bigint; echoA: bigint; echoB: bigint; eventId: string; closedAt: Timestamp }
+): void {
+  if (micros(c.closedAt) > OPEN) return;
+  const fresh = ctx.db.conversation.id.find(c.id);
+  if (!fresh || micros(fresh.closedAt) > OPEN) return;
+  ctx.db.conversation.id.update({ ...fresh, closedAt: ctx.timestamp });
+  countEventMeeting(ctx, fresh); // no-op for a street meeting
+  ctx.db.summaryJob.insert({
+    scheduledId: 0n,
+    scheduledAt: ScheduleAt.time(micros(ctx.timestamp)),
+    conversationId: c.id,
+  });
+}
+
+/** What someone said they came to this event for, or '' if they are not in it. */
+function eventGoal(
+  ctx: { db: Db },
+  eventId: string,
+  who: { toHexString(): string }
+): string {
+  return ctx.db.eventJoin.key.find(`${eventId}:${who.toHexString()}`)?.goal ?? '';
+}
+
+/**
+ * Joining an event introduces you to everyone already in the room, up to that
+ * event's cap. Every pairing is created here so the count and the list are
+ * right immediately; only `EVENT_PARALLEL` of them talk at a time, and the tick
+ * starts the rest as slots free up. No run is required on either side: the
+ * point of an event is that you meet whoever is there.
+ *
+ * Event conversations are on the house and do not spend anyone's free five,
+ * because an uncapped event would otherwise burn a player's whole allowance
+ * before their first night out.
+ */
+function fanOutEvent(ctx: Ctx, eventId: string): void {
+  const myEcho = ctx.db.echo.owner.find(ctx.sender);
+  if (!myEcho) return; // joined the event before creating an Echoe; nothing to pair
+  const myGoal = eventGoal(ctx, eventId, ctx.sender);
+
+  // Most recent joiners first: the room you walked into, not its whole history.
+  const others = [...ctx.db.eventJoin.eventId.filter(eventId)]
+    .filter(j => !j.identity.isEqual(ctx.sender))
+    .sort((x, y) => (micros(x.joinedAt) < micros(y.joinedAt) ? 1 : -1))
+    .slice(0, EVENT_TALK_CAP[eventId] ?? DEFAULT_EVENT_TALK_CAP);
+
+  for (const other of others) {
+    const otherEcho = ctx.db.echo.owner.find(other.identity);
+    if (!otherEcho) continue;
+    const a = myEcho.id < otherEcho.id ? myEcho.id : otherEcho.id;
+    const b = myEcho.id < otherEcho.id ? otherEcho.id : myEcho.id;
+
+    let already = false;
+    for (const c of ctx.db.conversation.echoA.filter(a)) {
+      if (c.echoB === b && c.eventId === eventId) already = true;
+    }
+    if (already) continue;
+
+    // An event pairing is matched on what each side came to THIS event for,
+    // not on their street intent. Same scorer, different inputs.
+    const match = matchIntents(myGoal, other.goal);
+    ctx.db.conversation.insert({
+      id: 0n,
+      echoA: a,
+      echoB: b,
+      placeId: EVENT_PLACE,
+      eventId,
+      closedAt: OPEN_AT,
+      replies: 0, // not started yet; the tick gives it a slot
+      score: match.score,
+      why: match.why,
+      fundingA: 'house',
+      fundingB: 'house',
+      lastExchangeAt: ctx.timestamp,
+      createdAt: ctx.timestamp, // re-stamped when the conversation actually starts
+    });
+  }
+}
+
+/**
+ * Drives every event conversation, independent of runs: an event pairing has
+ * no roaming Echoe behind it and no landmark to stand at. Each tick, closes
+ * what has run out of time, adds one exchange to each open conversation, then
+ * fills each Echoe's free slots from its oldest unstarted pairings.
+ *
+ * ponytail: full conversation scan per tick. Index conversation by eventId if a
+ * real event makes this hurt.
+ */
+function tickEvents(ctx: Ctx, hasKey: boolean): void {
+  const now = micros(ctx.timestamp);
+  const open = new Map<bigint, number>();
+  const waiting: { id: bigint; echoA: bigint; echoB: bigint }[] = [];
+
+  for (const stale of [...ctx.db.conversation.iter()]) {
+    if (micros(stale.closedAt) > OPEN) continue;
+    const c = ctx.db.conversation.id.find(stale.id);
+    if (!c) continue;
+    // A street meeting is driven by the meet loop, but nothing there stamps the
+    // clock: the pair simply walks away. The scan is already here, so this is
+    // where a street talk that ran out of time gets closed and summarised.
+    if (c.eventId.length === 0) {
+      if (isClosed(now, c)) closeConversation(ctx, c);
+      continue;
+    }
+    if (c.replies === 0) {
+      waiting.push(c);
+      continue;
+    }
+    if (isClosed(now, c)) {
+      closeConversation(ctx, c);
+      continue;
+    }
+    open.set(c.echoA, (open.get(c.echoA) ?? 0) + 1);
+    open.set(c.echoB, (open.get(c.echoB) ?? 0) + 1);
+    if (micros(c.lastExchangeAt) === now) continue; // one exchange per tick
+    startEventExchange(ctx, c, hasKey, false);
+  }
+
+  // Oldest pairing first, so the room is worked through in the order it formed.
+  for (const c of waiting.sort((x, y) => (x.id < y.id ? -1 : 1))) {
+    if ((open.get(c.echoA) ?? 0) >= EVENT_PARALLEL) continue;
+    if ((open.get(c.echoB) ?? 0) >= EVENT_PARALLEL) continue;
+    const fresh = ctx.db.conversation.id.find(c.id);
+    if (!fresh) continue;
+    startEventExchange(ctx, fresh, hasKey, true);
+    open.set(c.echoA, (open.get(c.echoA) ?? 0) + 1);
+    open.set(c.echoB, (open.get(c.echoB) ?? 0) + 1);
+  }
+}
+
+/**
+ * One more exchange on an event conversation. `first` stamps `createdAt` now,
+ * which is what starts the three-minute clock: a pairing that waited an hour
+ * for a slot still gets its full three minutes.
+ */
+function startEventExchange(
+  ctx: Ctx,
+  c: { id: bigint; echoA: bigint; echoB: bigint; replies: number; createdAt: Timestamp },
+  hasKey: boolean,
+  first: boolean
+): void {
+  ctx.db.conversation.id.update({
+    ...ctx.db.conversation.id.find(c.id)!,
+    replies: c.replies + 1,
+    lastExchangeAt: ctx.timestamp,
+    ...(first ? { createdAt: ctx.timestamp } : {}),
+  });
+
+  // No receipt here: both sides get one when the conversation closes, which is
+  // also where peopleMet is counted, so Talks and the recap cannot disagree.
+  const owner = ctx.db.echo.id.find(c.echoA)?.owner;
+  if (hasKey && owner) {
+    ctx.db.talkJob.insert({
+      scheduledId: 0n,
+      scheduledAt: ScheduleAt.time(micros(ctx.timestamp)),
+      conversationId: c.id,
+      payer: owner, // both sides are 'house', so either owner reaches the same key
+    });
+  } else {
+    writeFallbackExchange(ctx, c.id, c.echoA, c.echoB, EVENT_PLACE);
+  }
+}
+
+/** Leave a map event: drops the public row and the private handles together. */
+export const leaveEvent = spacetimedb.reducer({ eventId: t.string() }, (ctx, { eventId }) => {
+  requirePlayer(ctx);
+  const id = trimmed(eventId, MAX_EVENT_ID, 'event_id');
+  const key = `${id}:${ctx.sender.toHexString()}`;
+  ctx.db.eventJoin.key.delete(key);
+  ctx.db.eventContact.key.delete(key);
+});
 
 function requireEcho(ctx: Ctx) {
   const row = ctx.db.echo.owner.find(ctx.sender);
@@ -777,21 +1179,37 @@ function outOfBudget(ctx: Ctx, runRow: ReturnType<typeof requireRun>): boolean {
   // ponytail: full scan per broke run per tick; index conversation by echoB if it shows up.
   for (const c of ctx.db.conversation.iter()) {
     if (c.echoA !== runRow.echoId && c.echoB !== runRow.echoId) continue;
+    if (c.eventId.length > 0) continue; // event talks are on the house, not this budget
     if (micros(c.createdAt) < micros(runRow.startedAt)) continue;
-    if (c.replies >= MAX_EXCHANGES) continue;
+    if (isClosed(micros(ctx.timestamp), c)) continue;
     if (c.echoA === runRow.echoId ? c.fundingA : c.fundingB) return false;
   }
   return true;
 }
+
+/** `isClosed` over a database row, whose timestamps are Timestamps. */
+function isClosed(
+  now: bigint,
+  c: { closedAt: Timestamp; replies: number; createdAt: Timestamp }
+): boolean {
+  return conversationClosed(now, {
+    ...c,
+    closedAt: micros(c.closedAt),
+    createdAt: micros(c.createdAt),
+  });
+}
+
+/** Epoch 0: what an open conversation carries in `closedAt`. */
+const OPEN_AT = new Timestamp(OPEN);
 
 /** True when this run already finished a conversation with `otherEchoId`. */
 function doneTalking(ctx: Ctx, runRow: ReturnType<typeof requireRun>, otherEchoId: bigint): boolean {
   const a = runRow.echoId < otherEchoId ? runRow.echoId : otherEchoId;
   const b = runRow.echoId < otherEchoId ? otherEchoId : runRow.echoId;
   for (const c of ctx.db.conversation.echoA.filter(a)) {
-    if (c.echoB !== b) continue;
+    if (c.echoB !== b || c.eventId.length > 0) continue; // street meetings only
     if (micros(c.createdAt) < micros(runRow.startedAt)) continue;
-    if (c.replies >= MAX_EXCHANGES) return true;
+    if (isClosed(micros(ctx.timestamp), c)) return true;
   }
   return false;
 }
@@ -927,12 +1345,12 @@ export const join = spacetimedb.reducer(
 );
 
 export const createEcho = spacetimedb.reducer(
-  { persona: t.string(), intent: t.string() },
-  (ctx, { persona, intent: intentLine }) => {
+  { persona: t.string() },
+  (ctx, { persona }) => {
     requirePlayer(ctx);
-    // Persona is optional flavour; the intent is the product.
+    // Persona is the whole of screen 2 now. The intent line is written later,
+    // by startRun, from "who do you want to meet".
     const cleanPersona = persona.trim().slice(0, MAX_PERSONA_LENGTH);
-    const cleanIntent = trimmed(intentLine, MAX_INTENT_LENGTH, 'intent');
 
     const existing = ctx.db.echo.owner.find(ctx.sender);
     let echoId: bigint;
@@ -954,30 +1372,40 @@ export const createEcho = spacetimedb.reducer(
       }).id;
     }
 
-    // One live intent per player. Re-creating refreshes the clock and keeps the
-    // share id, so a link already posted keeps working.
-    const existingIntent = ctx.db.intent.owner.find(ctx.sender);
-    if (existingIntent) {
-      ctx.db.intent.id.update({
-        ...existingIntent,
-        text: cleanIntent,
-        expiresAt: plus(ctx.timestamp, INTENT_TTL_MICROS),
-      });
-    } else {
-      let shareId = newShareId(ctx);
-      while (ctx.db.intent.shareId.find(shareId)) shareId = newShareId(ctx);
-      ctx.db.intent.insert({
-        id: 0n,
-        owner: ctx.sender,
-        echoId,
-        text: cleanIntent,
-        shareId,
-        createdAt: ctx.timestamp,
-        expiresAt: plus(ctx.timestamp, INTENT_TTL_MICROS),
-      });
-    }
+    // One live intent per player, created here so the share link exists before
+    // the first run. `text` stays empty until startRun writes the goal into it.
+    ensureIntent(ctx, echoId, null);
   }
 );
+
+/**
+ * The caller's live intent row, created if missing. `text` is left alone when
+ * `text` is null, which is what createEcho wants: a re-created Echoe keeps both
+ * the share id already posted somewhere and whatever line the last run set.
+ */
+function ensureIntent(ctx: Ctx, echoId: bigint, text: string | null): void {
+  const existing = ctx.db.intent.owner.find(ctx.sender);
+  if (existing) {
+    ctx.db.intent.id.update({
+      ...existing,
+      echoId,
+      text: text ?? existing.text,
+      expiresAt: plus(ctx.timestamp, INTENT_TTL_MICROS),
+    });
+    return;
+  }
+  let shareId = newShareId(ctx);
+  while (ctx.db.intent.shareId.find(shareId)) shareId = newShareId(ctx);
+  ctx.db.intent.insert({
+    id: 0n,
+    owner: ctx.sender,
+    echoId,
+    text: text ?? '',
+    shareId,
+    createdAt: ctx.timestamp,
+    expiresAt: plus(ctx.timestamp, INTENT_TTL_MICROS),
+  });
+}
 
 // ─── Screen 3: the live world ────────────────────────────────────────────────
 
@@ -1014,10 +1442,11 @@ export const travel = spacetimedb.reducer(
 
 export const startRun = spacetimedb.reducer(
   {
-    goal: t.string(),
+    goal: t.string(), // who they want to meet; also becomes the shared intent line
+    avoid: t.string(), // who they do NOT want to meet; '' is allowed
     hostShareId: t.string(), // empty unless the player arrived through a shared link
   },
-  (ctx, { goal, hostShareId }) => {
+  (ctx, { goal, avoid, hostShareId }) => {
     const playerRow = requirePlayer(ctx);
     const echoRow = requireEcho(ctx);
 
@@ -1031,12 +1460,17 @@ export const startRun = spacetimedb.reducer(
     }
 
     const cleanGoal = trimmed(goal, MAX_GOAL_LENGTH, 'goal');
+    const cleanAvoid = avoid.trim().slice(0, MAX_GOAL_LENGTH);
 
+    // The goal IS the share-link line. One box on the Start page, so there is
+    // nowhere else for the intent to come from.
+    ensureIntent(ctx, echoRow.id, cleanGoal.slice(0, MAX_INTENT_LENGTH));
 
     const row = {
       owner: ctx.sender,
       echoId: echoRow.id,
       goal: cleanGoal,
+      avoid: cleanAvoid,
       status: RUN_RUNNING,
       startedAt: ctx.timestamp,
       peopleMet: 0,
@@ -1148,6 +1582,91 @@ export const correct = spacetimedb.reducer(
 
     ctx.db.transcriptLine.id.update({ ...line, feedback: FEEDBACK_NOT_ME });
   }
+);
+
+// ─── Mutual reveal ───────────────────────────────────────────────────────────
+//
+// The payload is written once, on the Start page, and lives in a private table
+// no prompt ever reads. Pressing Reveal on a conversation only records that the
+// caller pressed it. Nothing crosses until both sides have, and even then it
+// crosses through `readReveal` rather than a subscription.
+
+const MAX_REVEAL_LENGTH = 200;
+
+/** Set (or clear, with '') what the caller hands over when they like someone. */
+export const setReveal = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  requirePlayer(ctx);
+  const clean = text.trim().slice(0, MAX_REVEAL_LENGTH);
+  const existing = ctx.db.revealSecret.identity.find(ctx.sender);
+  if (clean.length === 0) {
+    if (existing) ctx.db.revealSecret.identity.delete(ctx.sender);
+    return;
+  }
+  const row = { identity: ctx.sender, text: clean, updatedAt: ctx.timestamp };
+  if (existing) ctx.db.revealSecret.identity.update(row);
+  else ctx.db.revealSecret.insert(row);
+});
+
+function revealKey(conversationId: bigint, owner: { toHexString(): string }): string {
+  return `${conversationId}:${owner.toHexString()}`;
+}
+
+/** Mark my side of a conversation revealed. Idempotent; the other side is untouched. */
+export const revealTo = spacetimedb.reducer(
+  { conversationId: t.u64() },
+  (ctx, { conversationId }) => {
+    const echoRow = requireEcho(ctx);
+    const convo = ctx.db.conversation.id.find(conversationId);
+    if (!convo) fail(`unknown_conversation:${conversationId}`);
+    if (convo.echoA !== echoRow.id && convo.echoB !== echoRow.id) fail('not_a_participant');
+    const key = revealKey(conversationId, ctx.sender);
+    if (ctx.db.reveal.key.find(key)) return;
+    ctx.db.reveal.insert({
+      key,
+      conversationId,
+      identity: ctx.sender,
+      revealedAt: ctx.timestamp,
+    });
+  }
+);
+
+/**
+ * What the caller may see of the other side of one conversation. A procedure
+ * rather than a public table because the payload must never be subscribable:
+ * `text` and the event links stay '' until both `reveal` rows exist, and the
+ * caller must be one of the two Echoes.
+ */
+export const readReveal = spacetimedb.procedure(
+  { conversationId: t.u64() },
+  t.string(),
+  (ctx, { conversationId }) =>
+    ctx.withTx(tx => {
+      const convo = tx.db.conversation.id.find(conversationId);
+      if (!convo) fail(`unknown_conversation:${conversationId}`);
+      const myEcho = tx.db.echo.owner.find(tx.sender);
+      if (!myEcho || (convo.echoA !== myEcho.id && convo.echoB !== myEcho.id)) {
+        fail('not_a_participant');
+      }
+      const otherEcho = tx.db.echo.id.find(convo.echoA === myEcho.id ? convo.echoB : convo.echoA);
+      const mine = !!tx.db.reveal.key.find(revealKey(conversationId, tx.sender));
+      const theirs =
+        !!otherEcho && !!tx.db.reveal.key.find(revealKey(conversationId, otherEcho.owner));
+
+      let text = '';
+      let linkedin = '';
+      let twitter = '';
+      if (mine && theirs && otherEcho) {
+        text = tx.db.revealSecret.identity.find(otherEcho.owner)?.text ?? '';
+        if (convo.eventId.length > 0) {
+          const c = tx.db.eventContact.key.find(
+            `${convo.eventId}:${otherEcho.owner.toHexString()}`
+          );
+          linkedin = c?.linkedin ?? '';
+          twitter = c?.twitter ?? '';
+        }
+      }
+      return JSON.stringify({ mine, theirs, text, linkedin, twitter });
+    })
 );
 
 // ─── LLM configuration (private) ─────────────────────────────────────────────
@@ -1338,6 +1857,10 @@ export const tick = spacetimedb.reducer(
       if (micros(stale.expiresAt) <= now) ctx.db.intent.id.delete(stale.id);
     }
 
+    // Event conversations first, and outside the run loop: an event pairing
+    // belongs to two Echoes that may have no run at all.
+    tickEvents(ctx, hasKey);
+
     // Iterate over a snapshot, but re-read each row before acting on it. One
     // Echoe's turn can write to another Echoe's run (a conversation bumps
     // peopleMet on both sides), and acting on the snapshot would silently
@@ -1470,20 +1993,23 @@ function tryConverse(
     // continuing it would leave peopleMet at zero while a transcript grew.
     let existing: {
       id: bigint;
+      closedAt: Timestamp;
       replies: number;
       fundingA: string;
       fundingB: string;
+      createdAt: Timestamp;
       lastExchangeAt: Timestamp;
     } | null = null;
     for (const c of ctx.db.conversation.echoA.filter(a)) {
-      if (c.echoB !== b) continue;
+      // An event pairing is driven by its own scheduler, never picked up here.
+      if (c.echoB !== b || c.eventId.length > 0) continue;
       const started = micros(c.createdAt);
       if (started < micros(runRow.startedAt)) continue;
       if (otherRun && started < micros(otherRun.startedAt)) continue;
       existing = c;
     }
     // Said enough to each other tonight. Move on to the next person.
-    if (existing && existing.replies >= MAX_EXCHANGES) continue;
+    if (existing && isClosed(micros(ctx.timestamp), existing)) continue;
 
     // One exchange per tick, and the sides take turns: A opens, B answers.
     // Two jobs in one tick both read the same history and both write openers.
@@ -1519,6 +2045,8 @@ function tryConverse(
         echoA: a,
         echoB: b,
         placeId,
+        eventId: '', // a street meeting, not an event pairing
+        closedAt: OPEN_AT,
         replies: 1,
         score: match.score,
         why: match.why,
@@ -1694,12 +2222,23 @@ export const echoTalk = spacetimedb.procedure(
         personaA: echoA.persona,
         notesA: echoA.behaviourNotes,
         goalA: firstGoal(goalA),
-        intentA: tx.db.intent.owner.find(echoA.owner)?.text ?? '',
-        intentB: tx.db.intent.owner.find(echoB.owner)?.text ?? '',
+        // Who each side does NOT want to meet. The reveal payload and the event
+        // contact links are deliberately absent here and must stay absent.
+        avoidA: firstAvoid(tx.db.run.echoId.filter(echoA.id)),
+        avoidB: firstAvoid(tx.db.run.echoId.filter(echoB.id)),
+        // At an event the two are here for the event, not for the street. The
+        // event goal replaces the street intent in the prompt entirely.
+        eventId: convo.eventId,
+        eventTitle: eventTitle(convo.eventId),
+        eventGoalA: eventGoal(tx, convo.eventId, echoA.owner),
+        eventGoalB: eventGoal(tx, convo.eventId, echoB.owner),
+        intentA: convo.eventId ? '' : tx.db.intent.owner.find(echoA.owner)?.text ?? '',
+        intentB: convo.eventId ? '' : tx.db.intent.owner.find(echoB.owner)?.text ?? '',
         nameA,
         nameB,
-        // The reducer counted this exchange before queuing the job, so replies is final.
-        closing: convo.replies >= MAX_EXCHANGES,
+        // The reducer counted this exchange before queuing the job, so replies
+        // is final and the clock has all but run out on the last one.
+        closing: isClosed(micros(tx.timestamp), convo),
         exchange: convo.replies,
         why: convo.why,
         memoryA: memoryOf(echoA.id, echoB.id),
@@ -1719,10 +2258,17 @@ export const echoTalk = spacetimedb.procedure(
       {
         role: 'system',
         content: [
-          `Two strangers meet at ${setup.placeName} in Bengaluru at night. Exchange ${setup.exchange} of ${MAX_EXCHANGES}.`,
+          setup.eventId
+            ? `Two strangers meet at ${setup.eventTitle}, at ${setup.placeName} in Bengaluru. Exchange ${setup.exchange}.`
+            : `Two strangers meet at ${setup.placeName} in Bengaluru at night. Exchange ${setup.exchange}.`,
           '',
+          // At an event, what each came here for anchors the talk, so it goes
+          // above the persona. The street intent is not loaded at all.
+          setup.eventGoalA ? `At ${setup.eventTitle}, A wants: ${setup.eventGoalA}` : '',
+          setup.eventGoalB ? `At ${setup.eventTitle}, B wants: ${setup.eventGoalB}` : '',
           setup.personaA ? `A is: ${setup.personaA}` : '',
           setup.intentA ? `A wants: ${setup.intentA}` : '',
+          setup.avoidA ? `Do not pursue people who ${setup.avoidA}, on A's behalf.` : '',
           setup.notesA ? `A's corrections (obey these over everything):
 ${setup.notesA}` : '',
           setup.memoryA ? `A remembers B from a previous night: ${setup.memoryA}` : '',
@@ -1733,6 +2279,7 @@ ${setup.agentWorkA.map(n => `- ${n}`).join('\n')}`
           '',
           setup.personaB ? `B is: ${setup.personaB}` : '',
           setup.intentB ? `B wants: ${setup.intentB}` : '',
+          setup.avoidB ? `Do not pursue people who ${setup.avoidB}, on B's behalf.` : '',
           setup.notesB ? `B's corrections (obey these over everything):
 ${setup.notesB}` : '',
           setup.memoryB ? `B remembers A from a previous night: ${setup.memoryB}` : '',
@@ -1745,13 +2292,19 @@ ${setup.agentWorkB.map(n => `- ${n}`).join('\n')}`
           setup.memoryA || setup.memoryB
             ? 'They have met before. Pick up where they left off; no introductions.'
             : '',
-          'Both are deciding whether to meet in person this week. Every line should probe the',
-          "other's want, react to what was just said, or push toward the match. No small talk.",
+          'This is a long conversation, not an introduction. Go deeper with every exchange:',
+          'what exactly each of them is building, what is actually blocking them right now,',
+          'what they would need from the other person to make it easier. Ask follow-up',
+          'questions about specifics that were just said, and answer with detail rather than',
+          'a summary. No small talk, no compliments, no restating what the other just said.',
+          `Do not propose coffee, a call, a meeting or any next step, and do not sign off, before exchange ${MIN_EXCHANGES}.`,
           `Mention ${setup.placeName} or something physical there at most once.`,
           'One line each, A then B, under 25 words, no narration, no names, no letters as names.',
           'Format exactly: "A: ..." on the first line, then "B: ..." on the second.',
-          setup.exchange >= MAX_EXCHANGES
-            ? 'This is the final exchange: B must land on one concrete next step, a day, a place, or how to reach them.'
+          `Only once the two have genuinely exhausted the topic, land B on one concrete next step and end that line with ${END_MARKER}.`,
+          `Never write ${END_MARKER} while there is any specific left unasked.`,
+          setup.closing
+            ? `This is the final exchange: B must land on one concrete next step, a day, a place, or how to reach them, and end with ${END_MARKER}.`
             : '',
         ]
           .filter(l => l.length > 0)
@@ -1773,6 +2326,10 @@ ${setup.agentWorkB.map(n => `- ${n}`).join('\n')}`
         ? chat(ctx.http, bearer, setup.model, messages, setup.endpoint)
         : { ok: false, reason: 'no key available for this exchange' };
 
+    // The clock and the ceiling are known before the call; the model's own
+    // [END] can close it early, which is decided once the reply is in hand.
+    let closing = setup.closing;
+
     ctx.withTx(tx => {
       const now = tx.timestamp;
       const write = (speakerEchoId: bigint, text: string) => {
@@ -1790,7 +2347,10 @@ ${setup.agentWorkB.map(n => `- ${n}`).join('\n')}`
       // On the closing exchange, each side keeps one line about the other, built
       // from what was actually said. Next time these two meet it is in the prompt.
       const remember = () => {
-        if (!setup.closing) return;
+        if (!closing) return;
+        // Sticky, so no later tick re-opens what the clock or [END] just ended.
+        const convo = tx.db.conversation.id.find(job.conversationId);
+        if (convo) closeConversation(tx, convo); // stamps, counts, queues the summary
         const said = [...tx.db.transcriptLine.conversationId.filter(job.conversationId)].sort((x, y) =>
           x.id < y.id ? -1 : x.id > y.id ? 1 : 0
         );
@@ -1818,6 +2378,10 @@ ${setup.agentWorkB.map(n => `- ${n}`).join('\n')}`
       // Only a reply with both speakers ships. Anything else, including a
       // one-line or preamble-laden answer, falls back rather than guessing.
       const lines = result.ok ? splitLines(result.text, 2) : [];
+      // The model closes a conversation by ending a line with [END].
+      // Below the floor the marker is stripped but ignored: left alone the model
+      // wraps up in three lines, which is an introduction, not a conversation.
+      if (takeEndMarker(lines) && setup.exchange >= MIN_EXCHANGES) closing = true;
       if (!result.ok || lines.length < 2) {
         console.warn(`echoTalk falling back: ${result.ok ? 'malformed reply' : result.reason}`);
         const mine = setup.intentA || 'something I cannot name yet';
@@ -1865,6 +2429,134 @@ ${setup.agentWorkB.map(n => `- ${n}`).join('\n')}`
   }
 );
 
+// ─── The summary procedure ───────────────────────────────────────────────────
+
+/** A scored summary is longer than a two-line exchange, so it gets its own ceiling. */
+const SUMMARY_MAX_TOKENS = 900;
+
+/**
+ * Scheduled by `closeConversation`, one job per conversation that ends. Scores
+ * the finished transcript twice, once from each side, because "did they give me
+ * what I came for" has a different answer for each person in the room.
+ *
+ * Always on the house key: the summary is the product, not a metered exchange,
+ * and a player who never linked OpenRouter still gets one. Idempotent by row:
+ * a side that already has a `conversation_summary` row is skipped, so a
+ * re-queued job costs nothing. On failure it logs a warning and writes nothing,
+ * and the client shows "Summarising…" rather than a Retry button.
+ */
+export const summarize = spacetimedb.procedure(
+  { onSchedule: summaryJob },
+  { job: summaryJob.rowType },
+  t.unit(),
+  (ctx, { job }) => {
+    const setup = ctx.withTx(tx => {
+      const convo = tx.db.conversation.id.find(job.conversationId);
+      if (!convo) return null;
+      const echoA = tx.db.echo.id.find(convo.echoA);
+      const echoB = tx.db.echo.id.find(convo.echoB);
+      if (!echoA || !echoB) return null;
+
+      const config = tx.db.llmConfig.id.find(LLM_CONFIG_ID);
+      const lines = [...tx.db.transcriptLine.conversationId.filter(convo.id)]
+        .sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+
+      const nameOf = (o: typeof echoA.owner) => tx.db.player.identity.find(o)?.name ?? 'someone';
+      // At an event the two are here for the event, exactly as in the prompt:
+      // the event goal replaces the street intent rather than joining it.
+      const goalOf = (o: typeof echoA.owner) =>
+        convo.eventId ? eventGoal(tx, convo.eventId, o) : tx.db.intent.owner.find(o)?.text ?? '';
+      const avoidOf = (o: typeof echoA.owner) => tx.db.run.owner.find(o)?.avoid ?? '';
+
+      // One RubricInput per side. `mine` flips with the side, so each call reads
+      // the same transcript as its own half of the conversation.
+      const sideOf = (me: typeof echoA, them: typeof echoB): {
+        key: string;
+        identity: typeof echoA.owner;
+        input: RubricInput;
+      } => ({
+        key: `${convo.id}:${me.owner.toHexString()}`,
+        identity: me.owner,
+        input: {
+          eventTitle: convo.eventId ? eventTitle(convo.eventId) : '',
+          myName: nameOf(me.owner),
+          theirName: nameOf(them.owner),
+          myPersona: me.persona,
+          theirPersona: them.persona,
+          myGoal: goalOf(me.owner),
+          theirGoal: goalOf(them.owner),
+          myAvoid: avoidOf(me.owner),
+          lines: lines.map(l => ({ mine: l.speakerEchoId === me.id, text: l.text })),
+          deterministicScore: convo.score,
+        },
+      });
+
+      const sides = [sideOf(echoA, echoB), sideOf(echoB, echoA)]
+        // Already scored on a previous job. Nothing to pay for or overwrite.
+        .filter(s => !tx.db.conversationSummary.key.find(s.key));
+
+      return {
+        apiKey: config?.apiKey ?? '',
+        model: config?.model ?? '',
+        endpoint: config?.endpoint || OPENROUTER_ENDPOINT,
+        empty: lines.length === 0,
+        sides,
+      };
+    });
+
+    if (!setup || setup.sides.length === 0) return {};
+    if (setup.empty) {
+      console.warn(`summarize: conversation ${job.conversationId} closed with no transcript`);
+      return {};
+    }
+
+    const bearer = isGoogleEndpoint(setup.endpoint) ? googleBearer(ctx) : setup.apiKey;
+    if (!bearer || !setup.model) {
+      console.warn(`summarize: no house key for conversation ${job.conversationId}`);
+      return {};
+    }
+
+    // Network first, with no transaction open, exactly as echoTalk does it.
+    const scored = setup.sides.map(side => {
+      const reply = chat(
+        ctx.http,
+        bearer,
+        setup.model,
+        buildSummaryPrompt(side.input) as ChatMessage[],
+        setup.endpoint,
+        SUMMARY_MAX_TOKENS
+      );
+      if (!reply.ok) {
+        console.warn(`summarize: ${side.key} model call failed: ${reply.reason}`);
+        return null;
+      }
+      const parsed = parseSummary(reply.text, side.input);
+      if (!parsed) console.warn(`summarize: ${side.key} reply was unparseable`);
+      return parsed ? { side, parsed } : null;
+    });
+
+    ctx.withTx(tx => {
+      for (const row of scored) {
+        if (!row) continue;
+        if (tx.db.conversationSummary.key.find(row.side.key)) continue; // raced; first write wins
+        tx.db.conversationSummary.insert({
+          key: row.side.key,
+          conversationId: job.conversationId,
+          identity: row.side.identity,
+          summary: row.parsed.summary,
+          scoresJson: JSON.stringify(row.parsed.scores),
+          corrective: row.parsed.corrective.score,
+          correctiveNotesJson: JSON.stringify(row.parsed.corrective.notes),
+          match: row.parsed.match,
+          createdAt: tx.timestamp,
+        });
+      }
+    });
+
+    return {};
+  }
+);
+
 // ─── OpenRouter sign-in (client-callable) ─────────────────────────────────────
 
 /**
@@ -1903,54 +2595,6 @@ export const linkOpenRouter = spacetimedb.procedure(
   }
 );
 
-// ─── Intent suggestions from a persona (client-callable) ─────────────────────
-
-/**
- * Turns a persona into two or three one-line intents the player can tap. Uses
- * the LLM when a key is configured; otherwise builds lines from the persona's
- * own keywords so the button always returns something. Returns one line per
- * row of text, newline separated.
- */
-export const suggestIntents = spacetimedb.procedure(
-  { persona: t.string() },
-  t.string(),
-  (ctx, { persona }) => {
-    const clean = persona.trim().slice(0, MAX_PERSONA_LENGTH);
-    if (clean.length === 0) throw new SenderError('persona_required');
-
-    // Joined players only: this spends the house key on every tap.
-    const state = ctx.withTx(tx => ({
-      joined: tx.db.player.identity.find(tx.sender) !== undefined,
-      config: tx.db.llmConfig.id.find(LLM_CONFIG_ID),
-    }));
-    if (!state.joined) throw new SenderError('join_first');
-    const config = state.config;
-    // No heuristic stand-in: without a model there are no suggestions.
-    if (!config || !config.apiKey || !config.model) throw new SenderError('suggestions_unavailable');
-    {
-      const endpoint = config.endpoint || OPENROUTER_ENDPOINT;
-      const bearer = isGoogleEndpoint(endpoint) ? googleBearer(ctx) : config.apiKey;
-      if (!bearer) throw new SenderError('suggestions_unavailable');
-      const result = chat(ctx.http, bearer, config.model, [
-        {
-          role: 'system',
-          content: [
-            'You write one-line intents for a city networking app in Bengaluru.',
-            'Given a persona, write exactly three intents, one per line, each under 12 words,',
-            'each starting with a verb or a role, concrete enough that a stranger could act on it.',
-            'Examples: "hiring a Rust dev in Bengaluru", "raising pre-seed for a fintech",',
-            '"looking for a design cofounder", "want a gym partner in Indiranagar". No numbering.',
-          ].join(' '),
-        },
-        { role: 'user', content: clean },
-      ], endpoint);
-      if (result.ok) return splitLines(result.text, 3).join('\n');
-      console.warn(`suggestIntents failed: ${result.reason}`);
-      throw new SenderError('suggestions_failed');
-    }
-  }
-);
-
 /** The client renders a deterministic face from this. Never chosen, never edited. */
 function avatarSeed(identity: { toHexString(): string }): string {
   return identity.toHexString().slice(0, 16);
@@ -1961,6 +2605,11 @@ function firstGoal(rows: Iterable<{ goal: string }>): string {
   return '';
 }
 
+function firstAvoid(rows: Iterable<{ avoid: string }>): string {
+  for (const r of rows) return r.avoid;
+  return '';
+}
+
 // ─── Verified company Echoe ──────────────────────────────────────────────────
 
 /**
@@ -1968,6 +2617,20 @@ function firstGoal(rows: Iterable<{ goal: string }>): string {
  * company was added. `init` runs once per database, so without this a new row
  * in `companies.ts` would need a data wipe. Same admin gate as `setSecret`.
  */
+/**
+ * Refresh the landmark rows on a database published before a landmark was
+ * appended. `init` runs once, so without this a new place needs a data wipe.
+ * Same admin gate as `seedCompanies`. Ids never move, so Echoes keep their spot.
+ */
+export const seedPlaces = spacetimedb.reducer(ctx => {
+  requireSecretAdmin(ctx);
+  LANDMARKS.forEach(([name, lng, lat], id) => {
+    const row = { id, name, lng, lat };
+    if (ctx.db.place.id.find(id)) ctx.db.place.id.update(row);
+    else ctx.db.place.insert(row);
+  });
+});
+
 export const seedCompanies = spacetimedb.reducer(ctx => {
   requireSecretAdmin(ctx);
   for (const c of COMPANIES) {

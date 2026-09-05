@@ -4,8 +4,10 @@ import { reducers, tables } from './module_bindings';
 import './styles.css';
 
 import { Toast } from './components/Toast';
+import { landmarkById } from './data/landmarks';
 import { ConnectScreen } from './screens/ConnectScreen';
 import { EventsScreen } from './screens/EventsScreen';
+import { JoinEventScreen } from './screens/JoinEventScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { CorrectScreen } from './screens/CorrectScreen';
 import { CreateScreen } from './screens/CreateScreen';
@@ -14,6 +16,7 @@ import { JoinScreen } from './screens/JoinScreen';
 import { LimitsScreen } from './screens/LimitsScreen';
 import { ReturnScreen } from './screens/ReturnScreen';
 import { ReviewScreen } from './screens/ReviewScreen';
+import { SummaryScreen } from './screens/SummaryScreen';
 import { TalksScreen } from './screens/TalksScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
@@ -28,13 +31,16 @@ import {
   correctionsFor,
   historyFrom,
   hostCardFrom,
+  matchByConversation,
   placeIndexOf,
   rankedMatches,
   toPlayer,
   toReceipt,
   toRun,
+  toSummary,
   toTranscript,
   eventsFrom,
+  withMatch,
 } from './state/select';
 import type { Actions, ScreenName } from './state/types';
 
@@ -53,6 +59,11 @@ function App() {
   const [limitsFrom, setLimitsFrom] = useState<ScreenName>('world');
   const [profileFrom, setProfileFrom] = useState<ScreenName>('world');
   const [reviewFrom, setReviewFrom] = useState<ScreenName>('return');
+  // The event being joined, and where the Join page came from.
+  const [joinTarget, setJoinTarget] = useState<{ id: string; title: string; from: ScreenName } | null>(null);
+  // reveal_secret is a private table, so the Start page cannot read back what it
+  // last sent. Keep it here for this session only, to pre-fill the field.
+  const [reveal, setRevealText] = useState('');
 
   const [players, playersReady] = useTable(tables.player);
   const [echoes] = useTable(tables.echo);
@@ -66,12 +77,17 @@ function App() {
   const [companies] = useTable(tables.company);
   const [correctionRows] = useTable(tables.correction);
   const [linkedAccounts] = useTable(tables.linkedAccount);
+  const [eventJoins] = useTable(tables.eventJoin);
+  const [reveals] = useTable(tables.reveal);
+  const [summaryRows] = useTable(tables.conversationSummary);
   const [agentMemoryRows] = useTable(tables.agentMemory);
 
   const join = useReducer(reducers.join);
   const unverify = useReducer(reducers.unverify);
   const unlinkGoogle = useReducer(reducers.unlinkGoogle);
   const createEcho = useReducer(reducers.createEcho);
+  const joinEvent = useReducer(reducers.joinEvent);
+  const leaveEvent = useReducer(reducers.leaveEvent);
   const travel = useReducer(reducers.travel);
   const startRun = useReducer(reducers.startRun);
   const pauseRun = useReducer(reducers.pauseRun);
@@ -81,6 +97,8 @@ function App() {
   const correct = useReducer(reducers.correct);
   const unlinkOpenRouter = useReducer(reducers.unlinkOpenRouter);
   const setAgentLink = useReducer(reducers.setAgentLink);
+  const revealTo = useReducer(reducers.revealTo);
+  const setReveal = useReducer(reducers.setReveal);
 
   const hex = identity?.toHexString();
   const myPlayerRow = players.find(row => row.identity.toHexString() === hex);
@@ -155,7 +173,13 @@ function App() {
       onHostEvent(name) {
         // Hosting is a line plus the link that already exists: everyone who opens
         // it sends their Echoe to meet the host's. The share id survives re-creation.
-        run('Host event', createEcho({ persona: myEchoRow?.persona ?? '', intent: `Hosting ${name}` }));
+        run('Host event', startRun({ goal: `Hosting ${name}`, avoid: myRunRow?.avoid ?? '', hostShareId }));
+      },
+      onJoinEvent(eventId, goal, linkedin, twitter) {
+        run('Join event', joinEvent({ eventId, goal, linkedin, twitter }));
+      },
+      onLeaveEvent(eventId) {
+        run('Leave event', leaveEvent({ eventId }));
       },
       onRestart() {
         // Same line, same host if the player came in through a link. The run
@@ -163,41 +187,42 @@ function App() {
         const intent = myIntentRow?.text ?? '';
         run(
           'Send out again',
-          startRun({ goal: hostName ? `Meet ${hostName}` : intent, hostShareId }),
+          startRun({ goal: hostName ? `Meet ${hostName}` : intent, avoid: myRunRow?.avoid ?? '', hostShareId }),
           () => setScreen('roaming'),
         );
       },
-      onCreateEcho(persona, intent) {
-        // Decision 2: no Limits stop on the first run. The run starts here with
-        // the defaults so World opens with the Echoe already walking.
-        run(
-          'Create Echoe',
-          createEcho({ persona, intent }).then(() =>
-            startRun({
-              goal: hostName ? `Meet ${hostName}` : intent,
-              hostShareId,
-            }),
-          ),
-          () => setScreen('events'),
-        );
+      onCreateEcho(persona) {
+        // The Echoe exists but is not walking yet. Events comes first (Jay,
+        // 2026-09-06): see what is on tonight, then Enter Bengaluru lands on
+        // World with the Start button.
+        run('Create Echoe', createEcho({ persona }), () => { setProfileFrom('world'); setScreen('events'); });
       },
       onTravel(placeId) {
+        // Every "Send my Echoe" button routes here; the module refuses a walk to the current spot.
+        if (placeIndexOf(placeId) === myPlayerRow?.currentPlace) {
+          setToast(`Your Echoe is already at ${landmarkById(placeId)?.name ?? 'that spot'}`);
+          return;
+        }
         run('Travel', travel({ placeId: placeIndexOf(placeId) }));
       },
       onStartRun(limits) {
-        run(
-          'Start run',
+        setRevealText(limits.reveal);
+        // The secret goes in first: a run can start meeting people the moment
+        // startRun lands, and the reveal must already be there when it does.
+        const started = setReveal({ text: limits.reveal }).then(() =>
           startRun({
             goal: limits.goal,
-            hostShareId,
+            avoid: limits.avoid,
+            hostShareId: limits.hostShareId ?? hostShareId,
           }),
-          // Limits now edits a live run, so land back where it was opened from.
-          () => setScreen(limitsFrom),
         );
+        run('Start run', started, () => setScreen(limitsFrom));
       },
       onPause() {
-        const paused = myRunRow?.status === 'paused';
-        run(paused ? 'Resume' : 'Pause', paused ? resumeRun() : pauseRun());
+        run('Pause', pauseRun());
+      },
+      onResume() {
+        run('Resume', resumeRun());
       },
       onLinkOpenRouter() {
         void startOpenRouterLink();
@@ -223,14 +248,30 @@ function App() {
       onSetAgentLink(token) {
         run('Connect agent', setAgentLink({ token }));
       },
+      onReveal(id) {
+        run('Reveal', revealTo({ conversationId: BigInt(id) }));
+      },
     }),
     // The reducer handles are stable; myRunRow.status decides pause versus resume.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [run, hostShareId, hostName, limitsFrom, myRunRow?.status, myIntentRow?.text],
+    [run, hostShareId, hostName, limitsFrom, myRunRow?.status, myIntentRow?.text, myPlayerRow?.currentPlace],
   );
 
   const onlineCount = useMemo(() => players.filter(row => row.online).length, [players]);
+  const eventCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const row of eventJoins) counts[row.eventId] = (counts[row.eventId] ?? 0) + 1;
+    return counts;
+  }, [eventJoins]);
+  const myEvents = useMemo(
+    () => new Set(eventJoins.filter(row => row.identity.toHexString() === hex).map(row => row.eventId)),
+    [eventJoins, hex],
+  );
   const openProfile = (from: ScreenName) => { setProfileFrom(from); setScreen('profile'); };
+  const openJoinEvent = (id: string, title: string, from: ScreenName) => {
+    setJoinTarget({ id, title, from });
+    setScreen('joinEvent');
+  };
 
   const go = setScreen;
   const player = myPlayerRow ? toPlayer(myPlayerRow, companies) : undefined;
@@ -244,9 +285,18 @@ function App() {
     [travels, echoes, players, runs, myEchoId, hostEchoId],
   );
 
+  // One conversation_summary row per side; only mine is ever rendered.
+  const mySummaries = useMemo(
+    () => summaryRows.filter(row => row.identity.toHexString() === hex),
+    [summaryRows, hex],
+  );
+  const summaryMatch = useMemo(() => matchByConversation(mySummaries), [mySummaries]);
+  const mySummaryRow = mySummaries.find(row => String(row.conversationId) === conversationId);
+  const summary = mySummaryRow ? toSummary(mySummaryRow) : undefined;
+
   const matches = useMemo(
     () =>
-      rankedMatches(
+      withMatch(rankedMatches(
         conversations,
         myEchoId,
         hostEchoId,
@@ -254,13 +304,17 @@ function App() {
         players,
         companies,
         myPlayerRow?.currentPlace ?? 0,
-      ),
-    [conversations, myEchoId, hostEchoId, echoes, players, companies, myPlayerRow?.currentPlace],
+        myRunRow?.startedAt,
+      ), summaryMatch),
+    [conversations, myEchoId, hostEchoId, echoes, players, companies, myPlayerRow?.currentPlace, myRunRow?.startedAt, summaryMatch],
   );
 
   const joinedEvents = useMemo(
-    () => eventsFrom(myRunRow, myIntentRow, conversations, intents, echoes, players, myEchoId, companies),
-    [myRunRow, myIntentRow, conversations, intents, echoes, players, myEchoId, companies],
+    // eventJoins can be undefined for a beat while a republish swaps tables; never let that crash the tree.
+    () =>
+      eventsFrom(eventJoins ?? [], conversations ?? [], echoes, players, myEchoId, hex, companies, myPlayerRow?.currentPlace ?? 0)
+        .map(event => ({ ...event, people: withMatch(event.people, summaryMatch) })),
+    [eventJoins, conversations, echoes, players, myEchoId, hex, companies, myPlayerRow?.currentPlace, summaryMatch],
   );
 
   const transcript = useMemo(
@@ -327,6 +381,7 @@ function App() {
           actions={actions}
           go={go}
           onAdjustLimits={() => { setLimitsFrom('world'); setScreen('limits'); }}
+          onJoinEvent={openJoinEvent}
           onTalks={() => setScreen('talks')}
           hostCard={hostCard}
           player={player}
@@ -336,6 +391,8 @@ function App() {
           shareId={myIntentRow?.shareId ?? ''}
           mission={missions[0]?.text ?? ''}
           onlineCount={onlineCount}
+          eventCounts={eventCounts}
+          myEvents={myEvents}
           onProfile={() => openProfile('world')}
         />
       )}
@@ -345,6 +402,7 @@ function App() {
           go={go}
           run={runView}
           backTo={limitsFrom}
+          reveal={reveal}
           freeLeft={freeLeft}
           linked={player?.openrouterLinked ?? false}
         />
@@ -382,12 +440,35 @@ function App() {
           actions={actions}
           go={go}
           transcript={transcript}
-          match={matches.find(m => m.conversationId === conversationId)}
+          match={
+            matches.find(m => m.conversationId === conversationId) ??
+            joinedEvents.flatMap(e => e.people).find(m => m.conversationId === conversationId)
+          }
           focusedId={focusedLine?.id ?? null}
           player={player}
           onProfile={() => openProfile('review')}
           onFocus={setLineId}
           backTo={reviewFrom}
+          conversationId={conversationId}
+          revealCount={reveals.filter(r => String(r.conversationId) === conversationId).length}
+          open={
+            conversations.find(c => String(c.id) === conversationId)?.closedAt
+              .microsSinceUnixEpoch === 0n
+          }
+          hasSummary={Boolean(mySummaryRow)}
+        />
+      )}
+      {screen === 'summary' && (
+        <SummaryScreen
+          actions={actions}
+          go={go}
+          summary={summary}
+          match={
+            matches.find(m => m.conversationId === conversationId) ??
+            joinedEvents.flatMap(e => e.people).find(m => m.conversationId === conversationId)
+          }
+          player={player}
+          onProfile={() => openProfile('summary')}
         />
       )}
       {screen === 'correct' && (
@@ -430,7 +511,25 @@ function App() {
           onReview={id => openReview(id, 'talks')}
         />
       )}
-      {screen === 'events' && <EventsScreen actions={actions} go={go} backTo={profileFrom} />}
+      {screen === 'joinEvent' && joinTarget && (
+        <JoinEventScreen
+          actions={actions}
+          go={go}
+          eventId={joinTarget.id}
+          eventTitle={joinTarget.title}
+          backTo={joinTarget.from}
+        />
+      )}
+      {screen === 'events' && (
+        <EventsScreen
+          actions={actions}
+          go={go}
+          backTo={profileFrom}
+          onJoinEvent={openJoinEvent}
+          eventCounts={eventCounts}
+          myEvents={myEvents}
+        />
+      )}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}
     </main>
   );

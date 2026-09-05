@@ -76,7 +76,12 @@ Say so in one line. Then ask me exactly three questions, chosen so that the answ
 
 Now write the persona.`;
 
-export const INTENT_PLACEHOLDER = 'looking for a technical cofounder who has shipped';
+/** Start page: what the run is chasing, what it stays away from, what you trade. */
+export const GOAL_PLACEHOLDER = 'a technical cofounder who has shipped payments';
+export const AVOID_PLACEHOLDER = 'recruiters, agencies';
+export const REVEAL_PLACEHOLDER =
+  'a Google Meet link, Instagram, phone\u2026 only shown when you both reveal';
+export const START_EYEBROW = 'Say it once, then let it walk';
 
 export const RECEIPT_ICON: Record<string, string> = {
   travel: '↗',

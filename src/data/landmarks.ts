@@ -17,6 +17,7 @@ export const LANDMARKS: Landmark[] = [
   { id: 'mg-road', name: 'MG Road', lng: 77.6119, lat: 12.9738, icon: '🛣️' },
   { id: 'koramangala', name: 'Koramangala', lng: 77.6112, lat: 12.9346, icon: '☕' },
   { id: 'commercial-street', name: 'Commercial Street', lng: 77.6084, lat: 12.9822, icon: '🛒' },
+  { id: 'the-spark-whitefield', name: 'the*spark, Whitefield', lng: 77.72065, lat: 12.99116, icon: '🏢' },
 ];
 
 export function landmarkById(id: string): Landmark | undefined {

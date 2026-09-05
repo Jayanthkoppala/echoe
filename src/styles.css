@@ -788,11 +788,12 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 
 /* ── Return ───────────────────────────────────────────────────────────── */
 
-.recap-hero { margin-bottom: 16px; padding: 22px 18px; }
+.recap-hero { margin-bottom: 10px; padding: 14px 16px; }
+.recap-hero h1 { font-size: 26px; line-height: 1.1; }
 .recap-hero h1 { position: relative; z-index: 1; margin-bottom: 8px; }
 .recap-hero p { position: relative; z-index: 1; margin-bottom: 0; color: var(--fg2); font-size: 13px; }
-.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-.stat-card { padding: 14px 8px; text-align: center; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.stat-card { padding: 10px 6px; text-align: center; }
 .stat-card strong { display: block; position: relative; z-index: 1; font-size: 22px; font-variant-numeric: tabular-nums; }
 .stat-card span { position: relative; z-index: 1; color: var(--fg3); font-size: 11px; }
 .match-list { display: grid; gap: 10px; margin: 10px 0 18px; }
@@ -1155,7 +1156,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .pin-filter::-webkit-scrollbar { display: none; }
 .pin-pill {
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 14px;
   border-radius: 999px;
   color: var(--fg2);
@@ -1351,7 +1352,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   background: var(--panel-deep);
   cursor: not-allowed;
 }
-.events-btn { min-height: 32px; padding: 0 12px; font-size: 11px; }
+.events-btn { min-height: 44px; padding: 0 12px; font-size: 11px; }
 
 /* Talks screen tabs reuse the map filter pills, laid out in normal flow. */
 .pin-filter--tabs { position: static; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px; overflow: visible; }
@@ -1359,3 +1360,128 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 
 /* Event card with the host's own artwork on top. */
 .event-hero { display: block; width: calc(100% + 32px); margin: -16px -16px 12px; aspect-ratio: 5 / 3; object-fit: cover; object-position: center 40%; border-radius: var(--radius) var(--radius) 0 0; }
+
+/* Shown by MapBoundary when MapLibre cannot start (no WebGL, blocked worker). */
+.map-error { position: absolute; left: 12px; top: 17.5%; max-width: 72%; z-index: 5; margin: 0; padding: 4px 9px; border-radius: 999px; background: rgba(0,0,0,.7); color: #cfd6c4; font-size: 10px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Echoes on the flat fallback map (no WebGL2). Same clock as the live map, CSS only. */
+.flat-agents { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.flat-agent { position: absolute; width: 30px; height: 30px; border-radius: 50%; border: 2px solid #d7f06c; background: #0e120d; box-shadow: 0 2px 10px rgba(0,0,0,.6); transform: translate(-50%, -50%); transition: left .25s linear, top .25s linear; }
+.flat-agent img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.flat-agent span { position: absolute; top: 50%; left: 34px; transform: translateY(-50%); white-space: nowrap; font-size: 11px; font-weight: 700; color: #eef2e6; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.flat-agent.mine { box-shadow: 0 0 0 4px rgba(215,240,108,.35), 0 2px 10px rgba(0,0,0,.6); }
+
+.flat-agent.more { width: auto; height: 24px; padding: 0 8px; border-radius: 999px; border-color: rgba(215,240,108,.5); display: flex; align-items: center; }
+.flat-agent.more span { position: static; transform: none; font-size: 11px; }
+
+.flat-agent.left span { left: auto; right: 34px; }
+.flat-agent.more.left { transform: translate(-100%, -50%); }
+
+/* Join-event form: two handles, then the same action row the card uses. */
+
+/* Start page: the goal / avoid lines are two-line boxes, not paragraphs. */
+.textarea--line { min-height: 62px; font-size: 15px; line-height: 1.45; resize: none; }
+
+/* World sheet states: one launcher button, or roam + pause, or roam + resume + stop. */
+.sheet-cta--one { grid-template-columns: 1fr; }
+.sheet-cta--three { grid-template-columns: 1fr auto auto; }
+.ghost-btn--small { padding: 0 10px; font-size: 11px; }
+
+/* ── Talks: event drill-down, and Review: mutual reveal ───────────────── */
+
+/* The back chevron lives in the heading so the drill-down keeps one header. */
+.heading-back {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--fg2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.heading-back:hover { color: var(--fg); }
+
+/* An event row is the whole tap target, so it is a button wearing person-row. */
+.person-row--tap {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.event-counts { color: var(--fg3); font-size: 10px; white-space: nowrap; }
+
+.reveal-panel { display: grid; gap: 6px; margin-bottom: 14px; padding: 12px; }
+.reveal-panel > * { position: relative; z-index: 1; }
+.reveal-panel strong { font-size: 13px; }
+.reveal-panel p { margin: 0; color: var(--fg2); font-size: 12px; line-height: 1.45; }
+.reveal-btn { min-height: 42px; font-size: 13px; }
+.reveal-links { display: flex; gap: 14px; }
+.reveal-links a { color: var(--lime); }
+
+/* Design review 2026-09-06: back chevron keeps a 44px hit area under a small glyph. */
+.heading-back::before { content: ''; position: absolute; inset: -13px -13px; }
+/* Mutual reveal is the payoff: the one place the panel itself goes lime. */
+.reveal-panel--done { border-color: rgba(215, 240, 108, .45); box-shadow: inset 0 1px 0 var(--hl), 0 0 24px -8px rgba(215, 240, 108, .35); }
+/* Waiting is an active state, not a dead button. */
+.reveal-btn:disabled { animation: reveal-wait 1.8s ease-in-out infinite; }
+@keyframes reveal-wait { 0%, 100% { opacity: .6; } 50% { opacity: .85; } }
+@media (prefers-reduced-motion: reduce) { .reveal-btn:disabled { animation: none; } }
+/* The reveal question is the private, deferred one; the lime mark says so. */
+.label--reveal { color: var(--lime); }
+
+/* ── Live talk and Summary ────────────────────────────────────────────── */
+
+/* The LIVE pill rides the person card while the two Echoes are still talking. */
+.live-dot--pill {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 5px 10px 5px 9px;
+  border: 1px solid rgba(215, 240, 108, .35);
+  border-radius: 999px;
+  background: rgba(215, 240, 108, .12);
+}
+.chat-person .live-dot--pill { position: relative; z-index: 1; }
+
+.summary-hero {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 10px;
+  padding: 16px;
+}
+.summary-hero > * { position: relative; z-index: 1; }
+.summary-score { font-size: 44px; font-weight: 800; line-height: 1; letter-spacing: -.04em; }
+/* Lime is the "this one matters" mark, so only a strong match earns it. */
+.summary-score--hot { color: var(--lime); }
+.summary-hero span { color: var(--fg3); font-size: 11px; }
+.summary-text { margin: 0; color: var(--fg2); font-size: 12.5px; line-height: 1.55; }
+
+/* One rubric dimension: label and number on top, a 6px track underneath. */
+.rubric-row { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; align-items: baseline; }
+.rubric-label { color: var(--fg2); font-size: 12px; }
+.rubric-value { font-size: 12px; font-weight: 700; }
+.rubric-value small { color: var(--fg3); font-size: 10px; font-weight: 700; }
+.rubric-track {
+  grid-column: 1 / -1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .08);
+}
+.rubric-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, .5);
+  transition: width 700ms var(--ease);
+}
+.rubric-row--avoid .rubric-fill { background: var(--coral); box-shadow: 0 0 12px -4px var(--coral); }
+.rubric-row--avoid .rubric-label { color: var(--coral); }

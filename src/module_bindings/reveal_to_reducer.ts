@@ -11,7 +11,5 @@ import {
 } from "spacetimedb";
 
 export default {
-  goal: __t.string(),
-  avoid: __t.string(),
-  hostShareId: __t.string(),
+  conversationId: __t.u64(),
 };

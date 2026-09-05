@@ -34,8 +34,10 @@ const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
 // City view. Tuned by projecting all ten landmarks to screen coordinates and
 // checking none lands under the header band or the bottom sheet; see
 // docs/design/MAP-DESIGN.md.
-const CENTER: LngLat = [77.6153, 12.9628];
-const CITY_ZOOM = 11.95;
+// Widened east on 2026-09-05 so the Whitefield landmark (the Midnight Moonshot
+// venue, 11 km out) sits inside the frame at load.
+const CENTER: LngLat = [77.655, 12.9628];
+const CITY_ZOOM = 11.6;
 const CITY_PITCH = 55;
 const CITY_BEARING = -15;
 
@@ -592,9 +594,10 @@ function applyPinKinds(map: maplibregl.Map, kinds: PinKind[], pins: Record<strin
   if (map.getLayer('pin-featured')) map.setFilter('pin-featured', kindFilter as never);
   if (map.getLayer('pin-rest')) map.setFilter('pin-rest', ['all', ['!', ['has', 'point_count']], kindFilter] as never);
 
+  // Event pins stay on under every filter: the venue is the one thing on the
+  // map that must never hide. The Events pill only flies to it.
   for (const [kind, ids] of [
     ['startup', ['pin-clusters', 'pin-cluster-count']],
-    ['event', ['pin-events']],
   ] as [PinKind, string[]][]) {
     const on = kinds.includes(kind) ? 'visible' : 'none';
     for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on);
@@ -654,6 +657,9 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, onEvent
 
   useEffect(() => {
     if (!followMine) return;
+    // Arm following first: if my dot has not arrived yet, the frame loop
+    // centres on it the moment it appears instead of leaving it off-screen.
+    followRef.current = true;
     const map = mapRef.current;
     const me = agentsRef.current.find(a => a.isMine);
     if (!map || !me) return;

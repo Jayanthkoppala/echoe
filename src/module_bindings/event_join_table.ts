@@ -10,8 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
+export default __t.row({
+  key: __t.string().primaryKey(),
+  eventId: __t.string().name("event_id"),
+  identity: __t.identity(),
   goal: __t.string(),
-  avoid: __t.string(),
-  hostShareId: __t.string(),
-};
+  joinedAt: __t.timestamp().name("joined_at"),
+});

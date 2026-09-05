@@ -12,5 +12,4 @@ import {
 
 export default {
   persona: __t.string(),
-  intent: __t.string(),
 };

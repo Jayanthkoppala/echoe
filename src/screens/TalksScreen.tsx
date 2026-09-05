@@ -13,9 +13,34 @@ interface TalksScreenProps extends ScreenProps {
   onReview: (conversationId: string) => void;
 }
 
-/** Two tabs: every conversation this Echoe has had, and every event it hosts, walks to or joined. */
+/** One conversation, as a row with a Read button. Both tabs draw people this way. */
+function PersonRow({ person, onReview }: { person: Match; onReview: (id: string) => void }) {
+  return (
+    <div className="person-row">
+      <span className="host-avatar" aria-hidden="true">
+        <img src={avatarUri(person.avatar)} alt="" />
+      </span>
+      <div className="person-name">
+        <strong>{person.name}</strong>
+        <VerifiedBadge badge={person.badge} />
+        <p>{person.why}</p>
+      </div>
+      <div className="person-end">
+        <b className="match-score tabular">{person.score}</b>
+        <button className="link-btn" onClick={() => onReview(person.conversationId)}>
+          Read
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Two tabs: every conversation this Echoe has had, and every event this player joined. */
 export function TalksScreen({ go, people, events, player, onProfile, onReview }: TalksScreenProps) {
   const [tab, setTab] = useState<'talks' | 'events'>('talks');
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const openEvent = openKey ? events.find(event => event.key === openKey) : undefined;
+
   return (
     <div className="screen">
       <TopBar
@@ -43,50 +68,74 @@ export function TalksScreen({ go, people, events, player, onProfile, onReview }:
             role="tab"
             className={tab === 'events' ? 'pin-pill glass on' : 'pin-pill glass'}
             aria-selected={tab === 'events'}
-            onClick={() => setTab('events')}
+            onClick={() => { setTab('events'); setOpenKey(null); }}
           >
             Events
           </button>
         </div>
         {tab === 'events' ? (
-          <>
-            <h3 className="profile-heading">
-              Events <span>{events.length}</span>
-            </h3>
-            <section className="profile-card glass">
-              {events.length === 0 ? (
-                <p className="profile-empty">
-                  No events yet. Open someone's event link, or host one from your profile.
-                </p>
-              ) : (
-                events.map(event => (
-                  <div className="person-row" key={event.key}>
-                    <span className="host-avatar" aria-hidden="true">
-                      {event.hostAvatar ? <img src={avatarUri(event.hostAvatar)} alt="" /> : '👥'}
-                    </span>
-                    <div className="person-name">
-                      <strong>{event.name}</strong>
-                      <VerifiedBadge badge={event.badge} />
-                      <p>
-                        {event.status === 'hosting'
-                          ? 'You are hosting this. Your share link is the event link.'
-                          : event.status === 'walking'
-                            ? `Hosted by ${event.hostName}. Your Echoe is walking there.`
-                            : `Hosted by ${event.hostName}. Met at ${event.placeName || 'the event'}.`}
-                      </p>
-                    </div>
-                    <div className="person-end">
-                      {event.conversationId ? (
-                        <button className="link-btn" onClick={() => onReview(event.conversationId!)}>
-                          Read
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))
-              )}
-            </section>
-          </>
+          openEvent ? (
+            <>
+              <h3 className="profile-heading">
+                <button
+                  className="heading-back"
+                  aria-label="Back to events"
+                  onClick={() => setOpenKey(null)}
+                >
+                  ‹
+                </button>
+                {openEvent.name} <span>{openEvent.people.length} talked</span>
+              </h3>
+              <section className="profile-card glass">
+                {openEvent.people.length === 0 ? (
+                  <p className="profile-empty">
+                    Your Echoe has not talked to anyone here yet. It starts as people join.
+                  </p>
+                ) : (
+                  openEvent.people.map(person => (
+                    <PersonRow key={person.conversationId} person={person} onReview={onReview} />
+                  ))
+                )}
+              </section>
+            </>
+          ) : (
+            <>
+              <h3 className="profile-heading">
+                Events <span>{events.length}</span>
+              </h3>
+              <section className="profile-card glass">
+                {events.length === 0 ? (
+                  <p className="profile-empty">
+                    No events yet. Join one from the map and your Echoe starts talking to whoever
+                    else is there.
+                  </p>
+                ) : (
+                  events.map(event => (
+                    <button
+                      className="person-row person-row--tap"
+                      key={event.key}
+                      onClick={() => setOpenKey(event.key)}
+                    >
+                      <span className="host-avatar" aria-hidden="true">
+                        👥
+                      </span>
+                      <div className="person-name">
+                        <strong>{event.name}</strong>
+                        <p>
+                          {[event.venue, event.date].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                      <div className="person-end">
+                        <span className="event-counts">
+                          {event.joined} joined · {event.people.length} talked
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </section>
+            </>
+          )
         ) : (
         <>
         <h3 className="profile-heading">

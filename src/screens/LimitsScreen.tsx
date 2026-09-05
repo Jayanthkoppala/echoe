@@ -1,40 +1,89 @@
 import { useState } from 'react';
 import { TopBar } from '../components/TopBar';
-import { FREE_CONVERSATIONS } from '../state/copy';
+import {
+  AVOID_PLACEHOLDER,
+  FREE_CONVERSATIONS,
+  GOAL_PLACEHOLDER,
+  REVEAL_PLACEHOLDER,
+  START_EYEBROW,
+} from '../state/copy';
 import type { Run, ScreenName, ScreenProps } from '../state/types';
 
 interface LimitsScreenProps extends ScreenProps {
   run?: Run;
-  /** Limits edits a live run now, so it returns to whoever opened it. */
+  /** The Start page is a side door off World, so it returns where it came from. */
   backTo: ScreenName;
   freeLeft: number;
   linked: boolean;
+  /**
+   * The reveal payload lives in a private table the client cannot read back,
+   * so App keeps the last one submitted this session and hands it back here.
+   */
+  reveal: string;
 }
 
-export function LimitsScreen({ actions, go, run, backTo, freeLeft, linked }: LimitsScreenProps) {
+export function LimitsScreen({
+  actions,
+  go,
+  run,
+  backTo,
+  freeLeft,
+  linked,
+  reveal: revealIn,
+}: LimitsScreenProps) {
   const [goal, setGoal] = useState(run?.goal ?? '');
+  const [avoid, setAvoid] = useState(run?.avoid ?? '');
+  const [reveal, setReveal] = useState(revealIn);
 
   return (
     <div className="screen">
-      <TopBar title="Adjust limits" onBack={() => go(backTo)} />
-      <div className="content">
-        <div className="eyebrow">Your Echoe, your terms</div>
-        <h2>Adjust the run</h2>
+      <TopBar title="Start your Echoe" onBack={() => go(backTo)} />
+      <div className="content content--close">
+        <div className="eyebrow">{START_EYEBROW}</div>
+        <h2>Start your Echoe</h2>
         <p className="lede">
-          Set the goal your Echoe is chasing and connect the OpenRouter account it spends from.
+          Your Echoe carries these three lines through the city. Nobody sees the third one until
+          you both decide you want to meet.
         </p>
 
         <label className="label" htmlFor="goal">
-          Goal for this run
+          Who do you want to meet?
         </label>
-        <input
-          className="input"
+        <textarea
+          className="textarea textarea--line"
           id="goal"
           value={goal}
           onChange={event => setGoal(event.target.value)}
-          placeholder="Find one person worth a coffee"
+          placeholder={GOAL_PLACEHOLDER}
           maxLength={120}
         />
+
+        <label className="label" htmlFor="avoid">
+          Who do you NOT want to meet?
+        </label>
+        <textarea
+          className="textarea textarea--line"
+          id="avoid"
+          value={avoid}
+          onChange={event => setAvoid(event.target.value)}
+          placeholder={AVOID_PLACEHOLDER}
+          maxLength={120}
+        />
+
+        <label className="label label--reveal" htmlFor="reveal">
+          ✦ What will you reveal if you like someone?
+        </label>
+        <input
+          className="input"
+          id="reveal"
+          value={reveal}
+          onChange={event => setReveal(event.target.value)}
+          placeholder={REVEAL_PLACEHOLDER}
+          maxLength={200}
+        />
+        <p className="helper helper--tight">
+          Kept private. Your Echoe never reads it and never says it.
+        </p>
 
         <div className="label">Your OpenRouter account</div>
         {linked ? (
@@ -63,13 +112,15 @@ export function LimitsScreen({ actions, go, run, backTo, freeLeft, linked }: Lim
           onClick={() =>
             actions.onStartRun({
               goal: goal.trim(),
+              avoid: avoid.trim(),
+              reveal: reveal.trim(),
             })
           }
         >
-          Save and restart the run <span aria-hidden="true">→</span>
+          Start <span aria-hidden="true">→</span>
         </button>
         <button className="secondary" onClick={() => go(backTo)}>
-          Leave it as it is
+          Not now
         </button>
       </div>
     </div>

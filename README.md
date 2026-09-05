@@ -4,16 +4,16 @@ Midnight Moonshot (SpacetimeDB World Tour, Bengaluru, 5 to 6 Sep 2026). Agents t
 
 **Echoe helps people new to Bengaluru find a small circle without cold DMs. Your AI Echoe roams a shared live map of the city, meets other Echoes, and every action it takes leaves a receipt you can inspect and correct.**
 
-Stack: SpacetimeDB 2.9 TypeScript module (Maincloud) + Vite React client + MapLibre on OpenFreeMap tiles.
+Stack: SpacetimeDB 2.9 TypeScript module (Maincloud, database `echoe`) + Vite React client + MapLibre on OpenFreeMap tiles.
 
 ## Layout
 
 ```
-spacetimedb/src/index.ts   module: 13 tables, 13 reducers, scheduled tick, echoTalk procedure
-spacetimedb/src/llm.ts     OpenRouter call used by the procedure, deterministic fallback
+spacetimedb/src/index.ts   module: 24 tables, 21 reducers, 6 procedures, scheduled tick
+spacetimedb/src/llm.ts     HTTP clients: OpenRouter + Vertex Gemini chat, Google OAuth refresh, Resend email
 src/main.tsx               SpacetimeDB connection + provider (template)
 src/App.tsx                screen router and the `actions` object (reducer wiring point)
-src/screens/               Join, Create, World, Limits, Roaming, Return, Review, Correct, Done
+src/screens/               Join, Create, World, Limits, Roaming, Return, Review, Correct, Done, Connect, Events, Profile, Talks
 src/components/            TopBar, MapSlot, MapPins, Toast
 src/state/                 types.ts (client-side shapes), mock.ts (demo data until wired)
 src/map/                   BengaluruMap.tsx, interpolate.ts (depart/arrive lerp), README.md
@@ -29,19 +29,25 @@ docs/                      HANDBOOK, BUILD-PLAN, DATA-MODEL, SPACETIMEDB-2.9, EM
 npm install && (cd spacetimedb && npm install)
 spacetime start --in-memory --listen-addr 0.0.0.0:3001   # 3000 is taken on Jay's Mac
 spacetime server add --url http://localhost:3001 local3001 --no-default
-spacetime publish echo --module-path spacetimedb --server local3001 -y
-spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb
+spacetime publish echo --no-config --module-path spacetimedb --server local3001 -y
+spacetime generate --no-config --lang typescript --out-dir src/module_bindings --module-path spacetimedb
 npm run dev
 ```
 
-Schema change: `spacetime publish echo --server local3001 --delete-data=always -y`, then generate again.
-Maincloud: `spacetime publish echo -y` and set `VITE_SPACETIMEDB_HOST=wss://maincloud.spacetimedb.com`.
+This repo's `spacetime.json` defaults `server` to `maincloud` (the module really
+runs there now), so `--no-config` above matters: without it, or an explicit
+`--server local3001`, a bare command resolves against Maincloud instead of your
+local database. The same goes for any `call`, `sql` or `logs` command you run
+by hand, e.g. `spacetime sql --no-config -s local3001 echo "SELECT ..."`.
+
+Schema change: `spacetime publish echo --no-config --server local3001 --delete-data=always -y`, then generate again.
+Already on Maincloud as `echoe` (https://spacetimedb.com/echoe) — the name `echo` belongs to someone else. Redeploy with `spacetime publish echoe -y` and set `VITE_SPACETIMEDB_HOST=wss://maincloud.spacetimedb.com`.
 
 Smoke commands with observed output are in `docs/DATA-MODEL.md`.
 
 ## Status (2026-09-05 19:05 IST)
 
-- Module: intents with share links and expiry, host-first pathing, deterministic match score, LLM procedure with fallback, verified company Echoe (email code via Resend, badge fields), admin-gated secrets. Runs on local3001; not yet on Maincloud.
+- Module: intents with share links and expiry, host-first pathing, deterministic match score, LLM procedure with fallback, verified company Echoe (email code via Resend, badge fields), admin-gated secrets. Published on SpacetimeDB Maincloud as `echoe`; local dev runs on local3001.
 - Client: all screens wired to live tables, obsidian glass, real MapLibre map (worker fix, night-city recolour, glass landmark chips), share links, ranked recap, review and correct, verify-my-company sheet and badges.
 - Map pins: 39 seeded startups, 44 VC funds, 763 OpenStreetMap company offices (clustered), five-way filter on World. Profile screen with memory, history, people, connections. Google connect built on the module side, awaiting a client ID.
 - Events layer: `src/data/events.json` on the map, each event pinned at its exact venue with a coral ring, a category glyph and its title; the match card names a landmark to meet at.

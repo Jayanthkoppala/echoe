@@ -1,20 +1,43 @@
 import { Component, type ReactNode } from 'react';
 import BengaluruMap, { type AgentSpec, type EventPin, type PinKind } from '../map/BengaluruMap';
-import { MapPins } from './MapPins';
+import { FlatAgents, MapPins } from './MapPins';
 
 /**
  * MapLibre needs WebGL. Where it is missing the constructor throws, so fall
  * back to the flat CSS map rather than taking the whole screen down.
  */
-class MapBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
+class MapBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean; reason: string }
+> {
+  state = { failed: false, reason: '' };
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error: unknown) {
+    // Say why on screen, in our words. "The map is not working" on a phone is
+    // undiagnosable from a laptop; one short line of the real cause is not.
+    const raw = error instanceof Error ? error.message : String(error);
+    // Chrome, Firefox and Edge on iPhone all run inside Apple's web view, which
+    // does not hand out WebGL2. Safari on the same phone does. Verified live.
+    const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+    const iosOtherBrowser = /iPhone|iPad/.test(ua) && /CriOS|FxiOS|EdgiOS|OPT\//.test(ua);
+    const reason = /WebGL/i.test(raw)
+      ? iosOtherBrowser
+        ? 'this browser cannot show the live map on iPhone. Open the link in Safari'
+        : 'this browser has WebGL2 switched off'
+      : raw.slice(0, 90);
+    return { failed: true, reason };
   }
 
   render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
+    if (!this.state.failed) return this.props.children;
+    return (
+      <>
+        {this.props.fallback}
+        <p className="map-error" role="status">
+          Flat map: {this.state.reason || 'the live map could not start'}.
+        </p>
+      </>
+    );
   }
 }
 
@@ -37,6 +60,7 @@ export function MapSlot({ agents, activePlaceId, pinKinds, onPlaceTap, onEventTa
           <>
             <div className="map-fallback" aria-hidden="true" />
             <MapPins activePlaceId={activePlaceId ?? ''} onPick={onPlaceTap} />
+            <FlatAgents agents={agents} />
           </>
         }
       >

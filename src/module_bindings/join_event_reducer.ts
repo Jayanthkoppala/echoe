@@ -11,7 +11,8 @@ import {
 } from "spacetimedb";
 
 export default {
+  eventId: __t.string(),
   goal: __t.string(),
-  avoid: __t.string(),
-  hostShareId: __t.string(),
+  linkedin: __t.string(),
+  twitter: __t.string(),
 };

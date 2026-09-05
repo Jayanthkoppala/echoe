@@ -10,8 +10,4 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  goal: __t.string(),
-  avoid: __t.string(),
-  hostShareId: __t.string(),
-};
+export default {};
