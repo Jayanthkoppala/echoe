@@ -702,7 +702,13 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         const feature = e.features?.[0];
         if (!feature) return;
         const [lng, lat] = (feature.geometry as Point).coordinates as [number, number];
-        map.flyTo({ center: [lng, lat], zoom: 15.5, pitch: 60, duration: 1400, curve: 1.4, essential: true });
+        // At pitch 60 the map centre sits low on screen, which puts the tapped
+        // pin behind the sheet. The offset lifts it into the open band.
+        map.flyTo({
+          center: [lng, lat], zoom: 15.5, pitch: 60,
+          offset: [0, -130],
+          duration: 1400, curve: 1.4, essential: true,
+        });
         handlersRef.current.onCompanyTap?.(String(feature.properties?.slug ?? ''));
       });
 

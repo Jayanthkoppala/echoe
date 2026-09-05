@@ -73,7 +73,31 @@ still overlap slightly in the densest block around MG Road; HTML markers do not
 take part in MapLibre's collision engine, which is the price of keeping them
 crisp.
 
+## Company logo pins
+
+A symbol layer, not DOM markers. Featured (the first twelve rows) draw from the
+city zoom to 13.5; every company draws from 13.5 with its name from zoom 14.
+Icon size runs 0.4 at city zoom, 0.45 at 12.5, 0.8 at 15. A tap calls
+`onCompanyTap(slug)` and flies in with a `[0, -130]` offset, without which the
+tapped pin lands behind the sheet at pitch 60. Agents take a `badge`: a company
+slug reuses that logo sprite, `'domain'` gets a lime check, both at icon-size
+0.3 offset to the dot's top right on the existing agents source.
+
+Two things in the seed data shaped this:
+
+- **Logos are vendored**, by `scripts/fetch-logos.sh` into `public/logos/`. The
+  `logo` field's Google favicon URL renders in an `<img>` but serves no CORS
+  header, so its pixels cannot be read back off a canvas, which is what
+  `addImage` needs. Of the public services that do send CORS, unavatar answered
+  20 of 39 requests with HTTP 429. Same-origin files have neither problem. 33 of
+  39 resolve; the other 6 draw an initials chip, as does any 404.
+- **Coordinates are rounded to two decimals**, so 39 rows sit on 15 points and
+  six companies stack exactly. Each group is fanned onto a ~660m ring, which is
+  smaller than the 1.1km error the rounding already carries. Better coordinates
+  in the data would retire that code.
+
 ## Screenshots
 
-Both at 390x844 under the World chrome: `docs/design/shots/map-before.png` and
-`docs/design/shots/map-after.png`.
+At 390x844 under the World chrome: `map-before.png`, `map-after.png`,
+`map-companies-city.png` and `map-companies-tapped.png` in
+`docs/design/shots/`.
