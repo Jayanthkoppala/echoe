@@ -354,22 +354,20 @@ const featureFor = (row: PinRow) => {
   };
 };
 
-// Only unfeatured startups cluster: they are the 700-row source. VCs and spots
-// stay whole so a cluster is always purely startups, which is what lets the
-// kind filter hide the cluster layers exactly rather than approximately.
-// ponytail: if spots.json lands in the hundreds too, give it its own clustered
-// source and layer pair rather than mixing kinds into this one.
-const isUnclustered = (r: PinRow) => r.kind !== 'startup' || !!r.featured;
+// Startups and spots are both in the hundreds, so each unfeatured set gets its
+// own clustered source. A cluster carries no kind, so one source per kind is
+// what lets the filter hide clusters exactly rather than approximately. VCs are
+// only 44 and stay whole.
+const isUnclustered = (r: PinRow) => r.kind === 'vc' || !!r.featured;
 
-const PINS_MAIN: FeatureCollection = {
+const collect = (rows: PinRow[]): FeatureCollection => ({
   type: 'FeatureCollection',
-  features: PIN_ROWS.filter(isUnclustered).map(featureFor),
-};
+  features: rows.map(featureFor),
+});
 
-const PINS_REST: FeatureCollection = {
-  type: 'FeatureCollection',
-  features: PIN_ROWS.filter(r => !isUnclustered(r)).map(featureFor),
-};
+const PINS_MAIN = collect(PIN_ROWS.filter(isUnclustered));
+const PINS_REST = collect(PIN_ROWS.filter(r => !isUnclustered(r) && r.kind === 'startup'));
+const SPOTS_REST = collect(PIN_ROWS.filter(r => !isUnclustered(r) && r.kind === 'spot'));
 
 const CHIP_PX = 96;
 const CHIP_R = 44;
@@ -475,7 +473,8 @@ async function serveMissingImage(map: maplibregl.Map, id: string, alive: () => b
   // logo first and fall back to a drawn chip.
   let data: ImageData;
   try {
-    data = row.logo ? await logoChip(row) : fallbackChip(row);
+    // Spots never fetch: 872 rows, and a mug reads better than a favicon.
+    data = row.logo && row.kind !== 'spot' ? await logoChip(row) : fallbackChip(row);
   } catch {
     data = fallbackChip(row);
   }
@@ -501,9 +500,12 @@ function applyPinKinds(map: maplibregl.Map, kinds: PinKind[], pins: Record<strin
   if (map.getLayer('pin-spots')) map.setFilter('pin-spots', ['all', ['==', ['get', 'kind'], 'spot'], kindFilter] as never);
   if (map.getLayer('pin-rest')) map.setFilter('pin-rest', ['all', ['!', ['has', 'point_count']], kindFilter] as never);
 
-  const clustersOn = kinds.includes('startup');
-  for (const id of ['pin-clusters', 'pin-cluster-count']) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', clustersOn ? 'visible' : 'none');
+  for (const [kind, ids] of [
+    ['startup', ['pin-clusters', 'pin-cluster-count']],
+    ['spot', ['spot-clusters', 'spot-cluster-count', 'spot-rest']],
+  ] as [PinKind, string[]][]) {
+    const on = kinds.includes(kind) ? 'visible' : 'none';
+    for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on);
   }
 
   const placesOn = kinds.includes('place');
@@ -726,13 +728,9 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
       map.setMissingStyleImageResolver(id => serveMissingImage(map, id, () => alive));
 
       map.addSource('pins', { type: 'geojson', data: PINS_MAIN });
-      map.addSource('pins-rest', {
-        type: 'geojson',
-        data: PINS_REST,
-        cluster: true,
-        clusterRadius: 40,
-        clusterMaxZoom: 14,
-      });
+      const clustered = { cluster: true, clusterRadius: 40, clusterMaxZoom: 14 } as const;
+      map.addSource('pins-rest', { type: 'geojson', data: PINS_REST, ...clustered });
+      map.addSource('spots-rest', { type: 'geojson', data: SPOTS_REST, ...clustered });
 
       // 0.45 at 12.5 and 0.8 at 15 as asked; the low end reaches down to
       // CITY_ZOOM because the city view is 11.95, not the 12.5 the spec assumed.
@@ -809,6 +807,43 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         paint: { 'text-color': '#ffffff' },
       });
 
+      // Spots cluster in amber so a pub cluster never reads as a company one.
+      map.addLayer({
+        id: 'spot-clusters',
+        type: 'circle',
+        source: 'spots-rest',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': 'rgba(56,38,20,0.82)',
+          'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 50, 24],
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': 'rgba(224,164,88,0.55)',
+        },
+      });
+
+      map.addLayer({
+        id: 'spot-cluster-count',
+        type: 'symbol',
+        source: 'spots-rest',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['Noto Sans Regular'],
+          'text-size': 11,
+        },
+        paint: { 'text-color': '#ffffff' },
+      });
+
+      map.addLayer({
+        id: 'spot-rest',
+        type: 'symbol',
+        source: 'spots-rest',
+        minzoom: 13.5,
+        filter: ['!', ['has', 'point_count']],
+        layout: { 'icon-image': ['get', 'logoId'], 'icon-size': pinIconSize as never, ...pinText },
+        paint: pinPaint,
+      });
+
       map.addLayer({
         id: 'pin-rest',
         type: 'symbol',
@@ -819,7 +854,7 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         paint: pinPaint,
       });
 
-      const PIN_LAYERS = ['pin-featured', 'pin-spots', 'pin-rest'];
+      const PIN_LAYERS = ['pin-featured', 'pin-spots', 'pin-rest', 'spot-rest'];
 
       map.on('click', PIN_LAYERS, (e) => {
         const feature = e.features?.[0];
@@ -836,13 +871,15 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
       });
 
       // Documented cluster tap: expand to the zoom that breaks it apart.
-      map.on('click', 'pin-clusters', async (e) => {
-        const [feature] = map.queryRenderedFeatures(e.point, { layers: ['pin-clusters'] });
-        if (!feature) return;
-        const source = map.getSource('pins-rest') as maplibregl.GeoJSONSource;
-        const zoom = await source.getClusterExpansionZoom(feature.properties!.cluster_id as number);
-        map.easeTo({ center: (feature.geometry as Point).coordinates as [number, number], zoom });
-      });
+      for (const [layer, sourceId] of [['pin-clusters', 'pins-rest'], ['spot-clusters', 'spots-rest']] as const) {
+        map.on('click', layer, async (e) => {
+          const [feature] = map.queryRenderedFeatures(e.point, { layers: [layer] });
+          if (!feature) return;
+          const source = map.getSource(sourceId) as maplibregl.GeoJSONSource;
+          const zoom = await source.getClusterExpansionZoom(feature.properties!.cluster_id as number);
+          map.easeTo({ center: (feature.geometry as Point).coordinates as [number, number], zoom });
+        });
+      }
 
       applyPinKinds(map, kindsRef.current, pinsRef.current);
 
