@@ -27,6 +27,7 @@ import companiesJson from '../data/companies.json';
 import vcsJson from '../data/vcs.json';
 import osmJson from '../data/companies-osm.json';
 import { agentPosition, routeFor, type LngLat, type Leg } from './interpolate';
+import { avatarUri } from '../state/copy';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
 
@@ -78,6 +79,8 @@ export interface AgentSpec {
   departMs: number;
   arriveMs: number;
   isMine?: boolean;
+  /** Avatar seed, rendered as the map icon. Empty means dot only. */
+  avatar?: string;
   /** Company slug for a verified employer, or 'domain' for an unseeded one. */
   badge?: string;
 }
@@ -459,6 +462,30 @@ async function logoChip(row: PinRow): Promise<ImageData> {
   return chipPixels(ctx);
 }
 
+/** Prefix on an agent's icon id. The rest of the id is the avatar seed. */
+const AVATAR_IMAGE = 'av:';
+
+/**
+ * The same deterministic face the DOM renders, rasterised once per seed for the
+ * map. Data URI in, so the canvas is never tainted and nothing hits the network.
+ */
+async function avatarChip(seed: string): Promise<ImageData> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error(seed));
+    el.src = avatarUri(seed);
+  });
+  const ctx = chipContext();
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(CHIP_PX / 2, CHIP_PX / 2, CHIP_R, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(img, 0, 0, CHIP_PX, CHIP_PX);
+  ctx.restore();
+  return chipPixels(ctx);
+}
+
 /**
  * Demand-driven, so 800 favicons never start on load. MapLibre raises
  * styleimagemissing only for an image a currently visible feature needs, which
@@ -467,8 +494,14 @@ async function logoChip(row: PinRow): Promise<ImageData> {
  * console never logs a missing image, then the logo replaces it if there is one.
  */
 async function serveMissingImage(map: maplibregl.Map, id: string, alive: () => boolean): Promise<void> {
+  if (map.hasImage(id)) return;
+  if (id.startsWith(AVATAR_IMAGE)) {
+    const data = await avatarChip(id.slice(AVATAR_IMAGE.length));
+    if (alive() && !map.hasImage(id)) map.addImage(id, data, { pixelRatio: 2 });
+    return;
+  }
   const row = ROW_BY_IMAGE_ID.get(id);
-  if (!row || map.hasImage(id)) return;
+  if (!row) return;
   // Awaited by MapLibre, so nothing is ever reported missing: try the vendored
   // logo first and fall back to a drawn chip.
   let data: ImageData;
@@ -908,23 +941,39 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
         type: 'circle',
         source: AGENTS_SOURCE_ID,
         paint: {
+          // Sized to sit just behind the avatar icon, so it reads as its ring.
           'circle-radius': [
             '+',
-            ['case', ['get', 'isMine'], 7, 5],
+            ['case', ['get', 'isMine'], 17, 15],
             ['*', ['get', 'pulse'], 2],
             ['*', ['get', 'arrived'], 10],
           ],
           'circle-opacity': ['-', 1, ['*', ['get', 'arrived'], ['get', 'arrived']]],
           'circle-color': ['case', ['get', 'isMine'], LIME, ['get', 'colour']],
-          'circle-stroke-width': ['case', ['get', 'isMine'], 2, 1.2],
-          // A dark rim keeps the lime core separate from its own glow; everyone
-          // else gets the thin white ring.
+          'circle-stroke-width': ['case', ['get', 'isMine'], 3, 1.2],
+          // The face covers the fill, so the ring is the highlight: lime on the
+          // player's own Echoe, a thin white rim on everyone else.
           'circle-stroke-color': [
             'case',
             ['get', 'isMine'],
-            'rgba(6,12,9,0.9)',
+            LIME,
             'rgba(255,255,255,0.85)',
           ],
+        },
+      });
+
+      // The face itself. Same source as the dot, so it rides the same setData.
+      map.addLayer({
+        id: 'agents-avatar',
+        type: 'symbol',
+        source: AGENTS_SOURCE_ID,
+        filter: ['has', 'icon'],
+        layout: {
+          'icon-image': ['get', 'icon'],
+          // 96px chip at pixelRatio 2 is 48 CSS px, so this is ~30px on screen.
+          'icon-size': 0.62,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
         },
       });
 
@@ -1017,6 +1066,9 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, activeP
               properties: {
                 colour: agent.colour,
                 label: agent.label,
+                // Resolved by setMissingStyleImageResolver on first sight, so
+                // the dot draws immediately and the face lands a frame later.
+                icon: agent.avatar ? `${AVATAR_IMAGE}${agent.avatar}` : undefined,
                 isMine: !!agent.isMine,
                 badgeIcon,
                 // 0..1 breathing on the player's own dot.

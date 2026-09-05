@@ -3,11 +3,13 @@ import { useSpacetimeDB } from 'spacetimedb/react';
 import type { DbConnection } from '../module_bindings';
 import { GOOGLE_CLIENT_ID, loadGoogle, renderGoogleButton } from '../state/google';
 import { notesFrom } from '../state/select';
+import { ShareCard } from '../components/ShareCard';
 import { TopBar } from '../components/TopBar';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { VerifySheet } from '../components/VerifySheet';
-import { AVATAR_COLOUR, AVATAR_GLYPH } from '../state/copy';
+import { avatarUri, dayChip, sourceLabel } from '../state/copy';
 import type {
+  AgentNote,
   Correction,
   Match,
   PlaceVisit,
@@ -15,6 +17,33 @@ import type {
   ScreenName,
   ScreenProps,
 } from '../state/types';
+
+/** Simple hand-drawn marks, 16px, currentColor. No image fetches. */
+function ClaudeMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M8 1.4 9.3 6l4.3-2.3-2.3 4.3 4.7 1.3-4.7 1.3 2.3 4.3-4.3-2.3L8 16.6l-1.3-4.7-4.3 2.3 2.3-4.3-4.7-1.3 4.7-1.3-2.3-4.3 4.3 2.3z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+function CodexMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M8 1 14.2 4.6v6.8L8 15l-6.2-3.6V4.6z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="2.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+const MAX_AGENT_NOTES = 8;
 
 interface ProfileScreenProps extends ScreenProps {
   backTo: ScreenName;
@@ -24,6 +53,8 @@ interface ProfileScreenProps extends ScreenProps {
   /** The Echoe's accumulated behaviour notes, one bullet per line. */
   behaviourNotes: string;
   corrections: Correction[];
+  /** Rows from `agent_memory` for my Echoe, newest first. */
+  agentNotes: AgentNote[];
   history: PlaceVisit[];
   people: Match[];
   /** The linked_account row for this identity, when there is one. */
@@ -34,6 +65,9 @@ interface ProfileScreenProps extends ScreenProps {
   onReview: (conversationId: string) => void;
   /** Forgets this browser's identity and returns to Join. Nothing is deleted. */
   onLogout: () => void;
+  /** My live share id; the event link is this link. */
+  shareId: string;
+  onHostEvent: (name: string) => void;
 }
 
 const SOON = ['Connect X', 'Connect LinkedIn'];
@@ -67,6 +101,7 @@ export function ProfileScreen({
   persona,
   behaviourNotes,
   corrections,
+  agentNotes,
   history,
   people,
   google,
@@ -75,7 +110,11 @@ export function ProfileScreen({
   onUnlinkGoogle,
   onReview,
   onLogout,
+  shareId,
+  onHostEvent,
 }: ProfileScreenProps) {
+  const [hosting, setHosting] = useState(false);
+  const [eventName, setEventName] = useState('');
   const { getConnection } = useSpacetimeDB();
   const googleSlot = useRef<HTMLDivElement>(null);
   const [googleError, setGoogleError] = useState('');
@@ -119,14 +158,52 @@ export function ProfileScreen({
     <div className="screen">
       <TopBar title="Your profile" onBack={() => go(backTo)} />
       <div className="content">
+        <section className="section-block" style={{ marginTop: 0 }}>
+          {hosting ? (
+            <div className="profile-card glass">
+              <div className="eyebrow">Host an event</div>
+              <label className="label" htmlFor="event-name">
+                What is it?
+              </label>
+              <input
+                className="input"
+                id="event-name"
+                value={eventName}
+                onChange={e => setEventName(e.target.value)}
+                placeholder="Fintech founders coffee, Saturday 4pm"
+                maxLength={80}
+              />
+              <button
+                className="primary"
+                disabled={eventName.trim().length < 3}
+                onClick={() => onHostEvent(eventName.trim())}
+              >
+                Create the event link
+              </button>
+              {intent.startsWith('Hosting ') && shareId ? (
+                <ShareCard intent={intent} shareId={shareId} variant="inline" />
+              ) : null}
+              <p className="helper">
+                Your Echoe's line becomes "Hosting …". Everyone who opens your link sends their
+                Echoe to meet yours, and they come back ranked on your Return screen.
+              </p>
+              <button className="link-btn" onClick={() => setHosting(false)}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <button className="primary" onClick={() => setHosting(true)}>
+              Host an event
+            </button>
+          )}
+        </section>
         <section className="profile-card glass">
           <div className="profile-me">
             <span
               className="profile-avatar"
-              style={{ background: AVATAR_COLOUR[player?.avatar ?? 'circle'] }}
               aria-hidden="true"
             >
-              {AVATAR_GLYPH[player?.avatar ?? 'circle'] ?? '●'}
+              <img src={avatarUri(player?.avatar)} alt="" />
             </span>
             <div className="profile-me-name">
               <input
@@ -165,11 +242,16 @@ export function ProfileScreen({
           </dl>
         </section>
 
+        <button className="secondary" onClick={() => go('events')}>
+          Events in Bengaluru
+        </button>
+
         <h3 className="profile-heading">Memory</h3>
         <section className="profile-card glass">
           {notes.length === 0 && corrections.length === 0 ? (
             <p className="profile-empty">
-              Your Echoe has learned nothing yet. Correct a line after a run.
+              Your Echoe has learned nothing yet. Correct a line after a run, or connect your
+              coding agent.
             </p>
           ) : (
             <>
@@ -203,6 +285,35 @@ export function ProfileScreen({
               ))}
             </>
           )}
+
+          <div className="agent-connect-row">
+            <span className="agent-marks">
+              <ClaudeMark />
+              <CodexMark />
+            </span>
+            <span>Connect Claude Code · Codex</span>
+            <button className="link-btn" onClick={() => go('connect')}>
+              Connect
+            </button>
+          </div>
+
+          {agentNotes.length > 0 ? (
+            <>
+              <h4 className="agent-notes-heading">From your coding sessions</h4>
+              {agentNotes.slice(0, MAX_AGENT_NOTES).map(note => (
+                <div className="agent-note-row" key={note.id}>
+                  <span className="day-chip">{dayChip(note.day)}</span>
+                  <span className="source-chip">{sourceLabel(note.source)}</span>
+                  <span>{note.note}</span>
+                </div>
+              ))}
+              {agentNotes.length > MAX_AGENT_NOTES ? (
+                <p className="agent-notes-more">
+                  +{agentNotes.length - MAX_AGENT_NOTES} more
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </section>
 
         <h3 className="profile-heading">History</h3>
@@ -243,10 +354,9 @@ export function ProfileScreen({
               <div className="person-row" key={person.conversationId}>
                 <span
                   className="host-avatar"
-                  style={{ background: AVATAR_COLOUR[person.avatar] ?? '#d7f06c' }}
                   aria-hidden="true"
                 >
-                  {AVATAR_GLYPH[person.avatar] ?? '●'}
+                  <img src={avatarUri(person.avatar)} alt="" />
                 </span>
                 <div className="person-name">
                   <strong>{person.name}</strong>

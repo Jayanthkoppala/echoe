@@ -4,6 +4,8 @@ import { reducers, tables } from './module_bindings';
 import './styles.css';
 
 import { Toast } from './components/Toast';
+import { ConnectScreen } from './screens/ConnectScreen';
+import { EventsScreen } from './screens/EventsScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { CorrectScreen } from './screens/CorrectScreen';
 import { CreateScreen } from './screens/CreateScreen';
@@ -21,6 +23,7 @@ import { startOpenRouterLink, takeOpenRouterCode } from './state/openrouter';
 import { logout } from './state/session';
 import type { DbConnection } from './module_bindings';
 import {
+  agentMemoryFrom,
   agentsFrom,
   correctionsFor,
   historyFrom,
@@ -62,6 +65,7 @@ function App() {
   const [companies] = useTable(tables.company);
   const [correctionRows] = useTable(tables.correction);
   const [linkedAccounts] = useTable(tables.linkedAccount);
+  const [agentMemoryRows] = useTable(tables.agentMemory);
 
   const join = useReducer(reducers.join);
   const unverify = useReducer(reducers.unverify);
@@ -75,6 +79,7 @@ function App() {
   const rateLine = useReducer(reducers.rateLine);
   const correct = useReducer(reducers.correct);
   const unlinkOpenRouter = useReducer(reducers.unlinkOpenRouter);
+  const setAgentLink = useReducer(reducers.setAgentLink);
 
   const hex = identity?.toHexString();
   const myPlayerRow = players.find(row => row.identity.toHexString() === hex);
@@ -138,6 +143,11 @@ function App() {
       onJoin(name, email) {
         run('Join', join({ name, email }), () => setScreen('create'));
       },
+      onHostEvent(name) {
+        // Hosting is a line plus the link that already exists: everyone who opens
+        // it sends their Echoe to meet the host's. The share id survives re-creation.
+        run('Host event', createEcho({ persona: myEchoRow?.persona ?? '', intent: `Hosting ${name}` }));
+      },
       onRestart() {
         // Same line, same host if the player came in through a link. The run
         // row is upserted server-side, so this works after a run has ended.
@@ -148,18 +158,18 @@ function App() {
           () => setScreen('roaming'),
         );
       },
-      onCreateEcho(avatar, persona, intent) {
+      onCreateEcho(persona, intent) {
         // Decision 2: no Limits stop on the first run. The run starts here with
         // the defaults so World opens with the Echoe already walking.
         run(
           'Create Echoe',
-          createEcho({ avatar, persona, intent }).then(() =>
+          createEcho({ persona, intent }).then(() =>
             startRun({
               goal: hostName ? `Meet ${hostName}` : intent,
               hostShareId,
             }),
           ),
-          () => setScreen('world'),
+          () => setScreen('events'),
         );
       },
       onTravel(placeId) {
@@ -200,6 +210,9 @@ function App() {
           correct({ lineId: BigInt(id), shouldHaveSaid, behaviourChange: change }),
           () => setScreen('done'),
         );
+      },
+      onSetAgentLink(token) {
+        run('Connect agent', setAgentLink({ token }));
       },
     }),
     // The reducer handles are stable; myRunRow.status decides pause versus resume.
@@ -251,6 +264,10 @@ function App() {
   );
 
   const corrections = useMemo(() => correctionsFor(correctionRows, hex), [correctionRows, hex]);
+  const agentNotes = useMemo(
+    () => agentMemoryFrom(agentMemoryRows, myEchoId),
+    [agentMemoryRows, myEchoId],
+  );
   const history = useMemo(() => historyFrom(receipts), [receipts]);
   const myGoogle = linkedAccounts.find(
     row => row.identity.toHexString() === hex && row.provider === 'google',
@@ -372,6 +389,7 @@ function App() {
           persona={myEchoRow?.persona ?? ''}
           behaviourNotes={myEchoRow?.behaviourNotes ?? ''}
           corrections={corrections}
+          agentNotes={agentNotes}
           history={history}
           people={matches}
           onRename={name => run('Rename', join({ name, email: '' }))}
@@ -380,7 +398,12 @@ function App() {
           onUnlinkGoogle={() => run('Unlink', unlinkGoogle())}
           onReview={openReview}
           onLogout={logout}
+          shareId={myIntentRow?.shareId ?? ''}
+          onHostEvent={actions.onHostEvent}
         />
+      )}
+      {screen === 'connect' && (
+        <ConnectScreen actions={actions} go={go} agentNotes={agentNotes} onToast={setToast} />
       )}
       {screen === 'talks' && (
         <TalksScreen
@@ -392,6 +415,7 @@ function App() {
           onReview={id => openReview(id, 'talks')}
         />
       )}
+      {screen === 'events' && <EventsScreen actions={actions} go={go} backTo={profileFrom} />}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}
     </main>
   );

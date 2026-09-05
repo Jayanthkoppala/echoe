@@ -2,7 +2,7 @@ import { ShareCard } from '../components/ShareCard';
 import { ProfileButton } from '../components/ProfileButton';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { TopBar } from '../components/TopBar';
-import { avatarColour, avatarGlyph, RECEIPT_ICON } from '../state/copy';
+import { avatarUri, RECEIPT_ICON } from '../state/copy';
 import { useMounted } from '../state/useMounted';
 import type { Badge, Match, Player, Receipt, Run, ScreenProps } from '../state/types';
 
@@ -44,7 +44,7 @@ export function ReturnScreen({
         right={
           <ProfileButton
             name={player?.name ?? '?'}
-            avatar={player?.avatar ?? 'circle'}
+            avatar={player?.avatar ?? ''}
             onClick={onProfile}
           />
         }
@@ -87,10 +87,9 @@ export function ReturnScreen({
                   <div className="match-top">
                     <span
                       className="host-avatar"
-                      style={{ background: avatarColour(match.avatar) }}
                       aria-hidden="true"
                     >
-                      {avatarGlyph(match.avatar)}
+                      <img src={avatarUri(match.avatar)} alt="" />
                     </span>
                     <div className="match-name">
                       <strong>
