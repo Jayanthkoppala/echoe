@@ -10,8 +10,12 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  avatar: __t.string(),
-  persona: __t.string(),
-  intent: __t.string(),
-};
+export default __t.row({
+  id: __t.u64().primaryKey(),
+  owner: __t.identity(),
+  echoId: __t.u64().name("echo_id"),
+  text: __t.string(),
+  shareId: __t.string().name("share_id"),
+  createdAt: __t.timestamp().name("created_at"),
+  expiresAt: __t.timestamp().name("expires_at"),
+});

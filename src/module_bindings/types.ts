@@ -26,6 +26,8 @@ export const Conversation = __t.object("Conversation", {
   echoB: __t.u64(),
   placeId: __t.u8(),
   replies: __t.u8(),
+  score: __t.u8(),
+  why: __t.string(),
   createdAt: __t.timestamp(),
 });
 export type Conversation = __Infer<typeof Conversation>;
@@ -49,6 +51,17 @@ export const Echo = __t.object("Echo", {
   updatedAt: __t.timestamp(),
 });
 export type Echo = __Infer<typeof Echo>;
+
+export const Intent = __t.object("Intent", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  echoId: __t.u64(),
+  text: __t.string(),
+  shareId: __t.string(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+});
+export type Intent = __Infer<typeof Intent>;
 
 export const LlmConfig = __t.object("LlmConfig", {
   id: __t.u8(),
@@ -110,6 +123,8 @@ export const Run = __t.object("Run", {
   placesVisited: __t.u32(),
   built: __t.u32(),
   creditsSpent: __t.u32(),
+  hostEchoId: __t.u64(),
+  hostMet: __t.bool(),
 });
 export type Run = __Infer<typeof Run>;
 

@@ -25,4 +25,6 @@ export default __t.row({
   placesVisited: __t.u32().name("places_visited"),
   built: __t.u32(),
   creditsSpent: __t.u32().name("credits_spent"),
+  hostEchoId: __t.u64().name("host_echo_id"),
+  hostMet: __t.bool().name("host_met"),
 });

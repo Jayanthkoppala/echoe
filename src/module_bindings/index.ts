@@ -54,6 +54,7 @@ import AgentTravelRow from "./agent_travel_table";
 import ConversationRow from "./conversation_table";
 import CorrectionRow from "./correction_table";
 import EchoRow from "./echo_table";
+import IntentRow from "./intent_table";
 import MissionRow from "./mission_table";
 import PlaceRow from "./place_table";
 import PlayerRow from "./player_table";
@@ -125,6 +126,25 @@ const tablesSchema = __schema({
       { name: 'echo_owner_key', constraint: 'unique', columns: ['owner'] },
     ],
   }, EchoRow),
+  intent: __table({
+    name: 'intent',
+    indexes: [
+      { accessor: 'id', name: 'intent_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'owner', name: 'intent_owner_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+      ] },
+      { accessor: 'shareId', name: 'intent_share_id_idx_btree', algorithm: 'btree', columns: [
+        'shareId',
+      ] },
+    ],
+    constraints: [
+      { name: 'intent_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'intent_owner_key', constraint: 'unique', columns: ['owner'] },
+      { name: 'intent_share_id_key', constraint: 'unique', columns: ['shareId'] },
+    ],
+  }, IntentRow),
   mission: __table({
     name: 'mission',
     indexes: [

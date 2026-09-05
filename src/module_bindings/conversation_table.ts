@@ -16,5 +16,7 @@ export default __t.row({
   echoB: __t.u64().name("echo_b"),
   placeId: __t.u8().name("place_id"),
   replies: __t.u8(),
+  score: __t.u8(),
+  why: __t.string(),
   createdAt: __t.timestamp().name("created_at"),
 });

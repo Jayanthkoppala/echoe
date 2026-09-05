@@ -28,6 +28,10 @@ const RUN_DURATION_MICROS = 180_000_000n; //  3min stands in for 24 hours
 const DEFAULT_CREDITS = 8;
 const MAX_PERSONA_LENGTH = 2_000;
 const MAX_GOAL_LENGTH = 280;
+const MAX_INTENT_LENGTH = 120;
+const INTENT_TTL_MICROS = 7n * 24n * 3_600_000_000n; // intents expire after 7 days
+const SHARE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+const NO_HOST = 0n;
 
 /** Actions a player or an Echo may take, and what each costs in AI credits. */
 const ACTION_COST: Record<string, number> = {
@@ -99,6 +103,24 @@ const echo = table(
   }
 );
 
+/**
+ * What the player is here for right now, one line. `shareId` is the public
+ * handle in a link (echo.app/i/<shareId>). Rows expire: the tick deletes any
+ * intent past `expiresAt`, so the city never carries a stale profile.
+ */
+const intent = table(
+  { name: 'intent', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().unique(),
+    echoId: t.u64(),
+    text: t.string(),
+    shareId: t.string().unique(),
+    createdAt: t.timestamp(),
+    expiresAt: t.timestamp(),
+  }
+);
+
 /** Seeded once in `init`. Read-only for the lifetime of the database. */
 const place = table(
   { name: 'place', public: true },
@@ -145,6 +167,8 @@ const run = table(
     placesVisited: t.u32(),
     built: t.u32(),
     creditsSpent: t.u32(),
+    hostEchoId: t.u64(), // 0 when the run was not started from a shared intent
+    hostMet: t.bool(),
   }
 );
 
@@ -175,6 +199,8 @@ const conversation = table(
     echoB: t.u64(),
     placeId: t.u8(),
     replies: t.u8(),
+    score: t.u8(), // 0..100 deterministic intent match, set once at creation
+    why: t.string(), // one line a human can read: why these two should meet
     createdAt: t.timestamp(),
   }
 );
@@ -256,6 +282,7 @@ const talkJob = table(
 const spacetimedb = schema({
   player,
   echo,
+  intent,
   place,
   agentTravel,
   run,
@@ -360,6 +387,61 @@ function spendCredits(
   return true;
 }
 
+const STOPWORDS = new Set(
+  'a an the in on at for to of and or with my me i am is are want looking need new this week someone who'.split(' ')
+);
+
+function tokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9+#-]+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+}
+
+/** Pairs of intents that fit together even with no shared words. */
+const COMPLEMENTS: [string[], string[], string][] = [
+  [['hiring', 'hire', 'recruiting'], ['job', 'role', 'work', 'freelance', 'available'], 'one is hiring, the other is looking for work'],
+  [['raising', 'raise', 'fundraising', 'pre-seed', 'preseed', 'seed'], ['investing', 'investor', 'invest', 'angel', 'fund'], 'one is raising, the other invests'],
+  [['cofounder', 'co-founder'], ['cofounder', 'co-founder'], 'both want a cofounder'],
+  [['mentor'], ['mentee', 'learning', 'learn'], 'one mentors, the other wants to learn'],
+];
+
+/**
+ * Deterministic 0..100 match between two intents, plus a one-line reason. This
+ * runs inside the tick's transaction so it must be cheap and network-free. The
+ * LLM never decides who should meet; it only writes the words once this says so.
+ */
+function matchIntents(a: string, b: string): { score: number; why: string } {
+  const ta = new Set(tokens(a));
+  const tb = new Set(tokens(b));
+  const shared = [...ta].filter(w => tb.has(w));
+  let score = Math.min(70, shared.length * 25);
+  let why = shared.length > 0 ? `both mention ${shared.slice(0, 3).join(', ')}` : '';
+  for (const [left, right, reason] of COMPLEMENTS) {
+    const lr = left.some(w => ta.has(w)) && right.some(w => tb.has(w));
+    const rl = left.some(w => tb.has(w)) && right.some(w => ta.has(w));
+    if (lr || rl) {
+      score = Math.min(100, score + 50);
+      why = why ? `${reason}; ${why}` : reason;
+      break;
+    }
+  }
+  if (score === 0) why = 'no overlap yet';
+  return { score, why };
+}
+
+function newShareId(ctx: Ctx): string {
+  let out = '';
+  for (let i = 0; i < 6; i++) {
+    out += SHARE_ALPHABET[ctx.random.integerInRange(0, SHARE_ALPHABET.length - 1)];
+  }
+  return out;
+}
+
+function intentText(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity']): string {
+  return ctx.db.intent.owner.find(owner)?.text ?? '';
+}
+
 function requireRun(ctx: Ctx) {
   const row = ctx.db.run.owner.find(ctx.sender);
   if (!row) fail('no_run');
@@ -382,6 +464,19 @@ function latestLeg(ctx: Ctx, echoId: bigint) {
  * after their first parting, which is the wrong simulation and a dead demo.
  */
 function pickNextPlace(ctx: Ctx, runRow: ReturnType<typeof requireRun>, current: number): number {
+  // A run started from a shared link walks to its host before anything else.
+  if (runRow.hostEchoId !== NO_HOST && !runRow.hostMet) {
+    const hostEcho = ctx.db.echo.id.find(runRow.hostEchoId);
+    const hostPlayer = hostEcho ? ctx.db.player.identity.find(hostEcho.owner) : null;
+    if (hostPlayer) {
+      const hostLeg = latestLeg(ctx, runRow.hostEchoId);
+      const going =
+        hostLeg && micros(hostLeg.arriveTs) > micros(ctx.timestamp)
+          ? hostLeg.toPlace
+          : hostPlayer.currentPlace;
+      if (going !== current) return going;
+    }
+  }
   if (isAllowed(runRow.allowedActions, 'find')) {
     // Only the lower-numbered Echo of any pair gives chase. If both chased,
     // two Echoes would swap landmarks every tick and never actually arrive
@@ -460,31 +555,57 @@ export const join = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) =>
 });
 
 export const createEcho = spacetimedb.reducer(
-  { avatar: t.string(), persona: t.string() },
-  (ctx, { avatar, persona }) => {
+  { avatar: t.string(), persona: t.string(), intent: t.string() },
+  (ctx, { avatar, persona, intent: intentLine }) => {
     const playerRow = requirePlayer(ctx);
     if (!AVATARS.includes(avatar)) fail(`unknown_avatar:${avatar}`);
-    const cleanPersona = trimmed(persona, MAX_PERSONA_LENGTH, 'persona');
+    // Persona is optional flavour; the intent is the product.
+    const cleanPersona = persona.trim().slice(0, MAX_PERSONA_LENGTH);
+    const cleanIntent = trimmed(intentLine, MAX_INTENT_LENGTH, 'intent');
 
     ctx.db.player.identity.update({ ...playerRow, avatar });
 
     const existing = ctx.db.echo.owner.find(ctx.sender);
+    let echoId: bigint;
     if (existing) {
       ctx.db.echo.id.update({
         ...existing,
         persona: cleanPersona,
         updatedAt: ctx.timestamp,
       });
-      return;
+      echoId = existing.id;
+    } else {
+      echoId = ctx.db.echo.insert({
+        id: 0n,
+        owner: ctx.sender,
+        persona: cleanPersona,
+        behaviourNotes: '',
+        updatedAt: ctx.timestamp,
+      }).id;
     }
 
-    ctx.db.echo.insert({
-      id: 0n,
-      owner: ctx.sender,
-      persona: cleanPersona,
-      behaviourNotes: '',
-      updatedAt: ctx.timestamp,
-    });
+    // One live intent per player. Re-creating refreshes the clock and keeps the
+    // share id, so a link already posted keeps working.
+    const existingIntent = ctx.db.intent.owner.find(ctx.sender);
+    if (existingIntent) {
+      ctx.db.intent.id.update({
+        ...existingIntent,
+        text: cleanIntent,
+        expiresAt: plus(ctx.timestamp, INTENT_TTL_MICROS),
+      });
+    } else {
+      let shareId = newShareId(ctx);
+      while (ctx.db.intent.shareId.find(shareId)) shareId = newShareId(ctx);
+      ctx.db.intent.insert({
+        id: 0n,
+        owner: ctx.sender,
+        echoId,
+        text: cleanIntent,
+        shareId,
+        createdAt: ctx.timestamp,
+        expiresAt: plus(ctx.timestamp, INTENT_TTL_MICROS),
+      });
+    }
   }
 );
 
@@ -557,10 +678,20 @@ export const startRun = spacetimedb.reducer(
     repliesPerPerson: t.u8(),
     creditCap: t.u32(),
     allowedActions: t.string(),
+    hostShareId: t.string(), // empty unless the player arrived through a shared link
   },
-  (ctx, { goal, maxPeople, repliesPerPerson, creditCap, allowedActions }) => {
+  (ctx, { goal, maxPeople, repliesPerPerson, creditCap, allowedActions, hostShareId }) => {
     const playerRow = requirePlayer(ctx);
     const echoRow = requireEcho(ctx);
+
+    let hostEchoId = NO_HOST;
+    if (hostShareId.trim().length > 0) {
+      const host = ctx.db.intent.shareId.find(hostShareId.trim());
+      if (!host) fail('host_not_found');
+      if (micros(host.expiresAt) <= micros(ctx.timestamp)) fail('host_intent_expired');
+      if (host.owner.isEqual(ctx.sender)) fail('cannot_host_yourself');
+      hostEchoId = host.echoId;
+    }
 
     const cleanGoal = trimmed(goal, MAX_GOAL_LENGTH, 'goal');
     if (![1, 3, 5].includes(maxPeople)) fail(`bad_max_people:${maxPeople}`);
@@ -594,6 +725,8 @@ export const startRun = spacetimedb.reducer(
       placesVisited: 0,
       built: 0,
       creditsSpent: 0,
+      hostEchoId,
+      hostMet: false,
     };
 
     // A new night starts with a full wallet. Without this the wallet is a
@@ -758,6 +891,12 @@ export const tick = spacetimedb.reducer(
     const now = micros(ctx.timestamp);
     const hasKey = ctx.db.llmConfig.id.find(LLM_CONFIG_ID) !== null;
 
+    // Intents expire. Deleting the row is the whole mechanism: a link to an
+    // expired intent fails in startRun, and the map stops matching on it.
+    for (const stale of [...ctx.db.intent.iter()]) {
+      if (micros(stale.expiresAt) <= now) ctx.db.intent.id.delete(stale.id);
+    }
+
     // Iterate over a snapshot, but re-read each row before acting on it. One
     // Echo's turn can write to another Echo's run (a conversation bumps
     // peopleMet on both sides), and acting on the snapshot would silently
@@ -857,15 +996,32 @@ function tryConverse(
   const playerRow = ctx.db.player.identity.find(runRow.owner);
   if (!playerRow) return false;
 
-  for (const otherPlayer of ctx.db.player.currentPlace.filter(placeId)) {
+  // The host of a shared link is talked to first; everyone else in arrival order.
+  const here = [...ctx.db.player.currentPlace.filter(placeId)].sort((x, y) => {
+    const hx = ctx.db.echo.owner.find(x.identity)?.id === runRow.hostEchoId ? 0 : 1;
+    const hy = ctx.db.echo.owner.find(y.identity)?.id === runRow.hostEchoId ? 0 : 1;
+    return hx - hy;
+  });
+
+  for (const otherPlayer of here) {
     if (otherPlayer.identity.isEqual(runRow.owner)) continue;
 
-    const otherRun = ctx.db.run.owner.find(otherPlayer.identity);
-    if (!otherRun || otherRun.status !== RUN_RUNNING) continue;
-    if (!isAllowed(otherRun.allowedActions, 'talk')) continue;
+    const otherEcho = ctx.db.echo.owner.find(otherPlayer.identity);
+    if (!otherEcho) continue;
+    const isHost = runRow.hostEchoId !== NO_HOST && otherEcho.id === runRow.hostEchoId;
 
-    const a = runRow.echoId < otherRun.echoId ? runRow.echoId : otherRun.echoId;
-    const b = runRow.echoId < otherRun.echoId ? otherRun.echoId : runRow.echoId;
+    // A host is reachable even when their own run is over: their Echo stands
+    // at its last place and receives visitors. Anyone else needs a live run.
+    const otherRunRow = ctx.db.run.owner.find(otherPlayer.identity);
+    const otherRun = otherRunRow && otherRunRow.status === RUN_RUNNING ? otherRunRow : null;
+    if (!isHost) {
+      if (!otherRun) continue;
+      if (!isAllowed(otherRun.allowedActions, 'talk')) continue;
+    }
+    const otherEchoId = otherEcho.id;
+
+    const a = runRow.echoId < otherEchoId ? runRow.echoId : otherEchoId;
+    const b = runRow.echoId < otherEchoId ? otherEchoId : runRow.echoId;
 
     // Reuse a conversation only if it belongs to the current pair of runs. A
     // conversation older than either run is a memory of a previous night, and
@@ -875,14 +1031,14 @@ function tryConverse(
       if (c.echoB !== b) continue;
       const started = micros(c.createdAt);
       if (started < micros(runRow.startedAt)) continue;
-      if (started < micros(otherRun.startedAt)) continue;
+      if (otherRun && started < micros(otherRun.startedAt)) continue;
       existing = c;
     }
 
     // New pair: both runs must still have room for another person.
     if (!existing) {
       if (runRow.peopleMet >= runRow.maxPeople) continue;
-      if (otherRun.peopleMet >= otherRun.maxPeople) continue;
+      if (otherRun && otherRun.peopleMet >= otherRun.maxPeople) continue;
     } else if (existing.replies >= runRow.repliesPerPerson) {
       continue;
     }
@@ -897,21 +1053,33 @@ function tryConverse(
         replies: existing.replies + 1,
       });
     } else {
+      const match = matchIntents(
+        intentText(ctx, runRow.owner),
+        intentText(ctx, otherPlayer.identity)
+      );
       const created = ctx.db.conversation.insert({
         id: 0n,
         echoA: a,
         echoB: b,
         placeId,
         replies: 1,
+        score: match.score,
+        why: match.why,
         createdAt: ctx.timestamp,
       });
       conversationId = created.id;
 
       // Re-read: spendCredits already wrote to this row.
       const freshRun = ctx.db.run.id.find(runRow.id)!;
-      ctx.db.run.id.update({ ...freshRun, peopleMet: freshRun.peopleMet + 1 });
-      const freshOther = ctx.db.run.id.find(otherRun.id)!;
-      ctx.db.run.id.update({ ...freshOther, peopleMet: freshOther.peopleMet + 1 });
+      ctx.db.run.id.update({
+        ...freshRun,
+        peopleMet: freshRun.peopleMet + 1,
+        hostMet: freshRun.hostMet || isHost,
+      });
+      if (otherRun) {
+        const freshOther = ctx.db.run.id.find(otherRun.id)!;
+        ctx.db.run.id.update({ ...freshOther, peopleMet: freshOther.peopleMet + 1 });
+      }
     }
 
     writeReceipt(
@@ -1043,6 +1211,8 @@ export const echoTalk = spacetimedb.procedure(
         personaA: echoA.persona,
         notesA: echoA.behaviourNotes,
         goalA: firstGoal(goalA),
+        intentA: tx.db.intent.owner.find(echoA.owner)?.text ?? '',
+        intentB: tx.db.intent.owner.find(echoB.owner)?.text ?? '',
         personaB: echoB.persona,
         notesB: echoB.behaviourNotes,
         goalB: firstGoal(goalB),
@@ -1058,14 +1228,17 @@ export const echoTalk = spacetimedb.procedure(
         content: [
           `Two people meet at ${setup.placeName} in Bengaluru, late at night.`,
           '',
-          `A is: ${setup.personaA}`,
+          setup.personaA ? `A is: ${setup.personaA}` : '',
+          setup.intentA ? `A is here for: ${setup.intentA}` : '',
           setup.goalA ? `A wants: ${setup.goalA}` : '',
           setup.notesA ? `A has been corrected before:\n${setup.notesA}` : '',
           '',
-          `B is: ${setup.personaB}`,
+          setup.personaB ? `B is: ${setup.personaB}` : '',
+          setup.intentB ? `B is here for: ${setup.intentB}` : '',
           setup.goalB ? `B wants: ${setup.goalB}` : '',
           setup.notesB ? `B has been corrected before:\n${setup.notesB}` : '',
           '',
+          'Each is trying to find out whether the other is worth meeting in person this week.',
           'Write exactly two lines of dialogue, one from A then one from B.',
           'Format each line as "A: ..." and "B: ...". No narration, under 25 words each.',
           'Obey every correction listed above; those are the strongest instruction here.',

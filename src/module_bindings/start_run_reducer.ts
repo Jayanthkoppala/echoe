@@ -16,4 +16,5 @@ export default {
   repliesPerPerson: __t.u8(),
   creditCap: __t.u32(),
   allowedActions: __t.string(),
+  hostShareId: __t.string(),
 };
