@@ -20,15 +20,7 @@ export function JoinScreen({ actions }: ScreenProps) {
       <TopBar title="Echo" step="01 / 08" showMark />
       <div className="content content--fit">
         <div className="hero-world" aria-hidden="true">
-          <div className="city-grid" />
-          <i className="pixel-building b1" />
-          <i className="pixel-building b2" />
-          <i className="pixel-building b3" />
-          <i className="pixel-building b4" />
-          <i className="tree-dot t1" />
-          <i className="tree-dot t2" />
-          <i className="tree-dot t3" />
-          <i className="hero-agent" />
+          <video className="hero-video" src="/echo-hero.mp4" autoPlay muted loop playsInline />
         </div>
         <h2 className="join-title">Talk, meet and have fun with Echoes.</h2>
         <label className="label" htmlFor="playerName">
