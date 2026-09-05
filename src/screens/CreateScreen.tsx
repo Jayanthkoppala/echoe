@@ -10,6 +10,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
   const [intent, setIntent] = useState('');
   const [persona, setPersona] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showPersona, setShowPersona] = useState(false);
 
   const copyPrompt = async () => {
     try {
@@ -40,7 +41,7 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
           maxLength={120}
         />
         <p className="helper helper--tight">
-          Your Echoe carries this line around the city and shows it to anyone worth meeting.
+          Your Echoe carries this line around the city and matches it against the persona of every Echoe it meets.
         </p>
 
         <div className="section-block">
@@ -63,26 +64,32 @@ export function CreateScreen({ actions, go, hostCard }: ScreenProps & { hostCard
           </div>
         </div>
 
-        <div className="section-block">
-          <span className="label">Give it a voice (optional)</span>
-          <div className="prompt-card">
-            <p className="prompt-text">{PERSONA_PROMPT}</p>
-            <button className="copy-btn" type="button" onClick={copyPrompt}>
-              {copied ? 'Copied' : 'Copy prompt'}
-            </button>
+        {showPersona ? (
+          <div className="section-block">
+            <span className="label">Your persona</span>
+            <div className="prompt-card">
+              <p className="prompt-text">{PERSONA_PROMPT}</p>
+              <button className="copy-btn" type="button" onClick={copyPrompt}>
+                {copied ? 'Copied' : 'Copy prompt'}
+              </button>
+            </div>
+            <p className="helper helper--tight">
+              Paste this into ChatGPT or Claude, then bring the answer back here.
+            </p>
+            <textarea
+              className="textarea"
+              value={persona}
+              onChange={event => setPersona(event.target.value)}
+              placeholder="Paste your persona here…"
+              aria-label="Your persona"
+              autoFocus
+            />
           </div>
-          <p className="helper helper--tight">
-            Paste this into ChatGPT or Claude, then bring the answer back here. Skip it and
-            your Echoe still goes.
-          </p>
-          <textarea
-            className="textarea"
-            value={persona}
-            onChange={event => setPersona(event.target.value)}
-            placeholder="Paste your persona here…"
-            aria-label="Your persona"
-          />
-        </div>
+        ) : (
+          <button className="secondary" type="button" onClick={() => setShowPersona(true)}>
+            Add my persona so others can match me <span className="muted">(optional)</span>
+          </button>
+        )}
       </div>
       <div className="footer">
         <button

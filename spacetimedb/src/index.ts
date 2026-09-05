@@ -438,8 +438,29 @@ function newShareId(ctx: Ctx): string {
   return out;
 }
 
-function intentText(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity']): string {
+function intentOf(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity']): string {
   return ctx.db.intent.owner.find(owner)?.text ?? '';
+}
+
+/** Who someone is: their persona, with their intent as a fallback when no persona was given. */
+function profileOf(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity']): string {
+  const persona = ctx.db.echo.owner.find(owner)?.persona ?? '';
+  const line = intentOf(ctx, owner);
+  return persona ? `${persona} ${line}` : line;
+}
+
+/**
+ * Direction matters: my intent is matched against who THEY are (their persona),
+ * and their intent against who I am. The better of the two directions wins.
+ */
+function matchPair(
+  ctx: Ctx,
+  me: ReturnType<typeof requirePlayer>['identity'],
+  them: ReturnType<typeof requirePlayer>['identity']
+): { score: number; why: string } {
+  const mine = matchIntents(intentOf(ctx, me), profileOf(ctx, them));
+  const theirs = matchIntents(intentOf(ctx, them), profileOf(ctx, me));
+  return mine.score >= theirs.score ? mine : theirs;
 }
 
 function requireRun(ctx: Ctx) {
@@ -1053,10 +1074,7 @@ function tryConverse(
         replies: existing.replies + 1,
       });
     } else {
-      const match = matchIntents(
-        intentText(ctx, runRow.owner),
-        intentText(ctx, otherPlayer.identity)
-      );
+      const match = matchPair(ctx, runRow.owner, otherPlayer.identity);
       const created = ctx.db.conversation.insert({
         id: 0n,
         echoA: a,
