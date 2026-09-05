@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { TopBar } from '../components/TopBar';
+import { eventBuildPrompt } from '../state/copy';
 import type { ScreenName, ScreenProps } from '../state/types';
 
 interface JoinEventScreenProps extends ScreenProps {
@@ -9,19 +10,61 @@ interface JoinEventScreenProps extends ScreenProps {
 }
 
 /**
- * Joining an event asks for one line the Echoe opens with, plus the two links
- * it never sees. The links go to a private table; only a mutual Reveal shows them.
+ * Joining an event asks what you are building (the Echoe leads with it), one
+ * line on what you want from the event, plus the two links it never sees. The
+ * links go to a private table; only a mutual Reveal shows them.
  */
 export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: JoinEventScreenProps) {
+  const [building, setBuilding] = useState('');
   const [goal, setGoal] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [twitter, setTwitter] = useState('');
-  const ready = Boolean(goal.trim() && linkedin.trim() && twitter.trim());
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ready = Boolean(building.trim() && goal.trim() && linkedin.trim() && twitter.trim());
+  const prompt = eventBuildPrompt(eventTitle);
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+    } catch {
+      // Clipboard can be blocked in embedded browsers; the text stays on screen.
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1400);
+  };
 
   return (
     <div className="screen">
       <TopBar title={eventTitle} onBack={() => go(backTo)} />
       <div className="content content--close">
+        <label className="label" htmlFor="event-building">
+          What are you building?
+        </label>
+        <textarea
+          className="textarea"
+          id="event-building"
+          value={building}
+          onChange={event => setBuilding(event.target.value)}
+          placeholder="Paste the 800 to 1200 words your coding agent wrote about it, or write it yourself: what it is, who it is for, what works today, what you are stuck on."
+          maxLength={9000}
+          autoFocus
+        />
+        <p className="helper helper--tight">
+          Your Echoe leads with this at the event and asks everyone what they are building back. Long is right here.{' '}
+          <button className="link-btn" type="button" onClick={() => setShowPrompt(open => !open)}>
+            {showPrompt ? 'Hide prompt' : 'Get a prompt'}
+          </button>
+        </p>
+        {showPrompt ? (
+          <div className="prompt-card glass">
+            <p className="prompt-text">{prompt}</p>
+            <button className="copy-btn" type="button" onClick={copyPrompt}>
+              {copied ? 'Copied' : 'Copy prompt'}
+            </button>
+          </div>
+        ) : null}
+
         <label className="label" htmlFor="event-goal">
           What do you want from this event?
         </label>
@@ -32,7 +75,6 @@ export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: Jo
           onChange={event => setGoal(event.target.value)}
           placeholder="meet two people building payments infra who want a design partner"
           maxLength={160}
-          autoFocus
         />
         <p className="helper helper--tight">
           Your Echoe opens every conversation at this event with this.
@@ -73,7 +115,7 @@ export function JoinEventScreen({ actions, go, eventId, eventTitle, backTo }: Jo
           className="primary"
           disabled={!ready}
           onClick={() => {
-            actions.onJoinEvent(eventId, goal.trim(), linkedin.trim(), twitter.trim());
+            actions.onJoinEvent(eventId, goal.trim(), linkedin.trim(), twitter.trim(), building.trim());
             go(backTo);
           }}
         >

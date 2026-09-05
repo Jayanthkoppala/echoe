@@ -121,6 +121,15 @@ export const EchoMemory = __t.object("EchoMemory", {
 });
 export type EchoMemory = __Infer<typeof EchoMemory>;
 
+export const EventBuild = __t.object("EventBuild", {
+  key: __t.string(),
+  eventId: __t.string(),
+  identity: __t.identity(),
+  text: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type EventBuild = __Infer<typeof EventBuild>;
+
 export const EventContact = __t.object("EventContact", {
   key: __t.string(),
   eventId: __t.string(),

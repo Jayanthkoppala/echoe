@@ -75,6 +75,7 @@ import ConversationRow from "./conversation_table";
 import ConversationSummaryRow from "./conversation_summary_table";
 import CorrectionRow from "./correction_table";
 import EchoRow from "./echo_table";
+import EventBuildRow from "./event_build_table";
 import EventJoinRow from "./event_join_table";
 import IntentRow from "./intent_table";
 import LinkedAccountRow from "./linked_account_table";
@@ -197,6 +198,20 @@ const tablesSchema = __schema({
       { name: 'echo_owner_key', constraint: 'unique', columns: ['owner'] },
     ],
   }, EchoRow),
+  eventBuild: __table({
+    name: 'event_build',
+    indexes: [
+      { accessor: 'eventId', name: 'event_build_event_id_idx_btree', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+      { accessor: 'key', name: 'event_build_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'event_build_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, EventBuildRow),
   eventJoin: __table({
     name: 'event_join',
     indexes: [

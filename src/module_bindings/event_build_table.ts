@@ -10,10 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  eventId: __t.string(),
-  goal: __t.string(),
-  linkedin: __t.string(),
-  twitter: __t.string(),
-  building: __t.string(),
-};
+export default __t.row({
+  key: __t.string().primaryKey(),
+  eventId: __t.string().name("event_id"),
+  identity: __t.identity(),
+  text: __t.string(),
+  updatedAt: __t.timestamp().name("updated_at"),
+});

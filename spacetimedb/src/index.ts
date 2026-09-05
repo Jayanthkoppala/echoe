@@ -262,6 +262,21 @@ const eventContact = table(
 );
 
 /**
+ * What a player is building, per event. Public and read by the event prompt so
+ * an Echoe can say what its owner is making and ask what the other is making.
+ */
+const eventBuild = table(
+  { name: 'event_build', public: true },
+  {
+    key: t.string().primaryKey(), // same key as event_join
+    eventId: t.string().index('btree'),
+    identity: t.identity(),
+    text: t.string(),
+    updatedAt: t.timestamp(),
+  }
+);
+
+/**
  * The Bengaluru companies a work address can be verified against. Public and
  * seeded in `init` from `companies.ts`, exactly like `place`, so the client
  * renders a badge from a join instead of shipping its own copy of the list.
@@ -632,6 +647,7 @@ const spacetimedb = schema({
   linkedAccount,
   eventJoin,
   eventContact,
+  eventBuild,
   agentTravel,
   run,
   receipt,
@@ -682,6 +698,7 @@ const MAX_EVENT_ID = 80;
 
 /** "What do you want from this event?", the baseline an Echoe networks on there. */
 const MAX_EVENT_GOAL = 160;
+const MAX_EVENT_BUILD = 9_000; // 800 to 1200 words, written by the player's own coding agent
 
 const MAX_HANDLE = 60;
 
@@ -706,8 +723,8 @@ function handleOf(value: string, field: string): string {
  * the handles and the goal, and keeps the first timestamp.
  */
 export const joinEvent = spacetimedb.reducer(
-  { eventId: t.string(), goal: t.string(), linkedin: t.string(), twitter: t.string() },
-  (ctx, { eventId, goal, linkedin, twitter }) => {
+  { eventId: t.string(), goal: t.string(), linkedin: t.string(), twitter: t.string(), building: t.string() },
+  (ctx, { eventId, goal, linkedin, twitter, building }) => {
     requirePlayer(ctx);
     const id = trimmed(eventId, MAX_EVENT_ID, 'event_id');
     const cleanGoal = trimmed(goal, MAX_EVENT_GOAL, 'goal');
@@ -718,6 +735,10 @@ export const joinEvent = spacetimedb.reducer(
     const contactRow = { key, eventId: id, identity: ctx.sender, linkedin: li, twitter: tw, givenAt: ctx.timestamp };
     if (ctx.db.eventContact.key.find(key)) ctx.db.eventContact.key.update(contactRow);
     else ctx.db.eventContact.insert(contactRow);
+    // What they are building: '' is allowed, the prompt line simply stays out.
+    const buildRow = { key, eventId: id, identity: ctx.sender, text: building.trim().slice(0, MAX_EVENT_BUILD), updatedAt: ctx.timestamp };
+    if (ctx.db.eventBuild.key.find(key)) ctx.db.eventBuild.key.update(buildRow);
+    else ctx.db.eventBuild.insert(buildRow);
     const joined = ctx.db.eventJoin.key.find(key);
     if (joined) {
       // Already in the room: a re-join only updates the goal it networks on.
@@ -818,6 +839,11 @@ function eventGoal(
   who: { toHexString(): string }
 ): string {
   return ctx.db.eventJoin.key.find(`${eventId}:${who.toHexString()}`)?.goal ?? '';
+}
+
+/** What someone said they are building at this event, or ''. */
+function eventBuildOf(ctx: { db: Db }, eventId: string, who: { toHexString(): string }): string {
+  return ctx.db.eventBuild.key.find(`${eventId}:${who.toHexString()}`)?.text ?? '';
 }
 
 /**
@@ -966,6 +992,7 @@ export const leaveEvent = spacetimedb.reducer({ eventId: t.string() }, (ctx, { e
   const key = `${id}:${ctx.sender.toHexString()}`;
   ctx.db.eventJoin.key.delete(key);
   ctx.db.eventContact.key.delete(key);
+  ctx.db.eventBuild.key.delete(key);
 });
 
 function requireEcho(ctx: Ctx) {
@@ -2232,6 +2259,8 @@ export const echoTalk = spacetimedb.procedure(
         eventTitle: eventTitle(convo.eventId),
         eventGoalA: eventGoal(tx, convo.eventId, echoA.owner),
         eventGoalB: eventGoal(tx, convo.eventId, echoB.owner),
+        eventBuildA: eventBuildOf(tx, convo.eventId, echoA.owner),
+        eventBuildB: eventBuildOf(tx, convo.eventId, echoB.owner),
         intentA: convo.eventId ? '' : tx.db.intent.owner.find(echoA.owner)?.text ?? '',
         intentB: convo.eventId ? '' : tx.db.intent.owner.find(echoB.owner)?.text ?? '',
         nameA,
@@ -2266,6 +2295,8 @@ export const echoTalk = spacetimedb.procedure(
           // above the persona. The street intent is not loaded at all.
           setup.eventGoalA ? `At ${setup.eventTitle}, A wants: ${setup.eventGoalA}` : '',
           setup.eventGoalB ? `At ${setup.eventTitle}, B wants: ${setup.eventGoalB}` : '',
+          setup.eventBuildA ? `What A is building, in A's own words:\n${setup.eventBuildA}` : '',
+          setup.eventBuildB ? `What B is building, in B's own words:\n${setup.eventBuildB}` : '',
           setup.personaA ? `A is: ${setup.personaA}` : '',
           setup.intentA ? `A wants: ${setup.intentA}` : '',
           setup.avoidA ? `Do not pursue people who ${setup.avoidA}, on A's behalf.` : '',

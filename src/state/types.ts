@@ -196,7 +196,7 @@ export interface Actions {
   /** Profile: sets the Echoe's line to "Hosting <name>" so the existing share link becomes the event link. */
   onHostEvent(name: string): void;
   /** Map event card: join or leave a city event by its events.json id. */
-  onJoinEvent(eventId: string, goal: string, linkedin: string, twitter: string): void;
+  onJoinEvent(eventId: string, goal: string, linkedin: string, twitter: string, building: string): void;
   onLeaveEvent(eventId: string): void;
   /** Upserts the caller's coding-agent link token (Connect screen). */
   onSetAgentLink(token: string): void;

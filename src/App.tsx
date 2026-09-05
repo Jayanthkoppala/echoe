@@ -175,8 +175,8 @@ function App() {
         // it sends their Echoe to meet the host's. The share id survives re-creation.
         run('Host event', startRun({ goal: `Hosting ${name}`, avoid: myRunRow?.avoid ?? '', hostShareId }));
       },
-      onJoinEvent(eventId, goal, linkedin, twitter) {
-        run('Join event', joinEvent({ eventId, goal, linkedin, twitter }));
+      onJoinEvent(eventId, goal, linkedin, twitter, building) {
+        run('Join event', joinEvent({ eventId, goal, linkedin, twitter, building }));
       },
       onLeaveEvent(eventId) {
         run('Leave event', leaveEvent({ eventId }));
