@@ -29,7 +29,7 @@ export function ReturnScreen({
 
   return (
     <div className="screen">
-      <TopBar title="Your return" onBack={() => go('roaming')} />
+      <TopBar title="Your return" onBack={() => go('world')} />
       <div className="content">
         <div className="recap-hero glass">
           <div className="eyebrow">While you were gone</div>
