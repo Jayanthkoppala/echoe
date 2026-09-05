@@ -10,9 +10,9 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
   if (!line) {
     return (
       <div className="screen">
-        <TopBar title="Correct your Echo" step="08 / 08" onBack={() => go('review')} />
+        <TopBar title="Correct your Echoe" step="08 / 08" onBack={() => go('review')} />
         <div className="content">
-          <p className="lede">Pick one of your Echo's lines first.</p>
+          <p className="lede">Pick one of your Echoe's lines first.</p>
         </div>
         <div className="footer">
           <button className="secondary" onClick={() => go('review')}>
@@ -27,7 +27,7 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
 
   return (
     <div className="screen">
-      <TopBar title="Correct your Echo" step="08 / 08" onBack={() => go('review')} />
+      <TopBar title="Correct your Echoe" step="08 / 08" onBack={() => go('review')} />
       <div className="content">
         <div className="eyebrow">One correction at a time</div>
         <h2>What should it learn?</h2>
@@ -35,7 +35,7 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
         <div className="correction-card">
           <blockquote className="quote">“{line.text}”</blockquote>
           <label className="label" htmlFor="correction">
-            My Echo should have said…
+            My Echoe should have said…
           </label>
           <textarea
             className="textarea"
@@ -74,7 +74,7 @@ export function CorrectScreen({ actions, go, line }: ScreenProps & { line?: Tran
           disabled={!said.trim()}
           onClick={() => actions.onCorrect(line.id, said.trim(), change)}
         >
-          Update Echo and close the loop <span aria-hidden="true">→</span>
+          Update Echoe and close the loop <span aria-hidden="true">→</span>
         </button>
         <button className="secondary" onClick={() => go('review')}>
           Keep the original behaviour

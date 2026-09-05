@@ -20,12 +20,12 @@ export function LimitsScreen({ actions, go, hostName }: ScreenProps & { hostName
 
   return (
     <div className="screen">
-      <TopBar title="Echo limits" step="04 / 08" onBack={() => go('world')} />
+      <TopBar title="Echoe limits" step="04 / 08" onBack={() => go('world')} />
       <div className="content">
         <div className="eyebrow">You stay in control</div>
         <h2>What can it do without you?</h2>
         <p className="lede">
-          The Echo wakes only for a meaningful action, so a long run is not a long AI bill.
+          The Echoe wakes only for a meaningful action, so a long run is not a long AI bill.
         </p>
 
         <label className="label" htmlFor="goal">

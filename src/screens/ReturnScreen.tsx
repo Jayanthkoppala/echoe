@@ -20,7 +20,7 @@ export function ReturnScreen({ go, run, matches, receipts, onReview }: ReturnScr
           <h1>
             {matches.length > 0
               ? `${matches.length} ${matches.length === 1 ? 'person' : 'people'} worth meeting.`
-              : 'Your Echo came home empty handed.'}
+              : 'Your Echoe came home empty handed.'}
           </h1>
           <p>{run?.goal ?? ''}</p>
         </div>

@@ -27,7 +27,7 @@ export function ReviewScreen({
             ☻
           </div>
           <div>
-            <strong>{match ? `${match.name}'s Echo · clearly AI` : 'Echo conversation'}</strong>
+            <strong>{match ? `${match.name}'s Echoe · clearly AI` : 'Echoe conversation'}</strong>
             <span>
               {match ? `${match.placeName} · match ${match.score}` : ''}
             </span>
@@ -79,7 +79,7 @@ export function ReviewScreen({
             </div>
           </div>
         ) : (
-          <p className="helper">Tap one of your Echo's lines to rate it.</p>
+          <p className="helper">Tap one of your Echoe's lines to rate it.</p>
         )}
 
         <p className="helper">

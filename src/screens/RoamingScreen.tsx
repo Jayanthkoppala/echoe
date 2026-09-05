@@ -7,7 +7,7 @@ interface RoamingScreenProps extends ScreenProps {
   agents: AgentSpec[];
 }
 
-/** The Echo acts while the player is away. Every number here is a live row. */
+/** The Echoe acts while the player is away. Every number here is a live row. */
 export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
   const paused = run?.status === 'paused';
   const creditsLeft = run ? Math.max(0, run.creditCap - run.creditsSpent) : 0;
@@ -26,7 +26,7 @@ export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
 
         <header className="topbar topbar--map">
           <div className="brand">
-            <span className="brand-mark">E</span> Echo is roaming
+            <span className="brand-mark">E</span> Echoe is roaming
           </div>
           <span className="timer tabular">{creditsLeft} cr left</span>
         </header>
@@ -62,7 +62,7 @@ export function RoamingScreen({ actions, run, agents }: RoamingScreenProps) {
               {paused ? 'Resume' : 'Pause'}
             </button>
             <button className="return-btn" onClick={actions.onEndRun}>
-              Bring my Echo home →
+              Bring my Echoe home →
             </button>
           </div>
         </div>

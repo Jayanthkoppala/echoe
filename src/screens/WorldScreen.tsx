@@ -77,7 +77,7 @@ export function WorldScreen({
               ))}
             </div>
             <button className="handoff-btn" onClick={() => go('limits')}>
-              Let my Echo keep going without me →
+              Let my Echoe keep going without me →
             </button>
           </div>
         </div>
