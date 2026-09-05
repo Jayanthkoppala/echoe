@@ -63,6 +63,7 @@ export interface Place {
 
 /** The subset of a Run the player chooses on the limits screen. */
 export interface RunLimits {
+  goal: string;
   maxPeople: number;
   repliesPerPerson: number;
   creditCap: number;
