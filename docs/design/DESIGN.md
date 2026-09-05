@@ -58,8 +58,10 @@ Per `../UX-ORDER.md`: Join (video, name) -> Create (character, persona first, in
 ## Known issues to fix (as of this update)
 
 - [x] Map verified drawing (2026-09-05 18:25 IST): streets, area labels, agents. Root cause was MapLibre 6's tile worker 404ing under Vite pre-bundling; fixed with `setWorkerUrl` and the `?worker&url` import in `src/map/BengaluruMap.tsx`. Style is OpenFreeMap `dark` with our own `building-3d` layer (shows from zoom 13, so on fly-to, not at city view).
-- [ ] The dark basemap reads dim at city zoom; consider lightening road colours via `setPaintProperty` on load, or lowering `.map-scrim` further. Judge on a phone.
+- [x] Basemap recoloured to a night city with a three-step road hierarchy (docs/design/MAP-DESIGN.md).
 - [ ] Glass over the video on Join: check blur cost on a mid-range Android.
+- [x] Landmark chips carry no backdrop blur (ten blur layers over WebGL stalled iOS); sheet and header keep theirs.
+- [x] Pins: 39 seeded startups, 44 VCs, 763 OSM offices (clustered), four-kind filter row on World. Logos are vendored same-origin (favicon services block canvas reads).
 - [ ] Create screen: after the aurora landed, re-check that the persona and intent textareas read as glass, not black.
 
 ## How to verify a visual change
