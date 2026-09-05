@@ -16,6 +16,5 @@ export default __t.row({
   avatar: __t.string(),
   online: __t.bool(),
   currentPlace: __t.u8().name("current_place"),
-  credits: __t.u32(),
   joinedAt: __t.timestamp().name("joined_at"),
 });

@@ -23,7 +23,7 @@ export interface HttpLike {
 export type ChatMessage = { role: 'system' | 'user'; content: string };
 
 export type ChatResult =
-  | { ok: true; text: string }
+  | { ok: true; text: string; costUsd: number }
   | { ok: false; reason: string };
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
@@ -46,7 +46,7 @@ export function chat(
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ model, messages, max_tokens: 220 }),
+      body: JSON.stringify({ model, messages, max_tokens: 220, usage: { include: true } }),
       timeout: TIMEOUT,
     });
   } catch (err) {
@@ -65,11 +65,13 @@ export function chat(
   }
 
   try {
-    const content = JSON.parse(body)?.choices?.[0]?.message?.content;
+    const parsed = JSON.parse(body);
+    const content = parsed?.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.trim().length === 0) {
       return { ok: false, reason: `parse: no choices[0].message.content` };
     }
-    return { ok: true, text: content.trim() };
+    const cost = parsed?.usage?.cost;
+    return { ok: true, text: content.trim(), costUsd: typeof cost === 'number' ? cost : 0 };
   } catch (err) {
     return { ok: false, reason: `parse: ${errText(err)}` };
   }

@@ -44,7 +44,6 @@ export function toPlayer(row: PlayerRow): Player {
   return {
     name: row.name,
     avatar: row.avatar,
-    credits: row.credits,
     currentPlace: landmarkOf(row.currentPlace).id,
   };
 }
@@ -52,15 +51,10 @@ export function toPlayer(row: PlayerRow): Player {
 export function toRun(row: RunRow): Run {
   return {
     goal: row.goal,
-    maxPeople: row.maxPeople,
-    repliesPerPerson: row.repliesPerPerson,
-    creditCap: row.creditCap,
-    allowedActions: row.allowedActions.split(',').filter(Boolean),
     status: row.status as RunStatus,
     placesVisited: row.placesVisited,
     peopleMet: row.peopleMet,
-    built: row.built,
-    creditsSpent: row.creditsSpent,
+    spentUsd: row.spentUsd,
     hostMet: row.hostMet,
     hasHost: row.hostEchoId !== 0n,
   };
@@ -71,7 +65,7 @@ export function toReceipt(row: ReceiptRow): Receipt {
     id: String(row.id),
     kind: row.kind,
     text: row.text,
-    creditCost: row.creditCost,
+    costUsd: row.costUsd,
     placeName: landmarkOf(row.placeId).name,
     at: msOf(row.createdAt),
   };

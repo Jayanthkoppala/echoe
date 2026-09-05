@@ -12,6 +12,8 @@ interface ShareCardProps {
 /** The link is the product. Everything here exists to get it posted. */
 export function ShareCard({ intent, shareId, mission, variant = 'inline' }: ShareCardProps) {
   const [copied, setCopied] = useState(false);
+  // Pinned over the map it starts folded to one line so the map stays visible.
+  const [open, setOpen] = useState(variant !== 'pinned');
   if (!shareId) return null;
 
   const url = `${window.location.origin}/i/${shareId}`;
@@ -49,33 +51,45 @@ export function ShareCard({ intent, shareId, mission, variant = 'inline' }: Shar
   ];
 
   return (
-    <div className={`share-card glass share-card--${variant}`}>
-      {mission ? <small className="share-mission">{mission}</small> : null}
-      <p className="share-intent">
-        Your Echoe is carrying: <strong>{intent}</strong>
-      </p>
-      <div className="share-link">
-        <code>{url}</code>
-        <button className="copy-btn" type="button" onClick={copy}>
-          {copied ? 'Copied' : 'Copy link'}
-        </button>
-      </div>
-      <div className="share-row">
-        <button className="share-btn share-btn--main" type="button" onClick={share}>
-          Share
-        </button>
-        {links.map(link => (
-          <a
-            key={link.id}
-            className="share-btn"
-            href={link.href}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {link.id}
-          </a>
-        ))}
-      </div>
+    <div className={`share-card glass share-card--${variant}${open ? '' : ' share-card--folded'}`}>
+      <button
+        className="share-head"
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+      >
+        <span className="share-intent">
+          Your Echoe is carrying: <strong>{intent}</strong>
+        </span>
+        <span className="share-chevron" aria-hidden="true">{open ? '▴' : '▾'}</span>
+      </button>
+      {open ? (
+        <>
+          {mission ? <small className="share-mission">{mission}</small> : null}
+          <div className="share-link">
+            <code>{url}</code>
+            <button className="copy-btn" type="button" onClick={copy}>
+              {copied ? 'Copied' : 'Copy link'}
+            </button>
+          </div>
+          <div className="share-row">
+            <button className="share-btn share-btn--main" type="button" onClick={share}>
+              Share
+            </button>
+            {links.map(link => (
+              <a
+                key={link.id}
+                className="share-btn"
+                href={link.href}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {link.id}
+              </a>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

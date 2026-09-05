@@ -92,7 +92,6 @@ export const Player = __t.object("Player", {
   avatar: __t.string(),
   online: __t.bool(),
   currentPlace: __t.u8(),
-  credits: __t.u32(),
   joinedAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
@@ -103,7 +102,7 @@ export const Receipt = __t.object("Receipt", {
   kind: __t.string(),
   placeId: __t.u8(),
   text: __t.string(),
-  creditCost: __t.u32(),
+  costUsd: __t.f64(),
   createdAt: __t.timestamp(),
 });
 export type Receipt = __Infer<typeof Receipt>;
@@ -113,16 +112,11 @@ export const Run = __t.object("Run", {
   owner: __t.identity(),
   echoId: __t.u64(),
   goal: __t.string(),
-  maxPeople: __t.u8(),
-  repliesPerPerson: __t.u8(),
-  creditCap: __t.u32(),
-  allowedActions: __t.string(),
   status: __t.string(),
   startedAt: __t.timestamp(),
   peopleMet: __t.u32(),
   placesVisited: __t.u32(),
-  built: __t.u32(),
-  creditsSpent: __t.u32(),
+  spentUsd: __t.f64(),
   hostEchoId: __t.u64(),
   hostMet: __t.bool(),
 });
@@ -132,6 +126,7 @@ export const TalkJob = __t.object("TalkJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
   conversationId: __t.u64(),
+  payer: __t.identity(),
 });
 export type TalkJob = __Infer<typeof TalkJob>;
 

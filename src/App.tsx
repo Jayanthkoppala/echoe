@@ -13,7 +13,7 @@ import { ReviewScreen } from './screens/ReviewScreen';
 import { RoamingScreen } from './screens/RoamingScreen';
 import { WorldScreen } from './screens/WorldScreen';
 
-import { DEFAULT_ALLOWED, behaviourFrom } from './state/copy';
+import { behaviourFrom } from './state/copy';
 import {
   agentsFrom,
   hostCardFrom,
@@ -54,7 +54,6 @@ function App() {
   const join = useReducer(reducers.join);
   const createEcho = useReducer(reducers.createEcho);
   const travel = useReducer(reducers.travel);
-  const act = useReducer(reducers.act);
   const startRun = useReducer(reducers.startRun);
   const pauseRun = useReducer(reducers.pauseRun);
   const resumeRun = useReducer(reducers.resumeRun);
@@ -119,10 +118,6 @@ function App() {
           createEcho({ avatar, persona, intent }).then(() =>
             startRun({
               goal: hostName ? `Meet ${hostName}` : intent,
-              maxPeople: 3,
-              repliesPerPerson: 2,
-              creditCap: 8,
-              allowedActions: DEFAULT_ALLOWED.join(','),
               hostShareId,
             }),
           ),
@@ -132,18 +127,11 @@ function App() {
       onTravel(placeId) {
         run('Travel', travel({ placeId: placeIndexOf(placeId) }));
       },
-      onAct(kind) {
-        run('Action', act({ kind }));
-      },
       onStartRun(limits) {
         run(
           'Start run',
           startRun({
             goal: limits.goal,
-            maxPeople: limits.maxPeople,
-            repliesPerPerson: limits.repliesPerPerson,
-            creditCap: limits.creditCap,
-            allowedActions: limits.allowedActions.join(','),
             hostShareId,
           }),
           // Limits now edits a live run, so land back where it was opened from.
@@ -245,6 +233,7 @@ function App() {
           onAdjustLimits={() => { setLimitsFrom('world'); setScreen('limits'); }}
           hostCard={hostCard}
           player={player}
+          run={runView}
           agents={agents}
           intent={myIntentRow?.text ?? ''}
           shareId={myIntentRow?.shareId ?? ''}

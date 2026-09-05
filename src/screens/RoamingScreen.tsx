@@ -1,5 +1,6 @@
 import { MapSlot } from '../components/MapSlot';
 import type { AgentSpec } from '../map/BengaluruMap';
+import { usd } from '../state/copy';
 import type { Run, ScreenProps } from '../state/types';
 
 interface RoamingScreenProps extends ScreenProps {
@@ -11,8 +12,7 @@ interface RoamingScreenProps extends ScreenProps {
 /** The Echoe acts while the player is away. Every number here is a live row. */
 export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingScreenProps) {
   const paused = run?.status === 'paused';
-  const creditsLeft = run ? Math.max(0, run.creditCap - run.creditsSpent) : 0;
-  const spentPct = run && run.creditCap > 0 ? (run.creditsSpent / run.creditCap) * 100 : 0;
+  const spent = usd(run?.spentUsd ?? 0);
 
   const headline = run?.hasHost
     ? run.hostMet
@@ -29,7 +29,7 @@ export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingS
           <div className="brand">
             <span className="brand-mark">E</span> Roaming
           </div>
-          <span className="step-count tabular">{creditsLeft} cr left</span>
+          <span className="step-count tabular">{spent} spent</span>
         </header>
 
         <div className="roam-overlay glass">
@@ -39,11 +39,7 @@ export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingS
               <h2>{headline}</h2>
               <p>{run?.goal ?? 'Waiting for the first move'}</p>
             </div>
-            <span className="credit-pill">{creditsLeft} left</span>
-          </div>
-
-          <div className="progress">
-            <div className="progress-fill" style={{ width: `${Math.min(100, spentPct)}%` }} />
+            <span className="credit-pill">{spent}</span>
           </div>
 
           <div className="roam-stats">
@@ -54,10 +50,6 @@ export function RoamingScreen({ actions, onAdjustLimits, run, agents }: RoamingS
             <div className="roam-stat">
               <strong>{run?.peopleMet ?? 0}</strong>
               <span>people</span>
-            </div>
-            <div className="roam-stat">
-              <strong>{run?.built ?? 0}</strong>
-              <span>built</span>
             </div>
           </div>
 

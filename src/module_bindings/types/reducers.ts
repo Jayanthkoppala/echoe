@@ -6,7 +6,6 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import ActReducer from "../act_reducer";
 import CorrectReducer from "../correct_reducer";
 import CreateEchoReducer from "../create_echo_reducer";
 import EndRunReducer from "../end_run_reducer";
@@ -19,7 +18,6 @@ import SetMissionReducer from "../set_mission_reducer";
 import StartRunReducer from "../start_run_reducer";
 import TravelReducer from "../travel_reducer";
 
-export type ActParams = __Infer<typeof ActReducer>;
 export type CorrectParams = __Infer<typeof CorrectReducer>;
 export type CreateEchoParams = __Infer<typeof CreateEchoReducer>;
 export type EndRunParams = __Infer<typeof EndRunReducer>;

@@ -3,14 +3,15 @@ import { ShareCard } from '../components/ShareCard';
 import { Toast } from '../components/Toast';
 import type { AgentSpec } from '../map/BengaluruMap';
 import { landmarkById } from '../data/landmarks';
-import { ACTIONS } from '../state/copy';
+import { usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
-import type { ActionKind, HostCard, Player, ScreenProps } from '../state/types';
+import type { HostCard, Player, Run, ScreenProps } from '../state/types';
 
 interface WorldScreenProps extends ScreenProps {
   onAdjustLimits: () => void;
   hostCard?: HostCard;
   player?: Player;
+  run?: Run;
   agents: AgentSpec[];
   intent: string;
   shareId: string;
@@ -30,6 +31,7 @@ export function WorldScreen({
   onAdjustLimits,
   hostCard,
   player,
+  run,
   agents,
   intent,
   shareId,
@@ -38,7 +40,6 @@ export function WorldScreen({
   toast,
 }: WorldScreenProps) {
   const mounted = useMounted();
-  const credits = player?.credits ?? 0;
   const placeName = player ? landmarkById(player.currentPlace)?.name ?? '—' : '—';
 
   return (
@@ -76,24 +77,7 @@ export function WorldScreen({
               <small>You are at</small>
               <h3 className="location-name">{placeName}</h3>
             </div>
-            <span className="credit-pill">{credits} credits</span>
-          </div>
-
-          <div className="actions">
-            {ACTIONS.map(action => (
-              <button
-                key={action.kind}
-                className="action"
-                onClick={() => actions.onAct(action.kind as ActionKind)}
-                disabled={action.cost > credits}
-              >
-                <span className="glyph" aria-hidden="true">
-                  {action.icon}
-                </span>
-                {action.label}
-                <span className="cost">{action.cost} cr</span>
-              </button>
-            ))}
+            <span className="credit-pill">{usd(run?.spentUsd ?? 0)} spent</span>
           </div>
 
           {hostCard ? (

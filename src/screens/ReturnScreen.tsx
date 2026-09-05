@@ -1,6 +1,6 @@
 import { ShareCard } from '../components/ShareCard';
 import { TopBar } from '../components/TopBar';
-import { AVATAR_COLOUR, AVATAR_GLYPH, RECEIPT_ICON } from '../state/copy';
+import { AVATAR_COLOUR, AVATAR_GLYPH, RECEIPT_ICON, usd } from '../state/copy';
 import { useMounted } from '../state/useMounted';
 import type { Match, Receipt, Run, ScreenProps } from '../state/types';
 
@@ -49,8 +49,8 @@ export function ReturnScreen({
             <span>Echoes met</span>
           </div>
           <div className="stat-card glass">
-            <strong>{run?.creditsSpent ?? 0}</strong>
-            <span>AI credits</span>
+            <strong>{usd(run?.spentUsd ?? 0)}</strong>
+            <span>OpenRouter spend</span>
           </div>
         </div>
 
@@ -117,7 +117,7 @@ export function ReturnScreen({
                 <strong>{receipt.text}</strong>
                 <span>{receipt.placeName}</span>
               </div>
-              <b className="event-cost">{receipt.creditCost} cr</b>
+              <b className="event-cost">{receipt.costUsd > 0 ? usd(receipt.costUsd) : 'free'}</b>
             </div>
           ))}
         </div>

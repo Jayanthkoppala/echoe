@@ -34,7 +34,6 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import ActReducer from "./act_reducer";
 import CorrectReducer from "./correct_reducer";
 import CreateEchoReducer from "./create_echo_reducer";
 import EndRunReducer from "./end_run_reducer";
@@ -232,7 +231,6 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("act", ActReducer),
   __reducerSchema("correct", CorrectReducer),
   __reducerSchema("create_echo", CreateEchoReducer),
   __reducerSchema("end_run", EndRunReducer),

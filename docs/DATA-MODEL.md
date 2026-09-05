@@ -23,19 +23,19 @@ bindings. Private tables do not, and are excluded from codegen.
 
 | Table | Visibility | Purpose |
 | --- | --- | --- |
-| `player` | public | One row per human. `identity` is the primary key and always comes from `ctx.sender`, never from an argument. Holds name, avatar, online flag, `current_place`, and the credit wallet. |
+| `player` | public | One row per human. `identity` is the primary key and always comes from `ctx.sender`, never from an argument. Holds name, avatar, online flag and `current_place`. There is no wallet: the only budget is OpenRouter spend. |
 | `echo` | public | The player's agent. `owner` is unique per identity. `persona` is authored on screen 2; `behaviour_notes` accumulates from corrections and is fed into every later prompt. |
 | `place` | public | The ten Bengaluru landmarks, seeded once in `init`. Read-only afterwards. Array index is the place id. |
 | `agent_travel` | public | One row per leg, written only at leg boundaries. A roaming Echoe costs two rows per landmark rather than a position update per frame; the client interpolates between `depart_ts` and `arrive_ts`. |
-| `run` | public | The limits set on screen 4 plus live counters. `owner` is unique, so a player has exactly one run row that is reused across nights. |
+| `run` | public | The session started by "Send my Echoe out". Goal, status (running, paused, ended), counters, and `spent_usd`, the OpenRouter credits this run has burned. `owner` is unique, so a player has exactly one run row that is reused across nights. |
 | `receipt` | public | Append-only. Nothing in the module ever updates or deletes a receipt. This is what screen 6 renders and what makes a correction honest. |
-| `conversation` | public | One row per talking pair. `echo_a` is always the numerically smaller id, which makes the pair a stable key. `replies` counts exchanges against the run's `replies_per_person`. |
+| `conversation` | public | One row per talking pair. `echo_a` is always the numerically smaller id, which makes the pair a stable key. `replies` counts exchanges; it is a counter, not a cap. |
 | `transcript_line` | public | The lines themselves. `is_ai` is always true so the client can label every line. `feedback` is `none`, `like` or `not_me`. |
 | `correction` | public | One row per correction on screen 8. Keeps the original text alongside the replacement, so the record of what was actually said survives. |
 | `mission` | public | Single row, id 0. The shared "tonight's mission" line on screen 3. |
 | `llm_config` | **private** | Single row, id 0. Holds the OpenRouter key and model. No `public: true`, so it is invisible to every client and absent from codegen. The key goes in through a reducer argument and never comes back out. |
 | `world_tick` | **private** | Drives the `tick` reducer on a 5 second interval. |
-| `talk_job` | **private** | One-shot jobs carrying a conversation into the `echoTalk` procedure. Rows are deleted automatically once the procedure returns. |
+| `talk_job` | **private** | One-shot jobs carrying a conversation and its `payer` into the `echoTalk` procedure. Rows are deleted automatically once the procedure returns. |
 
 ### Places
 
@@ -64,9 +64,8 @@ client bindings. `createEcho` in the module is `create_echo` to the CLI and
 | --- | --- | --- |
 | `join` | `name` | Name is non-empty after trimming and at most 40 characters. Called again by an existing player, it renames and marks them online rather than failing. |
 | `createEcho` | `avatar`, `persona` | Caller has joined. Avatar is one of circle, square, triangle, diamond, hex. Persona is non-empty and at most 2000 characters. Called again, it replaces the persona and keeps the accumulated behaviour notes. |
-| `travel` | `placeId` | Caller has joined and has an Echoe. The place exists. The player is not already there. Writes a leg and a zero-cost receipt. |
-| `act` | `kind` | Caller has joined and has an Echoe. `kind` is one of travel, find, talk, dance, build, bluff. If a run is live, the action must be in its allowed set and the run's cap must have room. Talk and bluff cost one credit; the rest cost nothing. |
-| `startRun` | `goal`, `maxPeople`, `repliesPerPerson`, `creditCap`, `allowedActions` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `maxPeople` is 1, 3 or 5. `repliesPerPerson` is 1, 2 or 3. `creditCap` is between 1 and 8. Every entry in the comma-separated `allowedActions` is a known action and the list is non-empty. Refills the wallet to 8 so a second night is possible. |
+| `travel` | `placeId` | Caller has joined and has an Echoe. The place exists. The player is not already there. Writes a leg and a receipt. |
+| `startRun` | `goal`, `hostShareId` | Caller has joined and has an Echoe. Goal non-empty, at most 280 characters. `hostShareId` is empty or names a live intent that is not the caller's own. No caps: the run is bounded by the clock and by OpenRouter credits. |
 | `pauseRun` | none | A run exists and is running. |
 | `resumeRun` | none | A run exists and is paused. |
 | `endRun` | none | A run exists and is not already ended. Writes a `run_end` receipt. |
@@ -92,31 +91,31 @@ silently rolled that write back. The first version of this had exactly that bug.
 
 For every run whose status is `running`:
 
-1. **Stop conditions first.** If the compressed day has elapsed, or
-   `credits_spent` has reached `credit_cap`, finish the run and write a
-   `run_end` receipt.
+1. **Stop condition first.** If the compressed day has elapsed, finish the run
+   and write a `run_end` receipt. Running out of OpenRouter credit ends it too:
+   the procedure gets a non-2xx and falls back, and the receipts show $0 lines.
 2. **In transit?** If the latest leg has not reached its `arrive_ts`, do nothing
    this tick.
 3. **Arrived but unbanked?** Move `current_place` to the leg destination,
    increment `places_visited`, write an `arrive` receipt, and stop for this tick.
-4. **Standing at a landmark.** Try to converse with a co-located Echoe. If no
-   conversation happened, maybe build. Before the first departure there is no
+4. **Standing at a landmark.** Try to converse with a co-located Echoe. That is
+   the only thing an Echoe does at a landmark. Before the first departure there is no
    leg at all, so the run's own `started_at` anchors the dwell and every Echoe
    gets one chance to talk where it began.
 5. **Dwell elapsed?** Depart for another landmark.
 
 ### Who talks to whom
 
-A conversation is created only when all of these hold: both runs allow `talk`,
-both are running, both are at the same place, neither has reached `max_people`,
-and the pair has no conversation belonging to the current pair of runs. A
+A conversation is created only when all of these hold: both runs are running,
+both are at the same place, and the pair has no conversation belonging to the
+current pair of runs. A
 conversation older than either run is treated as a memory of a previous night
 and a new one is started, otherwise `people_met` would stay at zero while a
 transcript kept growing.
 
-Once a conversation exists, each side may add one more exchange per tick until
-`replies` reaches that run's `replies_per_person`. Each exchange costs its
-initiator one credit.
+Once a conversation exists, each side may add one more exchange per tick for as
+long as both stand there. Each exchange is billed to its initiator in real
+OpenRouter credits, taken from `usage.cost` on the response.
 
 ### Where they walk
 
@@ -129,17 +128,15 @@ landmark.
 
 ## Credits
 
-The default wallet is 8 credits, refilled at the start of each run.
+There are no app credits. Every LLM exchange is billed in OpenRouter credits
+(USD). `echoTalk` reads `usage.cost` from the response, adds it to the paying
+run's `spent_usd`, and writes an `llm` receipt carrying the exact amount. The
+deterministic fallback costs nothing and writes no `llm` receipt. Travel, find
+and the rest are free and always were.
 
-| Action | Cost |
-| --- | --- |
-| travel, find, dance, build | 0 |
-| talk, bluff | 1 |
-
-Every charge passes through one function that checks both budgets before writing
-anything: the player's wallet must hold the cost, and the run's `credits_spent`
-plus the cost must not exceed its `credit_cap`. If either refuses, nothing is
-mutated and no line is ever generated.
+Per-player OpenRouter keys (minted through the management API on join, one
+spend limit each) are the next step; today a single key in `llm_config` pays
+for everyone.
 
 ## The LLM path
 

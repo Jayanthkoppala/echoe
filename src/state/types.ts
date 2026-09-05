@@ -12,29 +12,22 @@ export type ScreenName =
   | 'correct'
   | 'done';
 
-export type ActionKind = 'travel' | 'find' | 'talk' | 'dance' | 'build' | 'bluff';
-
 export type RunStatus = 'running' | 'paused' | 'ended';
 
 export interface Player {
   name: string;
   avatar: string;
-  credits: number;
   /** Landmark id, for example 'cubbon-park'. */
   currentPlace: string;
 }
 
 export interface Run {
   goal: string;
-  maxPeople: number;
-  repliesPerPerson: number;
-  creditCap: number;
-  allowedActions: string[];
   status: RunStatus;
   placesVisited: number;
   peopleMet: number;
-  built: number;
-  creditsSpent: number;
+  /** OpenRouter credits burned by this run, in USD. */
+  spentUsd: number;
   hostMet: boolean;
   hasHost: boolean;
 }
@@ -43,7 +36,7 @@ export interface Receipt {
   id: string;
   kind: string;
   text: string;
-  creditCost: number;
+  costUsd: number;
   placeName: string;
   at: number;
 }
@@ -79,10 +72,6 @@ export interface Match {
 
 export interface RunLimits {
   goal: string;
-  maxPeople: number;
-  repliesPerPerson: number;
-  creditCap: number;
-  allowedActions: string[];
 }
 
 /** Each member is one reducer call. App.tsx binds them to module_bindings. */
@@ -90,7 +79,6 @@ export interface Actions {
   onJoin(name: string): void;
   onCreateEcho(avatar: string, persona: string, intent: string): void;
   onTravel(placeId: string): void;
-  onAct(kind: ActionKind): void;
   onStartRun(limits: RunLimits): void;
   onPause(): void;
   onEndRun(): void;

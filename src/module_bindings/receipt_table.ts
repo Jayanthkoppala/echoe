@@ -16,6 +16,6 @@ export default __t.row({
   kind: __t.string(),
   placeId: __t.u8().name("place_id"),
   text: __t.string(),
-  creditCost: __t.u32().name("credit_cost"),
+  costUsd: __t.f64().name("cost_usd"),
   createdAt: __t.timestamp().name("created_at"),
 });

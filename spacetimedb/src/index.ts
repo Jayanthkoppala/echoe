@@ -25,7 +25,6 @@ const TRAVEL_MICROS = 4_000_000n; //  4s in transit between two landmarks
 const DWELL_MICROS = 6_000_000n; //  6s standing at a landmark before departing
 const RUN_DURATION_MICROS = 180_000_000n; //  3min stands in for 24 hours
 
-const DEFAULT_CREDITS = 8;
 const MAX_PERSONA_LENGTH = 2_000;
 const MAX_GOAL_LENGTH = 280;
 const MAX_INTENT_LENGTH = 120;
@@ -33,17 +32,6 @@ const INTENT_TTL_MICROS = 7n * 24n * 3_600_000_000n; // intents expire after 7 d
 const SHARE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 const NO_HOST = 0n;
 
-/** Actions a player or an Echoe may take, and what each costs in AI credits. */
-const ACTION_COST: Record<string, number> = {
-  travel: 0,
-  find: 0,
-  talk: 1,
-  dance: 0,
-  build: 0,
-  bluff: 1,
-};
-
-const ALL_ACTIONS = Object.keys(ACTION_COST);
 
 const AVATARS = ['circle', 'square', 'triangle', 'diamond', 'hex'];
 
@@ -86,7 +74,6 @@ const player = table(
     avatar: t.string(),
     online: t.bool(),
     currentPlace: t.u8().index('btree'),
-    credits: t.u32(),
     joinedAt: t.timestamp(),
   }
 );
@@ -157,16 +144,11 @@ const run = table(
     owner: t.identity().unique(),
     echoId: t.u64().index('btree'),
     goal: t.string(),
-    maxPeople: t.u8(),
-    repliesPerPerson: t.u8(),
-    creditCap: t.u32(),
-    allowedActions: t.string(), // comma-separated subset of ALL_ACTIONS
     status: t.string(), // running | paused | ended
     startedAt: t.timestamp(),
     peopleMet: t.u32(),
     placesVisited: t.u32(),
-    built: t.u32(),
-    creditsSpent: t.u32(),
+    spentUsd: t.f64(), // OpenRouter credits burned by this run, from usage.cost
     hostEchoId: t.u64(), // 0 when the run was not started from a shared intent
     hostMet: t.bool(),
   }
@@ -185,7 +167,7 @@ const receipt = table(
     kind: t.string(),
     placeId: t.u8(),
     text: t.string(),
-    creditCost: t.u32(),
+    costUsd: t.f64(),
     createdAt: t.timestamp(),
   }
 );
@@ -276,6 +258,7 @@ const talkJob = table(
     scheduledId: t.u64().primaryKey().autoInc(),
     scheduledAt: t.scheduleAt(),
     conversationId: t.u64(),
+    payer: t.identity(), // whose run is charged for this exchange
   }
 );
 
@@ -336,9 +319,6 @@ function plus(ts: Timestamp, delta: bigint): Timestamp {
   return new Timestamp(micros(ts) + delta);
 }
 
-function isAllowed(allowedActions: string, kind: string): boolean {
-  return allowedActions.split(',').includes(kind);
-}
 
 /** Every receipt in the system is written here, so the append-only rule has one home. */
 function writeReceipt(
@@ -347,7 +327,7 @@ function writeReceipt(
   kind: string,
   placeId: number,
   text: string,
-  creditCost: number
+  costUsd: number
 ): void {
   ctx.db.receipt.insert({
     id: 0n,
@@ -355,36 +335,9 @@ function writeReceipt(
     kind,
     placeId,
     text,
-    creditCost,
+    costUsd,
     createdAt: ctx.timestamp,
   });
-}
-
-/**
- * Charge one action against both budgets: the player's wallet and the run's cap.
- * Returns false when either budget refuses, and mutates nothing in that case.
- */
-function spendCredits(
-  ctx: Ctx,
-  playerRow: ReturnType<typeof requirePlayer>,
-  runRow: ReturnType<typeof requireRun> | null,
-  cost: number
-): boolean {
-  if (cost === 0) return true;
-  if (playerRow.credits < cost) return false;
-  if (runRow && runRow.creditsSpent + cost > runRow.creditCap) return false;
-
-  ctx.db.player.identity.update({
-    ...playerRow,
-    credits: playerRow.credits - cost,
-  });
-  if (runRow) {
-    ctx.db.run.id.update({
-      ...runRow,
-      creditsSpent: runRow.creditsSpent + cost,
-    });
-  }
-  return true;
 }
 
 const STOPWORDS = new Set(
@@ -499,7 +452,7 @@ function pickNextPlace(ctx: Ctx, runRow: ReturnType<typeof requireRun>, current:
       if (going !== current) return going;
     }
   }
-  if (isAllowed(runRow.allowedActions, 'find')) {
+  {
     // Only the lower-numbered Echoe of any pair gives chase. If both chased,
     // two Echoes would swap landmarks every tick and never actually arrive
     // together, which is exactly what the first version of this did.
@@ -571,7 +524,6 @@ export const join = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) =>
     avatar: AVATARS[0],
     online: true,
     currentPlace: 0,
-    credits: DEFAULT_CREDITS,
     joinedAt: ctx.timestamp,
   });
 });
@@ -662,47 +614,14 @@ export const travel = spacetimedb.reducer(
   }
 );
 
-/**
- * A manual action taken by the player while watching the map. Talk and bluff
- * cost one credit; the rest are free. A live run's cap applies here too, so a
- * player cannot spend past their own limit by acting by hand.
- */
-export const act = spacetimedb.reducer({ kind: t.string() }, (ctx, { kind }) => {
-  const playerRow = requirePlayer(ctx);
-  requireEcho(ctx);
-
-  const cost = ACTION_COST[kind];
-  if (cost === undefined) fail(`unknown_action:${kind}`);
-
-  const runRow = ctx.db.run.owner.find(ctx.sender);
-  const liveRun = runRow && runRow.status === RUN_RUNNING ? runRow : null;
-  if (liveRun && !isAllowed(liveRun.allowedActions, kind)) {
-    fail(`action_not_allowed:${kind}`);
-  }
-  if (!spendCredits(ctx, playerRow, liveRun, cost)) fail('out_of_credits');
-
-  writeReceipt(
-    ctx,
-    ctx.sender,
-    kind,
-    playerRow.currentPlace,
-    `${kind} at ${placeName(ctx, playerRow.currentPlace)}`,
-    cost
-  );
-});
-
 // ─── Screens 4 and 5: limits, roaming ────────────────────────────────────────
 
 export const startRun = spacetimedb.reducer(
   {
     goal: t.string(),
-    maxPeople: t.u8(),
-    repliesPerPerson: t.u8(),
-    creditCap: t.u32(),
-    allowedActions: t.string(),
     hostShareId: t.string(), // empty unless the player arrived through a shared link
   },
-  (ctx, { goal, maxPeople, repliesPerPerson, creditCap, allowedActions, hostShareId }) => {
+  (ctx, { goal, hostShareId }) => {
     const playerRow = requirePlayer(ctx);
     const echoRow = requireEcho(ctx);
 
@@ -716,45 +635,20 @@ export const startRun = spacetimedb.reducer(
     }
 
     const cleanGoal = trimmed(goal, MAX_GOAL_LENGTH, 'goal');
-    if (![1, 3, 5].includes(maxPeople)) fail(`bad_max_people:${maxPeople}`);
-    if (![1, 2, 3].includes(repliesPerPerson)) {
-      fail(`bad_replies_per_person:${repliesPerPerson}`);
-    }
-    if (creditCap < 1 || creditCap > DEFAULT_CREDITS) {
-      fail(`bad_credit_cap:${creditCap}`);
-    }
 
-    const actions = allowedActions
-      .split(',')
-      .map(a => a.trim())
-      .filter(a => a.length > 0);
-    if (actions.length === 0) fail('no_actions_allowed');
-    for (const a of actions) {
-      if (!ALL_ACTIONS.includes(a)) fail(`unknown_action:${a}`);
-    }
 
     const row = {
       owner: ctx.sender,
       echoId: echoRow.id,
       goal: cleanGoal,
-      maxPeople,
-      repliesPerPerson,
-      creditCap,
-      allowedActions: actions.join(','),
       status: RUN_RUNNING,
       startedAt: ctx.timestamp,
       peopleMet: 0,
       placesVisited: 0,
-      built: 0,
-      creditsSpent: 0,
+      spentUsd: 0,
       hostEchoId,
       hostMet: false,
     };
-
-    // A new night starts with a full wallet. Without this the wallet is a
-    // one-way ratchet and a second run can never be started, which makes the
-    // whole flow a single-use demo.
-    ctx.db.player.identity.update({ ...playerRow, credits: DEFAULT_CREDITS });
 
     const existing = ctx.db.run.owner.find(ctx.sender);
     if (existing) {
@@ -931,10 +825,6 @@ export const tick = spacetimedb.reducer(
         finishRun(ctx, runRow, 'the 24 hours ran out');
         continue;
       }
-      if (runRow.creditsSpent >= runRow.creditCap) {
-        finishRun(ctx, runRow, 'credit cap reached');
-        continue;
-      }
 
       const playerRow = ctx.db.player.identity.find(runRow.owner);
       if (!playerRow) continue;
@@ -972,7 +862,6 @@ export const tick = spacetimedb.reducer(
       const standingSince = leg ? micros(leg.arriveTs) : micros(runRow.startedAt);
 
       const acted = tryConverse(ctx, runRow, here, hasKey);
-      if (!acted) tryBuild(ctx, runRow, here);
 
       if (now >= standingSince + DWELL_MICROS) depart(ctx, runRow, here);
     }
@@ -980,7 +869,6 @@ export const tick = spacetimedb.reducer(
 );
 
 function depart(ctx: Ctx, runRow: ReturnType<typeof requireRun>, from: number): void {
-  if (!isAllowed(runRow.allowedActions, 'travel')) return;
   const to = pickNextPlace(ctx, runRow, from);
   ctx.db.agentTravel.insert({
     id: 0n,
@@ -1001,11 +889,11 @@ function depart(ctx: Ctx, runRow: ReturnType<typeof requireRun>, from: number): 
 }
 
 /**
- * Returns true when a credit was spent on conversation this tick.
+ * Returns true when an exchange was added to a conversation this tick.
  *
- * Both budgets, both caps and both consent rules are checked before a single
- * line exists. `repliesPerPerson` is enforced by refusing to add an exchange to
- * a conversation that has already reached it.
+ * There is no per-person or per-reply cap: the only brakes are the run clock and
+ * the OpenRouter balance. Consent (both sides allow `talk`) is checked before a
+ * single line exists. `peopleMet` and `replies` are counters, not limits.
  */
 function tryConverse(
   ctx: Ctx,
@@ -1013,8 +901,6 @@ function tryConverse(
   placeId: number,
   hasKey: boolean
 ): boolean {
-  if (!isAllowed(runRow.allowedActions, 'talk')) return false;
-
   const playerRow = ctx.db.player.identity.find(runRow.owner);
   if (!playerRow) return false;
 
@@ -1038,7 +924,6 @@ function tryConverse(
     const otherRun = otherRunRow && otherRunRow.status === RUN_RUNNING ? otherRunRow : null;
     if (!isHost) {
       if (!otherRun) continue;
-      if (!isAllowed(otherRun.allowedActions, 'talk')) continue;
     }
     const otherEchoId = otherEcho.id;
 
@@ -1056,16 +941,6 @@ function tryConverse(
       if (otherRun && started < micros(otherRun.startedAt)) continue;
       existing = c;
     }
-
-    // New pair: both runs must still have room for another person.
-    if (!existing) {
-      if (runRow.peopleMet >= runRow.maxPeople) continue;
-      if (otherRun && otherRun.peopleMet >= otherRun.maxPeople) continue;
-    } else if (existing.replies >= runRow.repliesPerPerson) {
-      continue;
-    }
-
-    if (!spendCredits(ctx, playerRow, runRow, ACTION_COST.talk)) return false;
 
     let conversationId: bigint;
     if (existing) {
@@ -1088,7 +963,6 @@ function tryConverse(
       });
       conversationId = created.id;
 
-      // Re-read: spendCredits already wrote to this row.
       const freshRun = ctx.db.run.id.find(runRow.id)!;
       ctx.db.run.id.update({
         ...freshRun,
@@ -1107,7 +981,7 @@ function tryConverse(
       'talk',
       placeId,
       `Talked with ${otherPlayer.name} at ${placeName(ctx, placeId)}`,
-      ACTION_COST.talk
+      0
     );
 
     if (hasKey) {
@@ -1117,6 +991,7 @@ function tryConverse(
         scheduledId: 0n,
         scheduledAt: ScheduleAt.time(micros(ctx.timestamp)),
         conversationId,
+        payer: runRow.owner,
       });
     } else {
       writeFallbackExchange(ctx, conversationId, a, b, placeId);
@@ -1124,22 +999,6 @@ function tryConverse(
     return true;
   }
   return false;
-}
-
-function tryBuild(ctx: Ctx, runRow: ReturnType<typeof requireRun>, placeId: number): void {
-  if (!isAllowed(runRow.allowedActions, 'build')) return;
-  if (ctx.random() > 0.35) return;
-
-  const fresh = ctx.db.run.id.find(runRow.id)!;
-  ctx.db.run.id.update({ ...fresh, built: fresh.built + 1 });
-  writeReceipt(
-    ctx,
-    runRow.owner,
-    'build',
-    placeId,
-    `Left something behind at ${placeName(ctx, placeId)}`,
-    0
-  );
 }
 
 // ─── Deterministic dialogue ──────────────────────────────────────────────────
@@ -1302,6 +1161,22 @@ export const echoTalk = spacetimedb.procedure(
       const lines = splitLines(result.text, 2);
       write(setup.echoAId, lines[0]);
       if (lines[1]) write(setup.echoBId, lines[1]);
+
+      // Real money, straight from OpenRouter's usage.cost. Charged to the run
+      // that queued the job; the receipt is what the Return screen totals.
+      const payerRun = tx.db.run.owner.find(job.payer);
+      if (payerRun) {
+        tx.db.run.id.update({ ...payerRun, spentUsd: payerRun.spentUsd + result.costUsd });
+      }
+      tx.db.receipt.insert({
+        id: 0n,
+        runOwner: job.payer,
+        kind: 'llm',
+        placeId: setup.placeId,
+        text: `OpenRouter: ${lines.length} lines`,
+        costUsd: result.costUsd,
+        createdAt: now,
+      });
     });
 
     return {};

@@ -461,6 +461,16 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .share-card { position: relative; z-index: 1; padding: 15px; }
 .share-card--pinned { position: absolute; z-index: 15; top: 84px; right: 12px; left: 12px; }
 .share-card--inline { margin-top: 12px; }
+.share-card--folded { padding: 6px 8px; }
+.share-head {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; min-height: 40px; padding: 4px 6px; border: 0; background: none;
+  color: var(--fg); text-align: left; cursor: pointer;
+}
+.share-head .share-intent { margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.share-chevron { flex: 0 0 auto; color: var(--lime); }
+.share-card--folded .share-intent { font-size: 13px; }
 .share-mission { display: block; margin-bottom: 6px; color: var(--fg3); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 .share-intent { position: relative; z-index: 1; margin: 0 0 10px; color: var(--fg2); font-size: 13px; line-height: 1.4; }
 .share-intent strong { color: var(--fg); font-weight: 600; }
