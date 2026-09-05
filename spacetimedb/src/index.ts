@@ -13,7 +13,7 @@ import {
   SenderError,
   type ReducerCtx,
 } from 'spacetimedb/server';
-import { ScheduleAt, Timestamp } from 'spacetimedb';
+import { ScheduleAt, TimeDuration, Timestamp } from 'spacetimedb';
 import { chat, splitLines, type ChatMessage } from './llm';
 
 // ─── Tuning ──────────────────────────────────────────────────────────────────
@@ -45,6 +45,13 @@ const FEEDBACK_NOT_ME = 'not_me';
 
 const LLM_CONFIG_ID = 0;
 const MISSION_ID = 0;
+
+/**
+ * Exchanges per meeting. Not a user setting: after this many, the conversation
+ * is closed, neither side adds to it, and the find step stops chasing that
+ * Echoe so the night is spent meeting people rather than one person.
+ */
+const MAX_EXCHANGES = 4;
 
 const DEFAULT_MISSION =
   "Tonight's mission: find someone who has changed their mind about Bengaluru.";
@@ -232,9 +239,29 @@ const llmConfig = table(
   { name: 'llm_config' },
   {
     id: t.u8().primaryKey(),
+    owner: t.identity(), // whoever configured it first; the only admin
     apiKey: t.string(),
     model: t.string(),
     updatedAt: t.timestamp(),
+  }
+);
+
+/** Private. Third-party keys other than OpenRouter (today: resend_api_key, public_origin). */
+const secret = table(
+  { name: 'secret' },
+  {
+    key: t.string().primaryKey(),
+    value: t.string(),
+  }
+);
+
+/** Private. Email a player left at join, never broadcast to other clients. */
+const contact = table(
+  { name: 'contact' },
+  {
+    identity: t.identity().primaryKey(),
+    email: t.string(),
+    welcomed: t.bool(),
   }
 );
 
@@ -275,6 +302,8 @@ const spacetimedb = schema({
   correction,
   mission,
   llmConfig,
+  secret,
+  contact,
   worldTickTimer,
   talkJob,
 });
@@ -432,6 +461,18 @@ function latestLeg(ctx: Ctx, echoId: bigint) {
   return newest;
 }
 
+/** True when this run already finished a conversation with `otherEchoId`. */
+function doneTalking(ctx: Ctx, runRow: ReturnType<typeof requireRun>, otherEchoId: bigint): boolean {
+  const a = runRow.echoId < otherEchoId ? runRow.echoId : otherEchoId;
+  const b = runRow.echoId < otherEchoId ? otherEchoId : runRow.echoId;
+  for (const c of ctx.db.conversation.echoA.filter(a)) {
+    if (c.echoB !== b) continue;
+    if (micros(c.createdAt) < micros(runRow.startedAt)) continue;
+    if (c.replies >= MAX_EXCHANGES) return true;
+  }
+  return false;
+}
+
 /**
  * Where to walk next. An Echoe allowed to `find` heads for a landmark that
  * already holds another running Echoe about half the time. Without that bias ten
@@ -460,6 +501,7 @@ function pickNextPlace(ctx: Ctx, runRow: ReturnType<typeof requireRun>, current:
     for (const other of ctx.db.run.iter()) {
       if (other.status !== RUN_RUNNING) continue;
       if (other.echoId <= runRow.echoId) continue;
+      if (doneTalking(ctx, runRow, other.echoId)) continue;
       const otherPlayer = ctx.db.player.identity.find(other.owner);
       if (!otherPlayer) continue;
       // Aim where they will be, not where they were.
@@ -509,24 +551,37 @@ export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
 
 // ─── Screens 1 and 2: join, create Echoe ──────────────────────────────────────
 
-export const join = spacetimedb.reducer({ name: t.string() }, (ctx, { name }) => {
-  const clean = trimmed(name, 40, 'name');
-  const existing = ctx.db.player.identity.find(ctx.sender);
+export const join = spacetimedb.reducer(
+  { name: t.string(), email: t.string() }, // email optional: empty string skips it
+  (ctx, { name, email }) => {
+    const clean = trimmed(name, 40, 'name');
+    const cleanEmail = email.trim().toLowerCase().slice(0, 120);
+    if (cleanEmail.length > 0) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) fail('email_invalid');
+      const prior = ctx.db.contact.identity.find(ctx.sender);
+      if (!prior) {
+        ctx.db.contact.insert({ identity: ctx.sender, email: cleanEmail, welcomed: false });
+      } else if (prior.email !== cleanEmail) {
+        ctx.db.contact.identity.update({ ...prior, email: cleanEmail, welcomed: false });
+      }
+    }
 
-  if (existing) {
-    ctx.db.player.identity.update({ ...existing, name: clean, online: true });
-    return;
+    const existing = ctx.db.player.identity.find(ctx.sender);
+    if (existing) {
+      ctx.db.player.identity.update({ ...existing, name: clean, online: true });
+      return;
+    }
+
+    ctx.db.player.insert({
+      identity: ctx.sender,
+      name: clean,
+      avatar: AVATARS[0],
+      online: true,
+      currentPlace: 0,
+      joinedAt: ctx.timestamp,
+    });
   }
-
-  ctx.db.player.insert({
-    identity: ctx.sender,
-    name: clean,
-    avatar: AVATARS[0],
-    online: true,
-    currentPlace: 0,
-    joinedAt: ctx.timestamp,
-  });
-});
+);
 
 export const createEcho = spacetimedb.reducer(
   { avatar: t.string(), persona: t.string(), intent: t.string() },
@@ -756,14 +811,26 @@ export const correct = spacetimedb.reducer(
 
 // ─── LLM configuration (private) ─────────────────────────────────────────────
 
+/**
+ * The first identity to call setLlmConfig becomes the admin (the CLI, on
+ * publish night). After that, shared rows change only for that identity, so a
+ * hostile second tab cannot swap the key or the mission mid-demo.
+ */
+function requireAdmin(ctx: Ctx) {
+  const config = ctx.db.llmConfig.id.find(LLM_CONFIG_ID);
+  if (config && !config.owner.isEqual(ctx.sender)) fail('not_admin');
+}
+
 export const setLlmConfig = spacetimedb.reducer(
   { apiKey: t.string(), model: t.string() },
   (ctx, { apiKey, model }) => {
+    requireAdmin(ctx);
     const key = trimmed(apiKey, 400, 'api_key');
     const cleanModel = trimmed(model, 120, 'model');
 
     const row = {
       id: LLM_CONFIG_ID,
+      owner: ctx.sender,
       apiKey: key,
       model: cleanModel,
       updatedAt: ctx.timestamp,
@@ -776,7 +843,28 @@ export const setLlmConfig = spacetimedb.reducer(
   }
 );
 
+/**
+ * Store a third-party secret (resend_api_key, public_origin, ...) in the
+ * private `secret` table. The first caller becomes admin; after that only the
+ * admin identity may write, so a hostile second tab cannot swap keys mid-demo.
+ */
+export const setSecret = spacetimedb.reducer(
+  { key: t.string(), value: t.string() },
+  (ctx, { key, value }) => {
+    const cleanKey = trimmed(key, 64, 'key');
+    const cleanValue = trimmed(value, 512, 'value');
+    const admin = ctx.db.secret.key.find('admin_identity');
+    const me = ctx.sender.toHexString();
+    if (admin && admin.value !== me) fail('not_admin');
+    if (!admin) ctx.db.secret.insert({ key: 'admin_identity', value: me });
+    const existing = ctx.db.secret.key.find(cleanKey);
+    if (existing) ctx.db.secret.key.update({ ...existing, value: cleanValue });
+    else ctx.db.secret.insert({ key: cleanKey, value: cleanValue });
+  }
+);
+
 export const setMission = spacetimedb.reducer({ text: t.string() }, (ctx, { text }) => {
+  requireAdmin(ctx);
   const clean = trimmed(text, 200, 'mission');
   const row = ctx.db.mission.id.find(MISSION_ID);
   if (row) {
@@ -941,6 +1029,8 @@ function tryConverse(
       if (otherRun && started < micros(otherRun.startedAt)) continue;
       existing = c;
     }
+    // Said enough to each other tonight. Move on to the next person.
+    if (existing && existing.replies >= MAX_EXCHANGES) continue;
 
     let conversationId: bigint;
     if (existing) {

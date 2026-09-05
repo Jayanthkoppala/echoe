@@ -20,6 +20,13 @@ export const AgentTravel = __t.object("AgentTravel", {
 });
 export type AgentTravel = __Infer<typeof AgentTravel>;
 
+export const Contact = __t.object("Contact", {
+  identity: __t.identity(),
+  email: __t.string(),
+  welcomed: __t.bool(),
+});
+export type Contact = __Infer<typeof Contact>;
+
 export const Conversation = __t.object("Conversation", {
   id: __t.u64(),
   echoA: __t.u64(),
@@ -65,6 +72,7 @@ export type Intent = __Infer<typeof Intent>;
 
 export const LlmConfig = __t.object("LlmConfig", {
   id: __t.u8(),
+  owner: __t.identity(),
   apiKey: __t.string(),
   model: __t.string(),
   updatedAt: __t.timestamp(),
@@ -121,6 +129,12 @@ export const Run = __t.object("Run", {
   hostMet: __t.bool(),
 });
 export type Run = __Infer<typeof Run>;
+
+export const Secret = __t.object("Secret", {
+  key: __t.string(),
+  value: __t.string(),
+});
+export type Secret = __Infer<typeof Secret>;
 
 export const TalkJob = __t.object("TalkJob", {
   scheduledId: __t.u64(),
