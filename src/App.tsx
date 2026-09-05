@@ -149,9 +149,15 @@ function App() {
   }, [toast]);
 
   // A returning player already has an Echoe, so do not make them introduce
-  // themselves twice.
+  // themselves twice. And an Echoe that appears while the player sits on Create
+  // or Connect was just written by their coding agent: move them on to the map.
+  // Editing an existing persona on Create stays put, since the row was already there.
+  const hadEcho = useRef(Boolean(myEchoRow));
   useEffect(() => {
-    if (screen === 'join' && myEchoRow) setScreen('world');
+    const has = Boolean(myEchoRow);
+    const agentWroteIt = has && !hadEcho.current && (screen === 'create' || screen === 'connect');
+    if ((screen === 'join' && has) || agentWroteIt) setScreen('world');
+    hadEcho.current = has;
   }, [screen, myEchoRow]);
 
   // The module ends a run on its own when the clock or the budget runs out.
