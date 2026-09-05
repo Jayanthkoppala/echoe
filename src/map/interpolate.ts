@@ -27,12 +27,20 @@ export function cumulativeDistances(polyline: LngLat[]): number[] {
   return cum;
 }
 
+const cumCache = new WeakMap<LngLat[], number[]>();
+
 /** Point at fraction (0..1) of the way along a polyline, by arc length. */
 export function pointAtFraction(polyline: LngLat[], fraction: number): LngLat {
   if (polyline.length === 0) return [0, 0];
   if (polyline.length === 1) return polyline[0];
   const f = Math.min(1, Math.max(0, fraction));
-  const cum = cumulativeDistances(polyline);
+  // Constant for the life of a leg; a 440-point sweep per agent per frame was
+  // one of the things starving the map's render loop.
+  let cum = cumCache.get(polyline);
+  if (!cum) {
+    cum = cumulativeDistances(polyline);
+    cumCache.set(polyline, cum);
+  }
   const total = cum[cum.length - 1];
   const target = total * f;
 

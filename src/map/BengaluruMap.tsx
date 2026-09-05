@@ -171,10 +171,21 @@ export default function BengaluruMap({ agents, onPlaceTap }: BengaluruMapProps) 
         },
       });
 
+      // setData is a worker round trip on the same pool that decodes tiles, so
+      // it runs at most ~30 times a second and never when there is nothing to draw.
+      let lastPush = 0;
+      let pushedEmpty = false;
       const tick = () => {
         const now = Date.now();
         const source = map.getSource(AGENTS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-        if (source) {
+        const hasAgents = agentsRef.current.length > 0;
+        if (source && !hasAgents && !pushedEmpty) {
+          source.setData({ type: 'FeatureCollection', features: [] });
+          pushedEmpty = true;
+        }
+        if (source && hasAgents && now - lastPush >= 33) {
+          lastPush = now;
+          pushedEmpty = false;
           const features = agentsRef.current.map((agent) => {
             let leg = legsRef.current[agent.id];
             if (!leg) {

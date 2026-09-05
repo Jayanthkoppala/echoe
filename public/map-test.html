@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>map-test</title>
+<link rel="stylesheet" href="/node_modules/maplibre-gl/dist/maplibre-gl.css">
+<style>
+  html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#111}
+  #overlay{position:fixed;top:0;left:0;z-index:10;background:rgba(0,0,0,.75);color:#0f0;font:12px monospace;padding:8px;white-space:pre}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="overlay">booting...</div>
+<script type="module">
+import { Map as MaplibreMap } from '/node_modules/maplibre-gl/dist/maplibre-gl.mjs';
+
+const params = new URLSearchParams(location.search);
+const styleName = params.get('style') || 'dark';
+const styleUrl = `https://tiles.openfreemap.org/styles/${styleName}`;
+
+let pbfCount = 0;
+const po = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.name.includes('.pbf')) pbfCount++;
+  }
+});
+po.observe({ type: 'resource', buffered: true });
+
+let rafCount = 0;
+let loaded = false;
+function tick() { rafCount++; requestAnimationFrame(tick); }
+requestAnimationFrame(tick);
+
+setInterval(() => {
+  document.getElementById('overlay').textContent =
+    `style: ${styleName}\nload fired: ${loaded}\npbf requests: ${pbfCount}\nrAF/sec: ${rafCount}\nmap.loaded(): ${window.__map ? window.__map.loaded() : 'n/a'}`;
+  rafCount = 0;
+}, 1000);
+
+const map = new MaplibreMap({
+  container: 'map',
+  style: styleUrl,
+  center: [77.60, 12.97],
+  zoom: 12.5,
+  pitch: 55,
+  bearing: -15,
+});
+window.__map = map;
+map.on('load', () => { loaded = true; });
+map.on('error', (e) => { console.error('maplibre error', e); });
+</script>
+</body>
+</html>
