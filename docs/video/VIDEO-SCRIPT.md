@@ -8,7 +8,7 @@ people in it, no slides, under three minutes. Nothing is shown beyond what runs 
 and correction are hidden in the app tonight, so both correction beats are cut from the
 voiceover.
 
-Voiceover: **276 words**, about **1:58** of speech at 140 words per minute, inside 2:00 with room
+Voiceover: **270 words**, about **1:56** of speech at 140 words per minute, inside 2:00 with room
 to breathe.
 
 ## Hook, first nine seconds
@@ -27,42 +27,37 @@ Two alternates if the first feels flat on camera:
 
 | Time | On screen | Voiceover |
 |---|---|---|
-| 0:00-0:09 | Camera, in the room. Jay at his desk, laptop open, builders behind him heads down. He turns to the row behind. | I have seen this hackathon happening. Fifty percent of the people never even interacted with the person sitting behind them. |
-| 0:09-0:19 | Hold on Jay. Two people at the same table working in silence behind him. | See, the main reason of the hackathon is networking. So I am taking that heavy lifting and giving it to your Echoe. |
-| 0:19-0:27 | Phone screen recording. Join: a name typed, "Enter Bengaluru". Then Events, the Midnight Moonshot card with the joined count. [1, 14] | You join the event. Your Echoe talks to every other Echoe in the room. |
-| 0:27-0:36 | Phone screen recording. Return: the ranked list of people. Then two phones, both tap "Reveal my details", both links appear. [11, 12] | It comes back with who wants to meet you, and their socials. Both say yes, or nothing is shared. |
-| 0:36-0:44 | Phone screen recording. Roaming: the map at night, the Echoe leaves its pin and walks a road between landmarks. [9] | It walks real Bengaluru roads, real landmarks. A row in a database, moving. |
-| 0:44-0:51 | Phone screen recording. Two dots converge, the talk panel opens, the first exchange lands live. [10] | It meets another Echoe and they talk. Four exchanges, in your register. |
-| 0:51-0:59 | Phone screen recording. Return: the transcript with all four exchanges, the receipt timeline underneath. [10] | Transcript and receipt come home. Every line said in my name, I can read. |
-| 0:59-1:09 | Phone screen recording. Events: "Join with my Echoe", the building text already filled, one line and a link typed, Join. [14] | Tonight there is one event. One line, a link, and my Echoe opens with what I am building. |
-| 1:09-1:17 | Camera, Jay to camera, the room behind him. | See, the hackathon is one vertical. At the end of the day this is an intent-based connections platform. |
-| 1:17-1:29 | Phone screen recording. Create: name, two persona lines. Start: the intent line typed. World: the "Your Echoe is carrying" bar fills in, tap Copy. [2, 5, 6, 7] | Type a name, two lines on who you are, one on who you want to meet. That is the whole setup. The line goes on the map with a link anyone can tap. |
-| 1:29-1:38 | Phone screen recording. Start: the line typed in the field. Then Return: the ranked list. [5, 11] | Someone new to the city types, two people to have lunch with who also moved here this year. A ranked list by morning. |
-| 1:38-1:47 | Second device. Join shows the host's intent card, one line typed, the map shows "walking to" the host. [8] | Someone posts, looking for someone who has run infra for a 50 person team. A stranger taps it, their Echoe walks straight there. |
-| 1:47-1:53 | Two phones. Both tap "Reveal my details", both links appear. [12] | Someone types, a cofounder who can sell, I will not do the selling. Both sides tap reveal and the socials appear. |
-| 1:53-1:57 | Laptop screen. One line pasted into Claude Code, the Connect screen beside it ticking stages. [4, 18] | Paste one line into Claude Code and it writes your Echoe while you code. |
-| 1:57-2:00 | Camera. A hand passes a phone showing Copy link, or Jay to camera. Cut to black. | Anyone can create one. Anyone can share it. Send yours out tonight. |
+| 0:00-0:10 | Camera, in the room. Jay at his desk, laptop open, builders behind him heads down. He turns to the row behind. | I have seen this hackathon happening. Fifty percent of the people never even interacted with the person sitting behind them. |
+| 0:10-0:20 | Phone screen recording. Create: two persona lines typed, "Send my Echoe out". Quick cut: the Connect screen, stages ticking from a Claude Code paste. [2, 4, 18] | So I built Echoe. Your Echoe is an agent that adapts your persona, how you talk, how you behave, and goes and does the talking for you. |
+| 0:20-0:30 | Phone screen recording. Profile: "Host an event", the field "What is it?", typed: SpacetimeDB Midnight Moonshot networking. World: the "Your Echoe is carrying" bar fills in, tap Copy. [15, 5, 6] | For this hackathon I created a networking event. One tap, one line, and there is a link for the whole room. |
+| 0:30-0:40 | Second device. The link opens on Join with the host card, a name and one line typed, "Enter Bengaluru". Map: "walking to" the host, the online count climbs. [8, 1] | Everyone who opens it joins with a name and one line about who they are. Their Echoe walks in. |
+| 0:40-0:50 | Phone screen recording. Map: dots converge at the event place, the talk panel opens, exchanges land. Cut to camera: Jay heads down at his laptop. [9, 10] | Then my Echoe talks to every other Echoe in the room. Four exchanges each, in my register, while I keep coding. |
+| 0:50-1:02 | Phone screen recording. Return: "While you were gone", the ranked list of people. Two phones: both tap "Reveal my details", both links appear. [11, 12] | It comes back with who wants to meet me, and their socials. Both say yes, or nothing is shared. That is the loop, end to end. |
+| 1:02-1:12 | Camera, Jay to camera, the room behind him. | See, the hackathon is one vertical. At the end of the day this is an intent-based connections platform. One Echoe talking to another. |
+| 1:12-1:22 | Phone screen recording. Two seconds on the map with Echoes walking. Then "Start your Echoe": the three fields typed in turn, who to meet, who to avoid, what you would reveal. [9, 5] | Type a name, two lines on who you are. Then say who you want to meet, who you do not, and what you would reveal. |
+| 1:22-1:32 | Phone screen recording. World: the carrying bar shows the line, tap Copy. Then the Echoe leaves its pin and walks. [6, 7, 9] | That is the whole setup. The line goes on the map with a link. Share it, or let your Echoe go find the match. |
+| 1:32-1:44 | Phone screen recording. Talk panel: the match found, exchanges land. Return: the transcript, then the receipt timeline scrolling: travel rows, find, talk, run end. [10, 11] | When it finds one, they talk. You read the conversation, and the receipt: where it walked, who it met, what it said in your name. |
+| 1:44-1:52 | Phone screen recording, three quick cuts. Each line typed into the "Start your Echoe" goal field, Start tapped. [5] | Two people to have lunch with who also moved here this year. Someone who has run infra for a 50 person team. A cofounder who can sell. |
+| 1:52-2:00 | Camera. A hand passes a phone showing Copy link, or Jay to camera. Cut to black. | Anyone can create one. Anyone can share it. Send yours out tonight. |
 
 ## Shot list, in the order to record
 
 | # | Shot | Captured on | Must be true in the app first |
 |---|---|---|---|
-| 1 | Jay at his desk, room behind him, turns to the row behind (0:00-0:19, one locked take) | Camera, in the room | Nothing. Shoot before 08:00 while the room is full and heads are down. |
-| 2 | Join to Create: name typed, persona typed, "Send my Echoe out" (0:19-0:27, 1:17) | Phone screen recording | A fresh identity (incognito profile or a fresh CLI identity) so Join is the first screen. |
-| 3 | Events screen, Midnight Moonshot card, skip past it | Phone screen recording | Same session as shot 2, unbroken. Create sends straight to Events tonight. |
-| 4 | Start your Echoe: the first example line typed, tap Start (1:17) | Phone screen recording | The Echoe from shot 2. Type "two people to have lunch with who also moved here this year." |
-| 5 | World: ShareCard goes blank to real line, expand, Copy link (1:17) | Phone screen recording | Shot 4's Start just completed. Do not roll before Start finishes, the bar reads blank. |
-| 6 | Roaming: the Echoe walking the map (0:36) | Phone screen recording | App foregrounded, MapLibre pauses when hidden. At least four other Echoes out so it is not one dot. |
-| 7 | Two Echoes meet, four exchanges land (0:44) | Phone screen recording | Two Echoes mid-run and pathed to cross. Model key live. Record the whole meeting once and trim, never stage it twice. |
-| 8 | Return: recap, ranked match list, receipts timeline (0:27, 0:51, 1:29) | Phone screen recording | The run from shot 7 finished, matches non-empty, receipt rows present. |
-| 9 | Review: transcript, both sides tap "Reveal my details", links appear (0:27, 1:47) | Phone screen recording, two devices | **Needs a second real person.** A conversation neither side has revealed yet, and the other identity ready to tap on cue. |
-| 10 | Events: "Join with my Echoe", building text pre-filled (0:59) | Phone screen recording | Not yet joined. The building field arrives filled by the agent run in shot 12, so only the goal line and the link get typed live. |
-| 11 | Second identity opens `/i/<shareId>`, host card, walks to the host (1:38) | Phone screen recording, second device | **Needs a second real person or a second real identity on a separate device.** A fresh unexpired link from a completed Start using "looking for someone who has run infra for a 50 person team". Never a second tab on Jay's own browser profile. |
-| 12 | Terminal paste, Connect screen ticking (1:53) | Laptop screen | A freshly generated token with every stage unticked. Claude Code signed in with the repo open, the hosted MCP endpoint reachable, Connect left open so it ticks by itself. |
-| 13 | Closing beat: to camera, or a hand passing a phone showing Copy link (1:57) | Camera | Nothing. Shoot last. |
+| 1 | Jay at his desk, room behind him, turns to the row behind; later the to-camera pivot (0:00, 1:02), one locked setup | Camera, in the room | Nothing. Shoot before 08:00 while the room is full and heads are down. |
+| 2 | Create: two persona lines typed, "Send my Echoe out" (0:10) | Phone screen recording | A fresh identity so Join is the first screen. Persona typed on camera. |
+| 3 | Connect screen stages ticking from a Claude Code paste (0:10, quick cut) | Laptop screen | A freshly generated token with every stage unticked, Claude Code signed in with the repo open, Connect left open so it ticks by itself. |
+| 4 | Profile: "Host an event", "What is it?" typed, then World with the carrying bar filled, Copy (0:20) | Phone screen recording | The Echoe from shot 2. Roll only after the host run has started, before that the bar reads blank. |
+| 5 | Second device opens the link: host card on Join, name and one line typed, map shows "walking to" the host, online count climbs (0:30) | Phone screen recording, second device | **Needs a second real person or a second identity on a separate device.** A fresh, unexpired host link from shot 4. |
+| 6 | Dots converge at the event place, talk panel, exchanges land; Jay heads down at the laptop (0:40) | Phone screen recording, then camera | Two Echoes mid-run and pathed to cross. Model key live with credit. Record the whole meeting once and trim. |
+| 7 | Return: "While you were gone", ranked list; two phones tap "Reveal my details", links appear (0:50) | Phone screen recording, two devices | **Needs the second person from shot 5.** A conversation between the two devices that neither side has revealed yet. Both taps in one take. |
+| 8 | Two seconds of the map with Echoes walking, then "Start your Echoe" with the three fields typed (1:12) | Phone screen recording | At least four other Echoes out so the map is not one dot. A run not yet started on this identity. |
+| 9 | World: carrying bar with the line, Copy; the Echoe leaves its pin and walks (1:22) | Phone screen recording | Shot 8's Start just completed. App foregrounded, MapLibre pauses when hidden. |
+| 10 | Talk panel with the match, then Return: transcript and the receipt timeline scrolling (1:32) | Phone screen recording | The run from shot 9 finished with at least one conversation and travel receipts. |
+| 11 | Three quick cuts: each example line typed into the goal field, Start tapped (1:44) | Phone screen recording | Three fresh runs, or one identity re-starting three times. Type the lines exactly as written. |
+| 12 | A hand passes a phone showing Copy link, or Jay to camera (1:52) | Camera | Nothing. Shoot last. |
 
-Thirteen shots. Shots 9 and 11 each need a second real person, or a second identity Jay controls
-from a separate device, present and briefed before the camera rolls.
+Twelve shots. Shots 5 and 7 need a second real person, or a second identity Jay controls from a separate device, present and briefed before the camera rolls.
 
 ## Left out on purpose
 
