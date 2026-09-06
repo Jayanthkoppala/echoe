@@ -272,6 +272,12 @@ export const Run = __t.object("Run", {
 });
 export type Run = __Infer<typeof Run>;
 
+export const RunPause = __t.object("RunPause", {
+  runId: __t.u64(),
+  pausedAt: __t.timestamp(),
+});
+export type RunPause = __Infer<typeof RunPause>;
+
 export const Secret = __t.object("Secret", {
   key: __t.string(),
   value: __t.string(),

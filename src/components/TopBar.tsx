@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { replayTour, tourAvailable } from '../tour/useTour';
 
 interface TopBarProps {
   title: string;
@@ -23,6 +24,16 @@ export function TopBar({ title, step, onBack, showMark, right }: TopBarProps) {
         {title}
       </div>
       {step ? <span className="step-count">{step}</span> : null}
+      {tourAvailable() ? (
+        <button
+          className="icon-btn tour-help"
+          data-tour="topbar-help"
+          onClick={() => void replayTour()}
+          aria-label="Replay the tour for this screen"
+        >
+          ?
+        </button>
+      ) : null}
       {right ?? (step ? null : <span />)}
     </header>
   );

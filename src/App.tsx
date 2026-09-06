@@ -43,6 +43,7 @@ import {
   withMatch,
 } from './state/select';
 import type { Actions, ScreenName } from './state/types';
+import { useTour } from './tour/useTour';
 
 /** Reads the share id out of /i/<shareId>. Empty when entered directly. */
 const hostShareIdFromUrl = (): string =>
@@ -52,6 +53,8 @@ function App() {
   const { identity, isActive, getConnection } = useSpacetimeDB();
   const [screen, setScreen] = useState<ScreenName>('join');
   const [toast, setToast] = useState<string | null>(null);
+  // One guided tour per screen, auto-run once and replayable from TopBar's "?".
+  useTour(screen);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [lineId, setLineId] = useState<string | null>(null);
   const [hostShareId] = useState(hostShareIdFromUrl);
@@ -168,7 +171,10 @@ function App() {
   useEffect(() => {
     const status = myRunRow?.status;
     const wasLive = prevRunStatus.current === 'running' || prevRunStatus.current === 'paused';
-    if (status === 'ended' && (screen === 'roaming' || (screen === 'world' && wasLive))) {
+    // Any screen but Correct, where the player is mid-sentence writing a
+    // correction: a run that ended while they were on Talks or Profile used to
+    // leave no route to the recap at all (audit C2).
+    if (status === 'ended' && wasLive && screen !== 'correct') {
       setScreen('return');
     }
     prevRunStatus.current = status;
@@ -184,8 +190,8 @@ function App() {
         // it sends their Echoe to meet the host's. The share id survives re-creation.
         run('Host event', startRun({ goal: `Hosting ${name}`, avoid: myRunRow?.avoid ?? '', hostShareId }));
       },
-      onJoinEvent(eventId, goal, linkedin, twitter, building) {
-        run('Join event', joinEvent({ eventId, goal, linkedin, twitter, building }));
+      onJoinEvent(eventId, goal, linkedin, twitter, building, onJoined) {
+        run('Join event', joinEvent({ eventId, goal, linkedin, twitter, building }), onJoined);
       },
       onLeaveEvent(eventId) {
         run('Leave event', leaveEvent({ eventId }));
@@ -263,7 +269,7 @@ function App() {
     }),
     // The reducer handles are stable; myRunRow.status decides pause versus resume.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [run, hostShareId, hostName, limitsFrom, myRunRow?.status, myIntentRow?.text, myPlayerRow?.currentPlace],
+    [run, hostShareId, hostName, limitsFrom, myRunRow?.status, myRunRow?.avoid, myIntentRow?.text, myPlayerRow?.currentPlace, myEchoRow?.persona],
   );
 
   const onlineCount = useMemo(() => players.filter(row => row.online).length, [players]);
@@ -304,7 +310,24 @@ function App() {
   const mySummaryRow = mySummaries.find(row => String(row.conversationId) === conversationId);
   const summary = mySummaryRow ? toSummary(mySummaryRow) : undefined;
 
+  // Everyone this Echoe has ever talked to. Talks and Profile are a history, so
+  // "Send my Echoe out again" must not empty them (audit C3).
   const matches = useMemo(
+    () =>
+      withMatch(rankedMatches(
+        conversations,
+        myEchoId,
+        hostEchoId,
+        echoes,
+        players,
+        companies,
+        myPlayerRow?.currentPlace ?? 0,
+      ), summaryMatch),
+    [conversations, myEchoId, hostEchoId, echoes, players, companies, myPlayerRow?.currentPlace, summaryMatch],
+  );
+
+  // The Return recap is about the run that just finished, so it keeps the filter.
+  const recapMatches = useMemo(
     () =>
       withMatch(rankedMatches(
         conversations,
@@ -448,7 +471,7 @@ function App() {
           go={go}
           run={runView}
           freeLeft={freeLeft}
-          matches={matches}
+          matches={recapMatches}
           receipts={receipts}
           intent={myIntentRow?.text ?? ''}
           shareId={myIntentRow?.shareId ?? ''}
@@ -557,6 +580,7 @@ function App() {
           eventTitle={joinTarget.title}
           backTo={joinTarget.from}
           initialBuilding={myEventBuildByEvent.get(joinTarget.id)}
+          joinedCount={eventCounts[joinTarget.id] ?? 0}
         />
       )}
       {screen === 'events' && (
@@ -567,6 +591,7 @@ function App() {
           onJoinEvent={openJoinEvent}
           eventCounts={eventCounts}
           myEvents={myEvents}
+          hasEcho={Boolean(myEchoRow)}
         />
       )}
       {screen === 'done' && <DoneScreen actions={actions} go={go} />}

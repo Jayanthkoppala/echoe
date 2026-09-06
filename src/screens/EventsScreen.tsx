@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TopBar } from '../components/TopBar';
-import { nearestLandmark } from '../state/select';
+import { FEATURED_EVENT } from '../state/copy';
 import type { ScreenName, ScreenProps } from '../state/types';
 
 interface EventRow {
@@ -58,9 +58,10 @@ interface EventsScreenProps extends ScreenProps {
   /** Echoes joined per event id, and the ids this player joined. */
   eventCounts: Record<string, number>;
   myEvents: Set<string>;
+  hasEcho: boolean;
 }
 
-export function EventsScreen({ actions, go, backTo, onJoinEvent, eventCounts, myEvents }: EventsScreenProps) {
+export function EventsScreen({ actions, go, backTo, onJoinEvent, eventCounts, myEvents, hasEcho }: EventsScreenProps) {
   const [filter, setFilter] = useState('All');
 
   const wanted = FILTERS[filter];
@@ -99,10 +100,12 @@ export function EventsScreen({ actions, go, backTo, onJoinEvent, eventCounts, my
                 .map(event => {
                   const joined = eventCounts[event.id] ?? 0;
                   const mine = myEvents.has(event.id);
-                  const near = nearestLandmark(event.lat, event.lng);
-                  const reachable = near.km <= 6;
                   return (
-                    <div className="event-card glass" key={event.id}>
+                    <div
+                      className="event-card glass"
+                      key={event.id}
+                      data-tour={event.id === shown[0]?.id ? 'events-card' : undefined}
+                    >
                       {event.image ? (
                         <img className="event-hero" src={event.image} alt="" loading="lazy" />
                       ) : null}
@@ -147,11 +150,7 @@ export function EventsScreen({ actions, go, backTo, onJoinEvent, eventCounts, my
                         >
                           {mine ? 'Joined ✓' : 'Join with my Echoe'}
                         </button>
-                        {reachable ? (
-                          <button className="share-btn" onClick={() => actions.onTravel(near.id)}>
-                            Send my Echoe
-                          </button>
-                        ) : null}
+
                       </div>
                     </div>
                   );
@@ -162,9 +161,19 @@ export function EventsScreen({ actions, go, backTo, onJoinEvent, eventCounts, my
       </div>
 
       <div className="footer">
-        <button className="primary" onClick={() => go('world')}>
-          Enter Bengaluru <span aria-hidden="true">→</span>
-        </button>
+        {!hasEcho ? (
+          <button className="primary" onClick={() => go('create')}>
+            Create your Echoe <span aria-hidden="true">→</span>
+          </button>
+        ) : myEvents.has(FEATURED_EVENT.id) ? (
+          <button className="primary" onClick={() => go('talks')}>
+            Go to messages <span aria-hidden="true">→</span>
+          </button>
+        ) : (
+          <button className="primary" onClick={() => go('world')}>
+            Continue your Echoe <span aria-hidden="true">→</span>
+          </button>
+        )}
       </div>
     </div>
   );

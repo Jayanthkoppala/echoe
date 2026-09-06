@@ -86,7 +86,7 @@ export function SummaryScreen({ go, summary, match, player, onProfile }: Summary
           </section>
         ) : (
           <>
-            <section className="summary-hero glass">
+            <section className="summary-hero glass" data-tour="summary-score">
               <b className={summary.match >= 70 ? 'summary-score tabular summary-score--hot' : 'summary-score tabular'}>
                 {summary.match}
               </b>
@@ -111,7 +111,7 @@ export function SummaryScreen({ go, summary, match, player, onProfile }: Summary
               What your Echoe should do differently
               <span className="tabular">{summary.corrective}/100</span>
             </h3>
-            <section className="profile-card glass">
+            <section className="profile-card glass" data-tour="summary-corrective">
               {summary.correctiveNotes.length === 0 ? (
                 <p className="profile-empty">Nothing to correct. It spoke the way you would have.</p>
               ) : (

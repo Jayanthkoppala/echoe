@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { TopBar } from '../components/TopBar';
-import { AGENT_MCP_WHY, AGENT_TOKEN_KEY, agentOnboardPaste, dayChip } from '../state/copy';
+import { AGENT_MCP_WHY, AGENT_SAFETY, AGENT_SAFETY_LINE, AGENT_TOKEN_KEY, agentOnboardPaste, agentOnboardUrl, dayChip } from '../state/copy';
 import { FEATURED_EVENT } from '../state/copy';
 import type { AgentNote, AgentStages, ScreenName, ScreenProps } from '../state/types';
 
@@ -56,9 +56,13 @@ export function ConnectScreen({ actions, go, agentNotes, onToast, backTo, stages
     localStorage.setItem(AGENT_TOKEN_KEY, fresh);
     setToken(fresh);
     actions.onSetAgentLink(fresh);
+    onToast('New link made. The old one stops working.');
   };
 
   const paste = agentOnboardPaste(token);
+  // Split rather than re-typing the sentence, so the rendered <pre> stays byte-identical to what Copy writes.
+  const url = agentOnboardUrl(token);
+  const [beforeUrl, afterUrl] = paste.split(url);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(paste);
@@ -69,6 +73,18 @@ export function ConnectScreen({ actions, go, agentNotes, onToast, backTo, stages
     }
   };
 
+  // The three things the agent writes. Once they are all in, the player's part
+  // is the event page, so walk them there instead of leaving them on a done list.
+  const written = stages.persona && stages.building && stages.memory;
+  const handedOff = useRef(false);
+  useEffect(() => {
+    if (!written || handedOff.current) return;
+    handedOff.current = true;
+    // A beat, so the third tick is seen landing before the screen changes.
+    const timer = setTimeout(() => go('events'), 1500);
+    return () => clearTimeout(timer);
+  }, [written, go]);
+
   const latestDay = agentNotes[0]?.day;
   const status = latestDay ? `Your agent last wrote on ${dayChip(latestDay)}` : 'Your agent has not written yet';
 
@@ -77,46 +93,72 @@ export function ConnectScreen({ actions, go, agentNotes, onToast, backTo, stages
       <TopBar title="Let your agent write it" onBack={() => go(backTo)} />
       <div className="content">
         <p className="lede">{AGENT_MCP_WHY}</p>
-
-        <div className="label">Paste this into Claude Code or Codex</div>
-        <div className="copy-block">
-          <pre ref={pasteRef}>{paste}</pre>
-          <button className="copy-btn" onClick={copy}>
-            Copy
-          </button>
+        <div className="safety-row" data-tour="connect-safety">
+          <ul className="safety-list">
+            {AGENT_SAFETY.map(claim => (
+              <li key={claim}>{claim}</li>
+            ))}
+          </ul>
+          <p className="safety-note">{AGENT_SAFETY_LINE}</p>
         </div>
 
-        <div className="label">Your token</div>
-        <div className="token-box">
-          <code>{token || 'generating…'}</code>
-          <button className="link-btn" onClick={rotateToken}>
-            New token
-          </button>
+        <div className="section-block">
+          <div className="label">Paste this into Claude Code or Codex</div>
+          <div className="copy-block connect-paste">
+            <pre ref={pasteRef}>
+              {beforeUrl}
+              <span className="paste-url">{url}</span>
+              {afterUrl}
+            </pre>
+            <div className="copy-actions">
+              <button className="copy-btn" onClick={copy}>
+                Copy
+              </button>
+              <button className="link-btn" onClick={rotateToken}>
+                New token
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="label">What lands, as it lands</div>
-        <ol className="stages">
-          <li className={stages.persona ? 'done' : ''}>Your Echoe, in your voice</li>
-          <li className={stages.building ? 'done' : ''}>What you are building, for {FEATURED_EVENT.title}</li>
-          <li className={stages.memory ? 'done' : ''}>What you have been working on lately</li>
-          <li className={stages.joined ? 'done' : ''}>
-            {stages.joined ? (
-              `In the room at ${FEATURED_EVENT.title}`
-            ) : (
-              <>
-                You: one line on what you want from {FEATURED_EVENT.title}, and a link.{' '}
-                <button className="link-btn" onClick={onJoinEvent} disabled={!stages.building}>
-                  Join {FEATURED_EVENT.title}
-                </button>
-              </>
-            )}
-          </li>
-        </ol>
-        <p className="connect-status">{status}</p>
+        <div className="section-block stages-block">
+          <div className="label">What lands, as it lands</div>
+          <ol className="stages">
+            <li className={stages.persona ? 'done' : ''}>Your Echoe, in your voice</li>
+            <li className={stages.building ? 'done' : ''}>What you are building, for {FEATURED_EVENT.title}</li>
+            <li className={stages.memory ? 'done' : ''}>What you have been working on lately</li>
+            <li className={stages.joined ? 'done' : ''}>
+              {stages.joined ? (
+                `In the room at ${FEATURED_EVENT.title}`
+              ) : (
+                <>
+                  You: one line on what you want from {FEATURED_EVENT.title}, and a link.
+                  <button
+                    className="copy-btn stage-action"
+                    onClick={onJoinEvent}
+                    disabled={!stages.building}
+                  >
+                    Join {FEATURED_EVENT.title} <span aria-hidden="true">→</span>
+                  </button>
+                  {!stages.building && <span className="stage-hint">Unlocks once your agent has written what you are building.</span>}
+                </>
+              )}
+            </li>
+          </ol>
+          <p className={latestDay ? 'connect-status connect-status--live' : 'connect-status'}>{status}</p>
+        </div>
       </div>
       <div className="footer">
-        <button className="primary" onClick={() => go(hasEcho ? 'world' : backTo)}>
-          {hasEcho ? 'To the map' : 'Done'}
+        <button className="primary" onClick={() => go(written ? 'events' : hasEcho ? 'world' : backTo)}>
+          {written ? (
+            <>
+              Continue to {FEATURED_EVENT.title} <span aria-hidden="true">→</span>
+            </>
+          ) : hasEcho ? (
+            'To the map'
+          ) : (
+            'Done'
+          )}
         </button>
       </div>
     </div>

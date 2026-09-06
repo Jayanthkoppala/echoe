@@ -607,6 +607,24 @@ function applyPinKinds(map: maplibregl.Map, kinds: PinKind[], pins: Record<strin
   for (const el of Object.values(pins)) el.classList.toggle('map-pin--off', !placesOn);
 }
 
+/* ── Tour anchors ────────────────────────────────────────────────
+   The player's Echoe and the event pin are drawn by WebGL, so Driver.js has no
+   box to highlight. These two invisible divs are that box: they track
+   map.project() of each target and are the only DOM the tour needs. */
+
+export type TourTargetId = 'my-echoe' | 'event-pin';
+
+const TOUR_TARGET_IDS: TourTargetId[] = ['my-echoe', 'event-pin'];
+/** Touch-target sized, so it comfortably covers the ~30px drawn icon. */
+const TOUR_ANCHOR_PX = 44;
+
+/** Global handle for the tour, which lives outside this component's props. */
+declare global {
+  interface Window {
+    echoeFocusTourTarget?: (id: TourTargetId) => boolean;
+  }
+}
+
 const AGENT_FAN_METRES = 15;
 const AGENT_FAN_RADIUS_DEG = 0.00007; // ~7m ring; keeps fanned dots pinned to their landmark
 
@@ -661,16 +679,8 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, onEvent
     // centres on it the moment it appears instead of leaving it off-screen.
     followRef.current = true;
     const map = mapRef.current;
-    const me = agentsRef.current.find(a => a.isMine);
-    if (!map || !me) return;
-    const leg = legsRef.current[me.id];
-    const target: LngLat = leg
-      ? agentPosition(leg, Date.now())
-      : (() => {
-          const at = LANDMARKS.find(l => l.id === me.toPlace);
-          return at ? [at.lng, at.lat] : [0, 0];
-        })();
-    followRef.current = true;
+    const target = tourTargetAt('my-echoe');
+    if (!map || !target) return;
     map.flyTo({ center: target, zoom: Math.max(map.getZoom(), 14.5), duration: 900 });
   }, [followMine]);
   const agentsRef = useRef<AgentSpec[]>(agents);
@@ -685,6 +695,17 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, onEvent
   agentsRef.current = agents;
   handlersRef.current = { onPlaceTap, onCompanyTap, onEventTap };
   kindsRef.current = pinKinds;
+
+  /** Where a tour target is right now, or null when it does not exist yet. */
+  function tourTargetAt(id: TourTargetId): LngLat | null {
+    if (id === 'event-pin') return EVENTS.length ? [EVENTS[0].lng, EVENTS[0].lat] : null;
+    const me = agentsRef.current.find(a => a.isMine);
+    if (!me) return null;
+    const leg = legsRef.current[me.id];
+    if (leg) return agentPosition(leg, Date.now());
+    const at = LANDMARKS.find(l => l.id === me.toPlace);
+    return at ? [at.lng, at.lat] : null;
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -705,6 +726,60 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, onEvent
     mapRef.current = map;
     // Dev aid only: lets a console or test script inspect the live map.
     if (import.meta.env.DEV) (window as unknown as { __echoeMap?: maplibregl.Map }).__echoeMap = map;
+
+    // Invisible boxes over the canvas so the tour can highlight two things that
+    // only exist as pixels. Never interactive: the pin and the dot keep their
+    // own map click handlers.
+    const anchors = {} as Record<TourTargetId, HTMLDivElement>;
+    for (const id of TOUR_TARGET_IDS) {
+      const el = document.createElement('div');
+      el.dataset.tour = id;
+      el.style.cssText = `position:absolute;left:0;top:0;width:${TOUR_ANCHOR_PX}px;height:${TOUR_ANCHOR_PX}px;pointer-events:none;display:none;z-index:2`;
+      containerRef.current!.appendChild(el);
+      anchors[id] = el;
+    }
+
+    const placeAnchors = () => {
+      const { clientWidth: w, clientHeight: h } = map.getCanvas();
+      for (const id of TOUR_TARGET_IDS) {
+        const el = anchors[id];
+        const at = tourTargetAt(id);
+        if (!at) {
+          el.style.display = 'none';
+          continue;
+        }
+        const p = map.project(at);
+        // ponytail: plain viewport test. A target behind the horizon at high
+        // pitch projects to a bogus point; the city view never pitches that far.
+        if (p.x < 0 || p.y < 0 || p.x > w || p.y > h) {
+          el.style.display = 'none';
+          continue;
+        }
+        el.style.display = 'block';
+        el.style.transform = `translate(${p.x - TOUR_ANCHOR_PX / 2}px, ${p.y - TOUR_ANCHOR_PX / 2}px)`;
+      }
+    };
+    // `render` covers both camera moves and the agent source's per-frame setData,
+    // which is every moment either target can shift.
+    map.on('render', placeAnchors);
+    map.on('move', placeAnchors);
+    // `render` only starts once the style is up, which on a cold tile fetch is
+    // seconds away. Place them now so the tour never highlights a 0x0 box.
+    placeAnchors();
+    map.on('load', placeAnchors);
+
+    const focusTourTarget = (id: TourTargetId) => {
+      const at = tourTargetAt(id);
+      if (!at) return false;
+      // Following would drag the camera off an event pin a frame later.
+      followRef.current = false;
+      map.easeTo({
+        center: at, zoom: Math.max(map.getZoom(), 15), pitch: 60,
+        offset: [0, -130], duration: 900, essential: true,
+      });
+      return true;
+    };
+    window.echoeFocusTourTarget = focusTourTarget;
 
     const pins = pinsRef.current;
     LANDMARKS.forEach((place, i) => {
@@ -1220,6 +1295,10 @@ export default function BengaluruMap({ agents, onPlaceTap, onCompanyTap, onEvent
       alive = false;
       cancelAnimationFrame(rafRef.current);
       pinsRef.current = {};
+      // A remount installs the new map's handle before this cleanup runs, so
+      // only drop the global when it is still this map's.
+      if (window.echoeFocusTourTarget === focusTourTarget) delete window.echoeFocusTourTarget;
+      for (const el of Object.values(anchors)) el.remove();
       map.remove();
       mapRef.current = null;
     };

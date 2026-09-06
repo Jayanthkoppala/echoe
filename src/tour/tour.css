@@ -1,0 +1,231 @@
+/* Echoe guided tour — Driver.js theming.
+   House look from docs/design/DESIGN.md: obsidian glass, white-only text,
+   lime scarce. Driver's popover is `all: unset`, so every property here is
+   declared, not inherited. Scoped to the `.echoe-tour` popoverClass that
+   src/tour/tour.ts sets, so nothing leaks into the app. */
+
+@import 'driver.js/dist/driver.css';
+
+/* ── Popover: one pane of obsidian glass ──────────────────────────────── */
+
+.driver-popover.echoe-tour {
+  /* 430px frame minus 2x16px margin still leaves room at 300px. */
+  min-width: 0;
+  max-width: 300px;
+  padding: 14px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  /* Glass, not a grey card: white at low alpha with light passing through. */
+  background:
+    linear-gradient(160deg, var(--sheen) 0%, rgba(255, 255, 255, 0) 42%),
+    var(--panel-deep);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(150%);
+  backdrop-filter: blur(var(--blur)) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 var(--hl),
+    inset 1px 0 0 rgba(255, 255, 255, .12),
+    inset 0 -1px 0 rgba(0, 0, 0, .35),
+    0 18px 40px -14px rgba(0, 0, 0, .85),
+    0 0 0 1px rgba(0, 0, 0, .35);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: transform 180ms var(--ease), opacity 180ms var(--ease);
+}
+
+/* Over the MapLibre canvas the aurora is gone and the basemap is bright in
+   places; a heavier fill keeps the copy readable. */
+.driver-popover.echoe-tour--map {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .1) 0%, rgba(255, 255, 255, 0) 42%),
+    rgba(12, 17, 13, .78);
+}
+
+/* ── Type: three tiers from size + weight + opacity ───────────────────── */
+
+.echoe-tour .driver-popover-title {
+  /* Clears the 44px close hit area. */
+  padding-right: 34px;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+
+.echoe-tour .driver-popover-title[style*="block"] + .driver-popover-description { margin-top: 6px; }
+
+.echoe-tour .driver-popover-description {
+  color: var(--fg2);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* ── Footer: progress · skip · back · next ────────────────────────────── */
+
+.echoe-tour .driver-popover-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+/* Order, not DOM position, decides the row, so tour.ts can append the skip
+   link anywhere in the footer. */
+.echoe-tour .driver-popover-progress-text {
+  order: -2;
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+}
+
+.echoe-tour .tour-skip {
+  order: -1;
+  border-radius: 10px;
+  margin-right: auto;
+  padding: 0 2px;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--fg3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 140ms var(--ease);
+}
+.echoe-tour .tour-skip:hover { color: var(--fg2); }
+
+.echoe-tour .driver-popover-navigation-btns {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
+.echoe-tour .driver-popover-navigation-btns button + button { margin-left: 0; }
+
+/* Back: ghost. Matches .ghost-btn, one step down in height. */
+.echoe-tour .driver-popover-footer-btn {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-btn);
+  color: var(--fg);
+  background: var(--chip);
+  box-shadow: inset 0 1px 0 var(--hl);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: background 140ms var(--ease), transform 120ms var(--ease);
+}
+.echoe-tour .driver-popover-footer-btn:hover { background: rgba(255, 255, 255, .14); }
+.echoe-tour .driver-popover-footer-btn:active { transform: scale(.97); }
+
+/* Next: the one lime thing on screen. Same recipe as .handoff-btn. */
+.echoe-tour .driver-popover-next-btn {
+  border-color: rgba(215, 240, 108, .7);
+  color: #101a0e;
+  background: var(--lime);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .45),
+    0 12px 28px -10px rgba(215, 240, 108, .65);
+}
+.echoe-tour .driver-popover-next-btn:hover { background: #dff37f; }
+
+.echoe-tour .driver-popover-btn-disabled { opacity: .35; }
+
+/* ── Close: 44px hit area, 16px glyph ─────────────────────────────────── */
+
+.echoe-tour .driver-popover-close-btn {
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  /* Circular so the lime focus ring reads as a ring, not a box; Driver puts
+     first focus on this button when a step opens. */
+  border-radius: 50%;
+  color: var(--fg3);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 44px;
+  transition: color 140ms var(--ease);
+}
+.echoe-tour .driver-popover-close-btn:hover,
+.echoe-tour .driver-popover-close-btn:focus { color: var(--fg); }
+/* Driver focuses the X on open and an auto-started tour has no pointer input
+   yet, so the browser treats that as keyboard focus. Keep a ring for real
+   keyboard users, but quiet, so lime stays on Next. */
+.echoe-tour .driver-popover-close-btn:focus-visible { outline: 1px solid var(--edge); outline-offset: 0; }
+
+/* ── Arrow: only the one visible border per side gets the fill ────────── */
+
+.echoe-tour .driver-popover-arrow { border-width: 7px; }
+.echoe-tour .driver-popover-arrow-side-left { border-left-color: rgba(255, 255, 255, .14); }
+.echoe-tour .driver-popover-arrow-side-right { border-right-color: rgba(255, 255, 255, .14); }
+.echoe-tour .driver-popover-arrow-side-top { border-top-color: rgba(255, 255, 255, .14); }
+.echoe-tour .driver-popover-arrow-side-bottom { border-bottom-color: rgba(255, 255, 255, .14); }
+.echoe-tour--map .driver-popover-arrow-side-left { border-left-color: rgba(22, 28, 22, .88); }
+.echoe-tour--map .driver-popover-arrow-side-right { border-right-color: rgba(22, 28, 22, .88); }
+.echoe-tour--map .driver-popover-arrow-side-top { border-top-color: rgba(22, 28, 22, .88); }
+.echoe-tour--map .driver-popover-arrow-side-bottom { border-bottom-color: rgba(22, 28, 22, .88); }
+
+/* ── Focus rings: lime, same as the app ───────────────────────────────── */
+
+.echoe-tour button:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* ── Stage: a soft lime ring on whatever is being explained ───────────── */
+/* Overlay colour, stage radius (14) and stage padding (6) are Driver JS
+   options, set in tour.ts; this is the ring the overlay cannot draw. */
+
+.driver-active .driver-active-element {
+  border-radius: var(--radius-sm);
+  box-shadow:
+    0 0 0 1px rgba(215, 240, 108, .55),
+    0 0 22px 2px rgba(215, 240, 108, .28);
+}
+
+/* ── TopBar replay button ─────────────────────────────────────────────── */
+
+.tour-help {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  color: var(--fg2);
+  background: var(--chip);
+  box-shadow: inset 0 1px 0 var(--hl);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  transition: color 140ms var(--ease), background 140ms var(--ease), transform 120ms var(--ease);
+}
+.tour-help:hover { color: var(--fg); background: rgba(255, 255, 255, .14); }
+.tour-help:active { transform: scale(.97); }
+
+/* ── Reduced motion ───────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-popover.echoe-tour { transition: none; }
+  .driver-fade .driver-popover,
+  .driver-fade .driver-overlay { animation: none; }
+  .echoe-tour .driver-popover-footer-btn,
+  .echoe-tour .driver-popover-close-btn,
+  .echoe-tour .tour-skip,
+  .tour-help { transition: none; }
+  .echoe-tour .driver-popover-footer-btn:active,
+  .tour-help:active { transform: none; }
+}

@@ -85,9 +85,22 @@ export const MCP_BASE = 'https://www.echoe.world/mcp'; // the apex 308s to www, 
 /** The event the Connect screen stages towards. ponytail: one event; pick from events.json when there are two. */
 export const FEATURED_EVENT = { id: 'spacetimedb-midnight-moonshot', title: 'Midnight Moonshot' };
 
+/**
+ * What the paste is allowed to do. Checked against connect/prompts.js
+ * `onboardDocument`: it reads the open repo, calls four write tools that take
+ * text only (persona, building, memory), and never touches files or runs code.
+ */
+export const AGENT_SAFETY = [
+  'Reads your repo, writes text only',
+  'Never edits or runs your code',
+  'Token revocable any time',
+];
+export const AGENT_SAFETY_LINE = 'Safe to run: it only fills the four items below.';
+
 /** The one thing a player pastes into their agent. The document at that URL carries every step. */
+export const agentOnboardUrl = (token: string): string => `${MCP_BASE}/${token}/onboard`;
 export const agentOnboardPaste = (token: string): string =>
-  `Fetch ${MCP_BASE}/${token}/onboard and follow it exactly, step by step. Show me each text before you save it.`;
+  `Fetch ${agentOnboardUrl(token)} and follow it exactly, step by step. Show me each text before you save it.`;
 
 export const AGENT_SOURCE_LABEL: Record<string, string> = {
   'claude-code': 'Claude Code',

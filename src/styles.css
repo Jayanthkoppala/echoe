@@ -113,7 +113,7 @@ p, li, button, label { text-wrap: pretty; }
 }
 
 /* Motion 2: the router mounts a fresh node, so this fires on every swap. */
-.phone > * { animation: screen-in 320ms var(--ease) both; }
+.phone > *:not(.toast) { animation: screen-in 320ms var(--ease) both; } /* .toast keeps its own translate(-50%) centring */
 @keyframes screen-in {
   from { opacity: 0; transform: translateY(12px) scale(.98); }
   to { opacity: 1; transform: none; }
@@ -945,8 +945,6 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   .score-fill { width: var(--score-pct); }
 }
 
-.link-btn { min-width: 0; min-height: 0; padding: 0; border: 0; background: none; color: var(--lime); font: inherit; text-decoration: underline; cursor: pointer; }
-
 /* Fix 5: the denominator makes a low score legible as a score. */
 .match-score small { color: var(--fg3); font-size: 11px; font-weight: 700; }
 /* Fix 14: the tap affordance on Review is otherwise invisible. */
@@ -1067,6 +1065,7 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .profile-name { min-height: 46px; font-size: 17px; font-weight: 700; }
 .link-btn {
   justify-self: start;
+  min-width: 0;
   min-height: 32px;
   padding: 0;
   border: 0;
@@ -1247,16 +1246,6 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .source-chip { color: var(--lime); }
 .agent-notes-more { margin: 4px 0 0; color: var(--fg3); font-size: 11px; }
 
-.token-box {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 6px 6px 12px;
-  border: 1px solid var(--edge);
-  border-radius: var(--radius-sm);
-  background: var(--chip);
-}
-.token-box code { flex: 1 1 auto; overflow: hidden; color: var(--lime); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .copy-block {
   display: grid;
   gap: 8px;
@@ -1275,6 +1264,10 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
   white-space: pre-wrap;
   word-break: break-word;
 }
+.connect-paste pre { font-size: 12px; }
+.paste-url { color: var(--lime); overflow-wrap: anywhere; }
+.connect-paste .copy-actions { display: flex; gap: 12px; align-items: center; }
+.connect-paste .copy-actions .copy-btn { flex: 1 1 auto; }
 .connect-status { margin: 4px 0 0; color: var(--fg3); font-size: 11px; }
 
 /* Memory bullets: two lines until tapped. */
@@ -1487,9 +1480,87 @@ h3 { margin-bottom: 4px; font-size: 16px; font-weight: 700; }
 .rubric-row--avoid .rubric-label { color: var(--coral); }
 
 /* Connect: the stages the coding agent fills in, ticked live from the tables */
-.stages { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.stages li { position: relative; padding-left: 26px; color: var(--fg3); font-size: 12px; line-height: 1.45; }
-.stages li::before { content: ''; position: absolute; left: 0; top: 3px; width: 14px; height: 14px; border: 1px solid var(--edge); border-radius: 50%; }
+.stages { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.stages li { display: grid; position: relative; padding-left: 26px; color: var(--fg3); font-size: 12px; line-height: 1.45; }
+.stages li::before { content: ''; position: absolute; left: 0; top: 2px; width: 14px; height: 14px; border: 1px solid var(--edge); border-radius: 50%; }
 .stages li.done { color: var(--fg2); }
 .stages li.done::before { content: '✓'; display: grid; place-items: center; border-color: rgba(215, 240, 108, .5); background: rgba(215, 240, 108, .16); color: var(--lime); font-size: 10px; font-weight: 700; }
-.stages .link-btn:disabled { opacity: .5; cursor: default; }
+.stages .stage-action { justify-self: start; margin-top: 8px; }
+.stages .stage-action:disabled { opacity: .45; cursor: not-allowed; }
+.stages .stage-hint { display: block; margin-top: 6px; color: var(--fg3); font-size: 11px; }
+
+.stages-block .connect-status { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.stages-block .connect-status::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--fg3); }
+.stages-block .connect-status--live { color: var(--fg2); }
+.stages-block .connect-status--live::before { background: var(--lime); }
+
+/* --- Onboarding hand-off: Create -> Connect -> Events -> Join --- */
+
+/* Create: the coding-agent route is a real choice, not a footnote link. */
+.agent-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--radius-btn);
+  background: #fff;
+  color: #101a0e;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.agent-btn:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+
+/* Connect: what the paste is allowed to do, before anyone runs it. */
+.safety-row { margin: 0; }
+.safety-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.safety-list li { position: relative; padding-left: 26px; color: var(--fg2); font-size: 12px; line-height: 1.45; }
+.safety-list li::before {
+  content: '✓';
+  display: grid;
+  place-items: center;
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(215, 240, 108, .5);
+  border-radius: 50%;
+  background: rgba(215, 240, 108, .16);
+  color: var(--lime);
+  font-size: 10px;
+  font-weight: 700;
+}
+.safety-note { margin: 8px 0 0; color: var(--fg3); font-size: 11px; line-height: 1.45; text-align: left; }
+
+/* Join event: which fields the agent already filled, and which are mine. */
+.field-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--panel-thin);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: none;
+  vertical-align: middle;
+}
+.field-chip.written { border-color: rgba(215, 240, 108, .5); background: rgba(215, 240, 108, .16); color: var(--lime); }
+.field-chip.needed { color: var(--fg3); }
+
+/* Join event: the state after the reducer lands. */
+.joined-state { display: grid; align-content: center; justify-items: center; gap: 10px; text-align: center; }
+.joined-title { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+.joined-count { margin: 0; color: var(--fg2); font-size: 14px; }
+.joined-count strong { color: var(--lime); font-variant-numeric: tabular-nums; }
+
+
+/* Create: the two ways to get a persona carry equal weight, split by "or". */
+.or-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0 4px; color: var(--fg3); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--edge); }
+.agent-card { display: grid; gap: 12px; padding: 14px; }
+.agent-card > * { position: relative; z-index: 1; }
+.agent-card p { margin: 0; color: var(--fg2); font-size: 13px; line-height: 1.45; }

@@ -244,9 +244,135 @@ async function main() {
     }
   });
 
+  // ── Tick fixes from the 2026-09-06 audit: T1, T2, T4, T6 ──────────────────
+  // Four more identities. Everyone joins standing at landmark 0, so these meet
+  // on the street, through the run loop, not through the event fan-out.
+  const [D, E, F, G] = await Promise.all([connect('D'), connect('E'), connect('F'), connect('G')]);
+  const echoOf = (conn: DbConnection) =>
+    conn.db.echo.iter().toArray().find(e => e.owner.isEqual(conn.identity!));
+  const runOf = (conn: DbConnection) =>
+    conn.db.run.iter().toArray().find(r => r.owner.isEqual(conn.identity!));
+  const msOf = (ts: { microsSinceUnixEpoch: bigint }) => Number(ts.microsSinceUnixEpoch / 1000n);
+
+  for (const [conn, name, persona] of [
+    [D, 'dara', 'Hosts a hardware meetup, ships firmware.'],
+    [E, 'esha', 'Writes about cities, wants a technical co-founder.'],
+    [F, 'faiz', 'Data engineer, learning Rust.'],
+    [G, 'gita', 'Illustrator moving into product.'],
+  ] as const) {
+    conn.reducers.join({ name, email: '' });
+    conn.reducers.createEcho({ persona });
+  }
+  await Promise.all([D, E, F, G].map(c => waitFor(() => echoOf(c))));
+
+  D.reducers.startRun({ goal: 'meet people building hardware', avoid: '', hostShareId: '' });
+  const hostShare = await waitFor(
+    () =>
+      D.db.intent.iter().toArray().find(i => i.owner.isEqual(D.identity!) && i.shareId.length > 0)
+        ?.shareId,
+  );
+  // E arrives through D's share link, so E's run names D's Echoe as its host.
+  E.reducers.startRun({ goal: 'meet a hardware founder', avoid: '', hostShareId: hostShare });
+  F.reducers.startRun({ goal: 'meet data people', avoid: '', hostShareId: '' });
+  G.reducers.startRun({ goal: 'meet illustrators', avoid: '', hostShareId: '' });
+  await Promise.all([D, E, F, G].map(c => waitFor(() => runOf(c))));
+  const gStartedMs = msOf(runOf(G)!.startedAt);
+
+  await step('7. T6: pause holds the clock and pins the Echoe', async () => {
+    const before = runOf(G)!;
+    G.reducers.pauseRun();
+    await waitFor(() => runOf(G)?.status === 'paused');
+
+    // travel is refused while paused: the pin must not move.
+    const placeOfG = () =>
+      G.db.player.iter().toArray().find(p => p.identity.isEqual(G.identity!))!.currentPlace;
+    const wasAt = placeOfG();
+    await assert.rejects(
+      () => G.reducers.travel({ placeId: wasAt === 3 ? 4 : 3 }) as Promise<unknown>,
+      /run_paused/,
+      'travel is refused while the run is paused',
+    );
+    assert.equal(placeOfG(), wasAt, 'a paused Echoe cannot be walked somewhere else');
+
+    await new Promise(r => setTimeout(r, 20_000));
+    G.reducers.resumeRun();
+    const resumed = await waitFor(() => {
+      const r = runOf(G);
+      return r && r.status === 'running' && msOf(r.startedAt) > msOf(before.startedAt) ? r : undefined;
+    }, 15_000);
+    const pushed = msOf(resumed.startedAt) - msOf(before.startedAt);
+    assert.ok(
+      pushed >= 18_000 && pushed <= 45_000,
+      `started_at pushed forward by the paused interval, got ${pushed}ms`,
+    );
+    console.log(`  -> paused 20s, started_at moved ${pushed}ms`);
+  });
+
+  await step('8. T2: the visitor run is marked host_met', async () => {
+    const visitor = await waitFor(() => (runOf(E)?.hostMet ? runOf(E) : undefined), 90_000);
+    assert.equal(visitor.hostMet, true, "E's run names D's Echoe as its host and has now met it");
+    assert.equal(runOf(D)!.hostEchoId, 0n, 'the host itself has no host');
+  });
+
+  await step('9. T4: a second start_run re-aims a live run instead of wiping it', async () => {
+    const before = await waitFor(() => {
+      const r = runOf(E);
+      return r && r.peopleMet > 0 ? r : undefined;
+    }, 90_000);
+    E.reducers.startRun({ goal: 'meet anyone shipping tonight', avoid: 'recruiters', hostShareId: '' });
+    const after = await waitFor(() => {
+      const r = runOf(E);
+      return r && r.goal === 'meet anyone shipping tonight' ? r : undefined;
+    });
+    assert.ok(
+      after.peopleMet >= before.peopleMet,
+      `people_met kept (${before.peopleMet} -> ${after.peopleMet})`,
+    );
+    assert.equal(after.status, 'running', 'the run is still the same live run');
+    assert.equal(after.avoid, 'recruiters', 'the new avoid line landed');
+    assert.equal(
+      after.startedAt.microsSinceUnixEpoch,
+      before.startedAt.microsSinceUnixEpoch,
+      'the clock is not restarted',
+    );
+    assert.equal(after.hostEchoId, before.hostEchoId, 'the host is kept');
+    console.log(`  -> people_met ${before.peopleMet} -> ${after.peopleMet}, places ${after.placesVisited}`);
+  });
+
+  await step('10. T6: the resumed run outlives its original three-minute mark', async () => {
+    while (Date.now() < gStartedMs + 185_000) await new Promise(r => setTimeout(r, 1000));
+    const r = runOf(G)!;
+    assert.notEqual(r.status, 'ended', 'a run paused for 20s is still alive 185s after it started');
+    console.log(`  -> G still ${r.status} at 185s`);
+  });
+
+  await step('11. T1: three street runs at one landmark all reach a closed conversation', async () => {
+    const ids = [D, E, F].map(c => echoOf(c)!.id);
+    const pairs = ([[ids[0], ids[1]], [ids[0], ids[2]], [ids[1], ids[2]]] as const).map(
+      ([x, y]) => (x < y ? [x, y] : [y, x]) as [bigint, bigint],
+    );
+    const closed = await waitFor(() => {
+      const rows = pairs.map(([a, b]) =>
+        D.db.conversation
+          .iter()
+          .toArray()
+          .find(c => c.echoA === a && c.echoB === b && c.eventId === ''),
+      );
+      return rows.every(r => r && r.closedAt.microsSinceUnixEpoch > 0n) ? rows : undefined;
+    }, 300_000);
+    for (const c of closed) {
+      console.log(`  -> conversation ${c!.id} closed after ${c!.replies} exchanges`);
+      assert.ok(c!.replies >= 2, `every pair got past the opener (id ${c!.id})`);
+    }
+  });
+
   A.disconnect();
   B.disconnect();
   C.disconnect();
+  D.disconnect();
+  E.disconnect();
+  F.disconnect();
+  G.disconnect();
 
   console.log(`\nflow.check: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

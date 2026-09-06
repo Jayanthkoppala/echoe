@@ -37,7 +37,7 @@ export function CreateScreen({
 
         <div className="section-block">
           <label className="label" htmlFor="persona">
-            Who is your Echoe?
+            Write it yourself
           </label>
           {showPrompt ? (
             <div className="prompt-card glass">
@@ -66,11 +66,20 @@ export function CreateScreen({
               </button>
             )}
           </p>
-          <p className="helper helper--tight">
-            <button className="link-btn" type="button" onClick={onConnect}>
-              Or let your coding agent write it
+        </div>
+
+        <div className="or-divider" aria-hidden="true"><span>or</span></div>
+
+        <div className="section-block">
+          <span className="label">Let your coding agent write it</span>
+          <div className="agent-card glass">
+            <p>
+              On Claude Code or Codex? Our MCP writes your persona from what it already knows about you. One click, nothing to type.
+            </p>
+            <button className="agent-btn" type="button" onClick={onConnect}>
+              Let my coding agent write it
             </button>
-          </p>
+          </div>
         </div>
       </div>
       <div className="footer">

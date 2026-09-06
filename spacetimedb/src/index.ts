@@ -335,6 +335,19 @@ const run = table(
 );
 
 /**
+ * PRIVATE. Open for exactly as long as a run is paused. The run clock is
+ * `now - startedAt`, so `resumeRun` pushes `startedAt` forward by however long
+ * this row stood: a judge who pauses to read a transcript does not lose the time.
+ */
+const runPause = table(
+  { name: 'run_pause' },
+  {
+    runId: t.u64().primaryKey(),
+    pausedAt: t.timestamp(),
+  }
+);
+
+/**
  * Append-only. Nothing in this module ever updates or deletes a receipt: that is
  * the whole point of the Return screen. Corrections change future behaviour and
  * leave the record of what actually happened intact.
@@ -650,6 +663,7 @@ const spacetimedb = schema({
   eventBuild,
   agentTravel,
   run,
+  runPause,
   receipt,
   conversation,
   conversationSummary,
@@ -1182,6 +1196,13 @@ function requireRun(ctx: Ctx) {
   return row;
 }
 
+/** The last row of an iterable that passes `keep`, or null. */
+function lastWhere<T>(rows: Iterable<T>, keep: (row: T) => boolean): T | null {
+  let found: T | null = null;
+  for (const row of rows) if (keep(row)) found = row;
+  return found;
+}
+
 /** The most recent leg for an Echoe, or null before its first departure. */
 function latestLeg(ctx: Ctx, echoId: bigint) {
   let newest: { id: bigint; toPlace: number; arriveTs: Timestamp } | null = null;
@@ -1215,6 +1236,9 @@ function outOfBudget(ctx: Ctx, runRow: ReturnType<typeof requireRun>): boolean {
     if (c.eventId.length > 0) continue; // event talks are on the house, not this budget
     if (micros(c.createdAt) < micros(runRow.startedAt)) continue;
     if (isClosed(micros(ctx.timestamp), c)) continue;
+    // Silent for three ticks: whatever it is waiting for is not coming, and a
+    // broke Echoe should not be kept out all night by it (audit P3).
+    if (micros(ctx.timestamp) - micros(c.lastExchangeAt) > 3n * TICK_MICROS) continue;
     if (c.echoA === runRow.echoId ? c.fundingA : c.fundingB) return false;
   }
   return true;
@@ -1388,7 +1412,13 @@ function upsertEcho(ctx: Ctx, owner: ReturnType<typeof requirePlayer>['identity'
   const existing = ctx.db.echo.owner.find(owner);
   let echoId: bigint;
   if (existing) {
-    ctx.db.echo.id.update({ ...existing, persona: cleanPersona, updatedAt: ctx.timestamp });
+    // An empty argument means "no persona to offer", never "erase mine": the
+    // event-hosting path could send one from a stale memo (audit C6).
+    ctx.db.echo.id.update({
+      ...existing,
+      persona: cleanPersona || existing.persona,
+      updatedAt: ctx.timestamp,
+    });
     echoId = existing.id;
   } else {
     echoId = ctx.db.echo.insert({
@@ -1459,6 +1489,8 @@ export const travel = spacetimedb.reducer(
   (ctx, { placeId }) => {
     const playerRow = requirePlayer(ctx);
     const echoRow = requireEcho(ctx);
+    const runRow = ctx.db.run.owner.find(ctx.sender);
+    if (runRow && runRow.status === RUN_PAUSED) fail('run_paused');
     if (!ctx.db.place.id.find(placeId)) fail(`unknown_place:${placeId}`);
     if (placeId === playerRow.currentPlace) fail('already_there');
 
@@ -1526,7 +1558,17 @@ export const startRun = spacetimedb.reducer(
     };
 
     const existing = ctx.db.run.owner.find(ctx.sender);
-    if (existing) {
+    if (existing && existing.status !== RUN_ENDED) {
+      // Starting again over a live run used to zero peopleMet, placesVisited and
+      // startedAt, which abandoned every open conversation and replayed the
+      // finished ones (audit T4). A second Start only re-aims the run.
+      ctx.db.run.id.update({
+        ...existing,
+        goal: cleanGoal,
+        avoid: cleanAvoid,
+        hostEchoId: existing.hostEchoId === NO_HOST ? hostEchoId : existing.hostEchoId,
+      });
+    } else if (existing) {
       ctx.db.run.id.update({ ...row, id: existing.id });
     } else {
       ctx.db.run.insert({ ...row, id: 0n });
@@ -1540,12 +1582,23 @@ export const pauseRun = spacetimedb.reducer(ctx => {
   const runRow = requireRun(ctx);
   if (runRow.status !== RUN_RUNNING) fail(`not_running:${runRow.status}`);
   ctx.db.run.id.update({ ...runRow, status: RUN_PAUSED });
+  // Upsert: a row left behind by a run that ended while paused must not stop
+  // the next pause from being recorded.
+  ctx.db.runPause.runId.delete(runRow.id);
+  ctx.db.runPause.insert({ runId: runRow.id, pausedAt: ctx.timestamp });
 });
 
 export const resumeRun = spacetimedb.reducer(ctx => {
   const runRow = requireRun(ctx);
   if (runRow.status !== RUN_PAUSED) fail(`not_paused:${runRow.status}`);
-  ctx.db.run.id.update({ ...runRow, status: RUN_RUNNING });
+  const paused = ctx.db.runPause.runId.find(runRow.id);
+  const owed = paused ? micros(ctx.timestamp) - micros(paused.pausedAt) : 0n;
+  if (paused) ctx.db.runPause.runId.delete(runRow.id);
+  ctx.db.run.id.update({
+    ...runRow,
+    status: RUN_RUNNING,
+    startedAt: plus(runRow.startedAt, owed), // paused time is not spent time
+  });
 });
 
 export const endRun = spacetimedb.reducer(ctx => {
@@ -2007,63 +2060,70 @@ function tryConverse(
   const myEcho = ctx.db.echo.id.find(runRow.echoId);
   if (!myEcho) return false;
 
-  // The host of a shared link is talked to first; everyone else in arrival order.
-  const here = [...ctx.db.player.currentPlace.filter(placeId)].sort((x, y) => {
-    const hx = ctx.db.echo.owner.find(x.identity)?.id === runRow.hostEchoId ? 0 : 1;
-    const hy = ctx.db.echo.owner.find(y.identity)?.id === runRow.hostEchoId ? 0 : 1;
-    return hx - hy;
-  });
-
-  for (const otherPlayer of here) {
-    if (otherPlayer.identity.isEqual(runRow.owner)) continue;
+  // Everyone standing here, with the conversation this pair already has, worked
+  // out once so the turn order below can sort on it.
+  const candidates = [...ctx.db.player.currentPlace.filter(placeId)].flatMap(otherPlayer => {
+    if (otherPlayer.identity.isEqual(runRow.owner)) return [];
 
     const otherEcho = ctx.db.echo.owner.find(otherPlayer.identity);
-    if (!otherEcho) continue;
+    if (!otherEcho) return [];
     const isHost = runRow.hostEchoId !== NO_HOST && otherEcho.id === runRow.hostEchoId;
 
     // A host is reachable even when their own run is over: their Echoe stands
     // at its last place and receives visitors. Anyone else needs a live run.
     const otherRunRow = ctx.db.run.owner.find(otherPlayer.identity);
     const otherRun = otherRunRow && otherRunRow.status === RUN_RUNNING ? otherRunRow : null;
-    if (!isHost) {
-      if (!otherRun) continue;
-    }
+    if (!isHost && !otherRun) return [];
     const otherEchoId = otherEcho.id;
-
     const a = runRow.echoId < otherEchoId ? runRow.echoId : otherEchoId;
     const b = runRow.echoId < otherEchoId ? otherEchoId : runRow.echoId;
 
     // Reuse a conversation only if it belongs to the current pair of runs. A
     // conversation older than either run is a memory of a previous night, and
     // continuing it would leave peopleMet at zero while a transcript grew.
-    let existing: {
-      id: bigint;
-      closedAt: Timestamp;
-      replies: number;
-      fundingA: string;
-      fundingB: string;
-      createdAt: Timestamp;
-      lastExchangeAt: Timestamp;
-    } | null = null;
-    for (const c of ctx.db.conversation.echoA.filter(a)) {
-      // An event pairing is driven by its own scheduler, never picked up here.
-      if (c.echoB !== b || c.eventId.length > 0) continue;
-      const started = micros(c.createdAt);
-      if (started < micros(runRow.startedAt)) continue;
-      if (otherRun && started < micros(otherRun.startedAt)) continue;
-      existing = c;
-    }
+    // An event pairing is driven by its own scheduler, never picked up here.
+    const existing = lastWhere(ctx.db.conversation.echoA.filter(a), c =>
+      c.echoB === b &&
+      c.eventId.length === 0 &&
+      micros(c.createdAt) >= micros(runRow.startedAt) &&
+      (!otherRun || micros(c.createdAt) >= micros(otherRun.startedAt)));
+
+    return [{ otherPlayer, otherEchoId, isHost, otherRun, existing }];
+  });
+
+  // The host of a shared link first, then whichever conversation has waited
+  // longest. Fairness is the whole fix for T1: an Echoe with two open
+  // conversations used to serve only the first one it happened to scan.
+  candidates.sort((x, y) => {
+    if (x.isHost !== y.isHost) return x.isHost ? -1 : 1;
+    const wx = x.existing ? micros(x.existing.lastExchangeAt) : 0n;
+    const wy = y.existing ? micros(y.existing.lastExchangeAt) : 0n;
+    return wx < wy ? -1 : wx > wy ? 1 : 0;
+  });
+
+  // True once some open conversation has this Echoe in it: it stays standing
+  // here even if it is nobody's turn to speak this tick.
+  let engaged = false;
+
+  for (const { otherPlayer, otherEchoId, isHost, otherRun, existing } of candidates) {
+    const a = runRow.echoId < otherEchoId ? runRow.echoId : otherEchoId;
+    const b = runRow.echoId < otherEchoId ? otherEchoId : runRow.echoId;
+
     // Said enough to each other tonight. Move on to the next person.
     if (existing && isClosed(micros(ctx.timestamp), existing)) continue;
 
     // One exchange per tick, and the sides take turns: A opens, B answers.
-    // Two jobs in one tick both read the same history and both write openers.
-    // Engaged but not my turn still counts as acting, so nobody walks off mid-chat.
+    // Not my turn is not a reason to stop scanning: returning here was what
+    // starved every other conversation waiting on this Echoe (audit T1).
     if (existing) {
       const myTurn = existing.replies % 2 === 0 ? runRow.echoId === a : runRow.echoId === b;
-      if (!myTurn || micros(existing.lastExchangeAt) === micros(ctx.timestamp)) return true;
-    } else if (runRow.echoId !== a) {
-      continue; // only the lower id opens, so a pair never opens twice in one tick
+      if (!myTurn || micros(existing.lastExchangeAt) === micros(ctx.timestamp)) {
+        engaged = true;
+        continue;
+      }
+    } else if (runRow.echoId !== a && otherRun) {
+      continue; // only the lower id opens, unless the other side has no live
+                // run to open with: a visitor may open on a finished host (T3).
     }
 
     // Who pays for my side. Settled the first time I speak in this conversation
@@ -2071,7 +2131,7 @@ function tryConverse(
     const mySide = runRow.echoId === a ? 'A' : 'B';
     const settled = existing ? (mySide === 'A' ? existing.fundingA : existing.fundingB) : '';
     const funding = settled || fundingFor(ctx, myEcho);
-    if (!funding) return false; // nothing to pay with; the tick brings the run home
+    if (!funding) return engaged; // nothing to pay with; the tick brings the run home
     const myFunding = mySide === 'A' ? { fundingA: funding } : { fundingB: funding };
 
     let conversationId: bigint;
@@ -2103,16 +2163,24 @@ function tryConverse(
       });
       conversationId = created.id;
 
-      const freshRun = ctx.db.run.id.find(runRow.id)!;
-      ctx.db.run.id.update({
-        ...freshRun,
-        peopleMet: freshRun.peopleMet + 1,
-        hostMet: freshRun.hostMet || isHost,
-      });
-      if (otherRun) {
+      // Meeting is what marks the host, and it marks whichever of the two runs
+      // named the other's Echoe as its host. Only the lower id opens, and the
+      // host usually is the lower id, so setting this on the opener alone left
+      // every visitor walking back to a host it had already met (audit T2).
+      const mine = ctx.db.run.id.find(runRow.id)!;
+      if (isHost && !mine.hostMet) ctx.db.run.id.update({ ...mine, hostMet: true });
+      if (otherRun && otherRun.hostEchoId === runRow.echoId) {
         const freshOther = ctx.db.run.id.find(otherRun.id)!;
-        ctx.db.run.id.update({ ...freshOther, peopleMet: freshOther.peopleMet + 1 });
+        if (!freshOther.hostMet) ctx.db.run.id.update({ ...freshOther, hostMet: true });
       }
+    }
+
+    // A side has met someone when it speaks, not when the row appears: crediting
+    // both at insert counted Echoes that never said a word (audit P4). `settled`
+    // is empty exactly until this side's first line in this conversation.
+    if (!settled) {
+      const freshRun = ctx.db.run.id.find(runRow.id)!;
+      ctx.db.run.id.update({ ...freshRun, peopleMet: freshRun.peopleMet + 1 });
     }
 
     if (!settled && funding === 'house') {
@@ -2153,7 +2221,7 @@ function tryConverse(
     }
     return true;
   }
-  return false;
+  return engaged;
 }
 
 // ─── Deterministic dialogue ──────────────────────────────────────────────────

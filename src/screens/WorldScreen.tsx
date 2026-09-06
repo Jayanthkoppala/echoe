@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { replayTour, tourAvailable } from '../tour/useTour';
 import { MapSlot, type EventPin, type PinKind } from '../components/MapSlot';
 import { ShareCard } from '../components/ShareCard';
 import { VerifiedBadge } from '../components/VerifiedBadge';
@@ -94,9 +95,22 @@ export function WorldScreen({
             <span className="brand-mark">E</span> Bengaluru
           </div>
           <span className="step-count">{onlineCount} online</span>
-          <button className="pin-pill glass events-btn" onClick={() => go('events')}>
+          <button
+            className="pin-pill glass events-btn"
+            onClick={() => go('events')}
+          >
             Events
           </button>
+          {tourAvailable() ? (
+            <button
+              className="icon-btn tour-help"
+              data-tour="topbar-help"
+              onClick={() => void replayTour()}
+              aria-label="Replay the tour for this screen"
+            >
+              ?
+            </button>
+          ) : null}
           <ProfileButton
             name={player?.name ?? '?'}
             avatar={player?.avatar ?? ''}
@@ -233,10 +247,17 @@ export function WorldScreen({
               )}
             </div>
           ) : (
-            <div className="sheet-cta sheet-cta--one">
+            <div className={run?.status === 'ended' ? 'sheet-cta' : 'sheet-cta sheet-cta--one'}>
               <button className="handoff-btn" onClick={onAdjustLimits}>
                 Start
               </button>
+              {/* A finished run has a recap, and this is the only way back to it
+                  after a refresh (audit C2). */}
+              {run?.status === 'ended' ? (
+                <button className="ghost-btn" onClick={() => go('return')}>
+                  See who it met
+                </button>
+              ) : null}
             </div>
           )}
         </div>

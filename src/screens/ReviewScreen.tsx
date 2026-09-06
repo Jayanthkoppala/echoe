@@ -80,7 +80,7 @@ export function ReviewScreen({
         }
       />
       <div className="content">
-        <div className="chat-person glass">
+        <div className="chat-person glass" data-tour="review-header">
           <div className="mini-avatar" aria-hidden="true">
             <img src={avatarUri(match?.avatar)} alt="" />
           </div>
@@ -97,7 +97,7 @@ export function ReviewScreen({
         </div>
 
         {open ? null : reveal?.mine && reveal.theirs ? (
-          <section className="reveal-panel reveal-panel--done glass">
+          <section className="reveal-panel reveal-panel--done glass" data-tour="review-reveal">
             <strong>You both revealed</strong>
             {reveal.text ? <p>{reveal.text}</p> : null}
             {reveal.linkedin || reveal.twitter ? (
@@ -112,7 +112,7 @@ export function ReviewScreen({
             ) : null}
           </section>
         ) : (
-          <section className="reveal-panel glass">
+          <section className="reveal-panel glass" data-tour="review-reveal">
             <button
               className="primary reveal-btn"
               disabled={Boolean(reveal?.mine)}
