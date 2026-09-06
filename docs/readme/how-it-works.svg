@@ -77,7 +77,7 @@
 <text x="88" y="536" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">SpacetimeDB module on Maincloud. State in tables, rules in reducers, every phone subscribed.</text>
 <text x="88.0" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">32</text>
 <text x="88.0" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">tables</text>
-<text x="88.0" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">21 public, 11 private</text>
+<text x="88.0" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">19 public, 13 private</text>
 <text x="372.8" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">28</text>
 <text x="372.8" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">reducers</text>
 <text x="372.8" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">every state change</text>
