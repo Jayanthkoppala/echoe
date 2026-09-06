@@ -8,7 +8,7 @@ people in it, no slides, under three minutes. Nothing is shown beyond what runs 
 and correction are hidden in the app tonight, so both correction beats are cut from the
 voiceover.
 
-Voiceover: **298 words**, about **2:08** of speech at 140 words per minute, inside 2:00 with room
+Voiceover: **276 words**, about **1:58** of speech at 140 words per minute, inside 2:00 with room
 to breathe.
 
 ## Hook, first nine seconds
@@ -29,19 +29,19 @@ Two alternates if the first feels flat on camera:
 |---|---|---|
 | 0:00-0:09 | Camera, in the room. Jay at his desk, laptop open, builders behind him heads down. He turns to the row behind. | I have seen this hackathon happening. Fifty percent of the people never even interacted with the person sitting behind them. |
 | 0:09-0:19 | Hold on Jay. Two people at the same table working in silence behind him. | See, the main reason of the hackathon is networking. So I am taking that heavy lifting and giving it to your Echoe. |
-| 0:19-0:27 | Phone screen recording. Join: a name typed, "Enter Bengaluru". Then Events, the Midnight Moonshot card with the joined count. [1, 14] | You join the event, and your Echoe goes and talks to every other Echoe in the room. |
-| 0:27-0:36 | Phone screen recording. Return: the ranked list of people. Then two phones, both tap "Reveal my details", both links appear. [11, 12] | It comes back with who wants to meet you, and their socials, end to end. Both sides say yes, or nothing is shared. |
-| 0:36-0:44 | Phone screen recording. Roaming: the map at night, the Echoe leaves its pin and walks a road between landmarks. [9] | It walks. Real Bengaluru roads, real landmarks. Your Echoe is a row in a database, moving. |
-| 0:44-0:51 | Phone screen recording. Two dots converge, the talk panel opens, the first exchange lands live. [10] | It runs into someone else's Echoe and the two talk. Four exchanges in your register. |
-| 0:51-0:59 | Phone screen recording. Return: the transcript with all four exchanges, the receipt timeline underneath. [10] | It comes home with the transcript and a receipt. Every line, in my name, I can read. |
-| 0:59-1:09 | Phone screen recording. Events: "Join with my Echoe", the building text already filled, one line and a link typed, Join. [14] | Tonight there is one event. I join with one line and a link. My Echoe opens with what I am building. |
+| 0:19-0:27 | Phone screen recording. Join: a name typed, "Enter Bengaluru". Then Events, the Midnight Moonshot card with the joined count. [1, 14] | You join the event. Your Echoe talks to every other Echoe in the room. |
+| 0:27-0:36 | Phone screen recording. Return: the ranked list of people. Then two phones, both tap "Reveal my details", both links appear. [11, 12] | It comes back with who wants to meet you, and their socials. Both say yes, or nothing is shared. |
+| 0:36-0:44 | Phone screen recording. Roaming: the map at night, the Echoe leaves its pin and walks a road between landmarks. [9] | It walks real Bengaluru roads, real landmarks. A row in a database, moving. |
+| 0:44-0:51 | Phone screen recording. Two dots converge, the talk panel opens, the first exchange lands live. [10] | It meets another Echoe and they talk. Four exchanges, in your register. |
+| 0:51-0:59 | Phone screen recording. Return: the transcript with all four exchanges, the receipt timeline underneath. [10] | Transcript and receipt come home. Every line said in my name, I can read. |
+| 0:59-1:09 | Phone screen recording. Events: "Join with my Echoe", the building text already filled, one line and a link typed, Join. [14] | Tonight there is one event. One line, a link, and my Echoe opens with what I am building. |
 | 1:09-1:17 | Camera, Jay to camera, the room behind him. | See, the hackathon is one vertical. At the end of the day this is an intent-based connections platform. |
-| 1:17-1:29 | Phone screen recording. Create: name, two persona lines. Start: the intent line typed. World: the "Your Echoe is carrying" bar fills in, tap Copy. [2, 5, 6, 7] | Type a name, two lines about who you are, one line about who you want to meet. That is the whole setup. That line goes on the map with a link anyone can tap. |
-| 1:29-1:38 | Phone screen recording. Start: the line typed in the field. Then Return: the ranked list. [5, 11] | Someone new to the city types, two people to have lunch with who also moved here this year. Ranked list in the morning. |
+| 1:17-1:29 | Phone screen recording. Create: name, two persona lines. Start: the intent line typed. World: the "Your Echoe is carrying" bar fills in, tap Copy. [2, 5, 6, 7] | Type a name, two lines on who you are, one on who you want to meet. That is the whole setup. The line goes on the map with a link anyone can tap. |
+| 1:29-1:38 | Phone screen recording. Start: the line typed in the field. Then Return: the ranked list. [5, 11] | Someone new to the city types, two people to have lunch with who also moved here this year. A ranked list by morning. |
 | 1:38-1:47 | Second device. Join shows the host's intent card, one line typed, the map shows "walking to" the host. [8] | Someone posts, looking for someone who has run infra for a 50 person team. A stranger taps it, their Echoe walks straight there. |
 | 1:47-1:53 | Two phones. Both tap "Reveal my details", both links appear. [12] | Someone types, a cofounder who can sell, I will not do the selling. Both sides tap reveal and the socials appear. |
-| 1:53-1:57 | Laptop screen. One line pasted into Claude Code, the Connect screen beside it ticking stages. [4, 18] | Paste one line into Claude Code and it writes your Echoe while you keep coding. |
-| 1:57-2:00 | Camera. A hand passes a phone showing Copy link, or Jay to camera. Cut to black. | Anyone can create one. Anyone can share it. Go send yours out tonight. |
+| 1:53-1:57 | Laptop screen. One line pasted into Claude Code, the Connect screen beside it ticking stages. [4, 18] | Paste one line into Claude Code and it writes your Echoe while you code. |
+| 1:57-2:00 | Camera. A hand passes a phone showing Copy link, or Jay to camera. Cut to black. | Anyone can create one. Anyone can share it. Send yours out tonight. |
 
 ## Shot list, in the order to record
 
