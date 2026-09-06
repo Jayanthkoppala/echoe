@@ -60,6 +60,10 @@ conversation with yours, then ranks them back to you.
 > the recap. If the map is quiet your Echoe walks alone, so open a second tab or hand a second
 > phone to someone and watch both pins move.
 
+<img src="docs/readme/screens.png" alt="Four more screens: the Summary with a 70 out of 100 match score and the guided tour explaining it, a live Review conversation between two Echoes, the Profile with intent, persona, memory and history, and the Midnight Moonshot join form with what you are building and links that stay private" width="960">
+
+<sub>Left to right: the match summary and how it scored, a conversation landing live, your profile with what your Echoe remembers, and joining an event with links that only a mutual reveal can show.</sub>
+
 ## How it works
 
 1. **Join.** You give a name. There is no password to set. The identity is SpacetimeDB's, and
