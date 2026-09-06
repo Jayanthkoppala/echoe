@@ -35,8 +35,8 @@ wrap the hero image below in <a href="https://youtu.be/VIDEO_ID"> and add the li
 ## The problem
 
 You move to Bengaluru and you know three people. Two of them are your flatmates. Events are
-not the shortage; the shortage is the one person in a room of two hundred who wanted the same
-thing you did, and you both left without knowing. At this hackathon, half the room never spoke
+easy to find. The hard part is the one person in a room of two hundred who wanted the same
+thing you did, and you both left without knowing it. At this hackathon, half the room never spoke
 to the row behind them. A cold DM does not fix that, and a directory you scroll is one more room.
 
 ## What Echoe does
@@ -61,15 +61,16 @@ conversation with yours, then ranks them back to you.
 
 ## How it works
 
-1. **Join.** A name, no password. The identity is SpacetimeDB's; the client never sends one.
+1. **Join.** You give a name. There is no password to set. The identity is SpacetimeDB's, and
+   the client never sends one.
 2. **Persona and intent.** Two lines on who you are, one on who you want to meet. Or let your
    coding agent write them (next section). The share link is minted in the same reducer that
    creates the Echoe.
 3. **Walk.** A scheduled reducer ticks every 5 seconds. It moves each Echoe between eleven
    landmarks along road polylines, writes one row per leg, and every phone interpolates the pin
-   between departure and arrival. No position updates per frame.
+   between departure and arrival. The module never writes a position per frame.
 4. **Talk.** Two Echoes at the same place whose lines match open a conversation. A reducer
-   authorises, counts and charges every exchange before any text exists. The model is only
+   authorises and charges every exchange before any text exists. The model is only
    ever called from a procedure, and if it is unreachable a deterministic fallback line is
    written inside the same transaction that paid for it.
 5. **Return.** Ranked matches with a score out of 100 and the reason, the transcript, and the
@@ -109,7 +110,7 @@ function, [`api/mcp/[token].js`](api/mcp/%5Btoken%5D.js).
 ## Real-time, in the module
 
 Open the app in two tabs. Start a run in one and the pin moves in the other before you can
-switch back; the online count, the receipts and the talk panel update the same way. There is
+switch back. The online count, the receipts and the talk panel update the same way. There is
 no server of ours in the middle: the SpacetimeDB module on Maincloud holds every row, every
 phone subscribes, and the client calls reducers through one `actions` object in
 [`src/App.tsx`](src/App.tsx).
@@ -121,7 +122,7 @@ phone subscribes, and the client calls reducers through one `actions` object in
 | Procedures | 7, the only place the module reaches the network: OpenRouter, Vertex Gemini, Resend, Google OAuth |
 | Scheduled | `tick` every 5 seconds on `world_tick`, plus one-shot `talk_job` and `summary_job` rows that fire a procedure and delete themselves |
 | Append-only | `receipt` and `transcript_line` |
-| Checks | six end-to-end scripts in [`spacetimedb/`](spacetimedb/) drive fresh identities through the real SDK against a local module, no mocks |
+| Checks | six end to end scripts in [`spacetimedb/`](spacetimedb/) drive fresh identities through the real SDK against a local module, no mocks |
 
 Read the live tables yourself, with the `spacetime` CLI and no identity of ours:
 
@@ -172,7 +173,7 @@ again. Deploying to Maincloud is `spacetime publish echoe -y` with the two value
 spacetimedb/src/index.ts   the module: 32 tables, 28 reducers, 7 procedures, the 5-second tick
 spacetimedb/src/llm.ts     OpenRouter and Vertex Gemini chat, Google OAuth refresh, Resend email
 spacetimedb/src/rubric.ts  how a finished conversation is scored
-spacetimedb/*.check.ts     end-to-end checks through the real SDK against a local module
+spacetimedb/*.check.ts     end to end checks through the real SDK against a local module
 src/App.tsx                screen router and the actions object, the one place reducers are called
 src/screens/               Join, Create, Connect, Events, JoinEvent, World, Limits, Roaming,
                            Return, Review, Correct, Talks, Profile, Summary, Done
@@ -201,7 +202,7 @@ docs/                      DATA-MODEL, HANDBOOK, design/, video/
 | Demo video | Recording today; the script and shot list are in [`docs/video/`](docs/video/VIDEO-SCRIPT.md) |
 
 The honest gap: with nobody else on the map, your Echoe walks alone. Two tabs fix that for a
-judge; a full room fixes it for everyone else.
+judge. Only a full room fixes it for everyone else.
 
 Details: [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) · [`docs/HANDBOOK.md`](docs/HANDBOOK.md) ·
 [`docs/AUDIT-2026-09-06.md`](docs/AUDIT-2026-09-06.md) (fourteen auditors, what they found, what was fixed) ·
@@ -209,7 +210,7 @@ Details: [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) · [`docs/HANDBOOK.md`](docs
 
 ## Author
 
-**Jayanth Koppala** — [site](https://jayanthkoppala.vercel.app) · [X](https://x.com/JayBosshq) ·
+**Jayanth Koppala** · [site](https://jayanthkoppala.vercel.app) · [X](https://x.com/JayBosshq) ·
 [LinkedIn](https://www.linkedin.com/in/jayanth-koppala-71a8091b9/) · jay@bosshq.in
 
-Apache-2.0 — see [`LICENSE`](LICENSE).
+Apache-2.0, see [`LICENSE`](LICENSE).
