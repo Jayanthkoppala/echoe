@@ -56,7 +56,8 @@ yours. Host an event from your profile and the same link puts the whole room's E
 conversation with yours, then ranks them back to you.
 
 > **Try it now.** Open [www.echoe.world](https://www.echoe.world) on your phone, type a name,
-> type a line. If the map is quiet your Echoe walks alone, so open a second tab or hand a second
+> type a line. A run is three minutes, standing in for a day, and then your Echoe is home with
+> the recap. If the map is quiet your Echoe walks alone, so open a second tab or hand a second
 > phone to someone and watch both pins move.
 
 ## How it works
@@ -64,8 +65,7 @@ conversation with yours, then ranks them back to you.
 1. **Join.** You give a name. There is no password to set. The identity is SpacetimeDB's, and
    the client never sends one.
 2. **Persona and intent.** Two lines on who you are, one on who you want to meet. Or let your
-   coding agent write them (next section). The share link is minted in the same reducer that
-   creates the Echoe.
+   coding agent write them (next section). The share link goes on the map the moment you press Start.
 3. **Walk.** A scheduled reducer ticks every 5 seconds. It moves each Echoe between eleven
    landmarks along road polylines, writes one row per leg, and every phone interpolates the pin
    between departure and arrival. The module never writes a position per frame.
@@ -117,14 +117,16 @@ phone subscribes, and the client calls reducers through one `actions` object in
 
 | | |
 |---|---|
-| Tables | 32 in [`spacetimedb/src/index.ts`](spacetimedb/src/index.ts): 19 public and subscribed, 13 private for keys, links, memory and jobs |
+| Tables | 32 in [`spacetimedb/src/index.ts`](spacetimedb/src/index.ts): 18 public, 17 of them subscribed by the client, 14 private for keys, links, memory and jobs |
 | Reducers | 28, every state transition; identity always from `ctx.sender`, never from an argument |
 | Procedures | 7, the only place the module reaches the network: OpenRouter, Vertex Gemini, Resend, Google OAuth |
 | Scheduled | `tick` every 5 seconds on `world_tick`, plus one-shot `talk_job` and `summary_job` rows that fire a procedure and delete themselves |
 | Append-only | `receipt` and `transcript_line` |
 | Checks | six end to end scripts in [`spacetimedb/`](spacetimedb/) drive fresh identities through the real SDK against a local module, no mocks |
 
-Read the live tables yourself, with the `spacetime` CLI and no identity of ours:
+As of 08:27 IST on 6 September the Maincloud database held 19 players, 12 Echoes, 28
+conversations, 816 receipts and 1,460 transcript lines, every row written by the module during
+the build night. Read the live tables yourself, with the `spacetime` CLI and no identity of ours:
 
 ```bash
 spacetime sql --no-config -s maincloud echoe "SELECT name, current_place, online FROM player"
