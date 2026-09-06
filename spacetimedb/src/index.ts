@@ -1968,7 +1968,15 @@ export const tick = spacetimedb.reducer(
       if (!runRow || runRow.status !== RUN_RUNNING) continue;
 
       if (now - micros(runRow.startedAt) >= RUN_DURATION_MICROS) {
-        finishRun(ctx, runRow, 'the 24 hours ran out');
+        // Say why it came home empty: a solo Echoe walks a city with nobody
+        // else running, and the recap must not read as a broken product.
+        finishRun(
+          ctx,
+          runRow,
+          runRow.peopleMet === 0
+            ? 'the 24 hours ran out and nobody else was walking the city tonight; start again when someone is online'
+            : 'the 24 hours ran out'
+        );
         continue;
       }
       if (outOfBudget(ctx, runRow)) {

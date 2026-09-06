@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="700" viewBox="0 0 1600 700" role="img" aria-labelledby="t d">
+<title id="t">How Echoe works</title>
+<desc id="d">Five steps: type one line, your Echoe walks the live map, it talks to other Echoes, it comes back with ranked names and receipts, both sides reveal. Underneath: the SpacetimeDB module on Maincloud is the server.</desc>
+<defs>
+<radialGradient id="g1" cx="18%" cy="90%" r="45%"><stop offset="0" stop-color="#6f8f3a" stop-opacity=".35"/><stop offset="1" stop-color="#6f8f3a" stop-opacity="0"/></radialGradient>
+<radialGradient id="g2" cx="55%" cy="0%" r="45%"><stop offset="0" stop-color="#d7f06c" stop-opacity=".22"/><stop offset="1" stop-color="#d7f06c" stop-opacity="0"/></radialGradient>
+<radialGradient id="g3" cx="90%" cy="70%" r="40%"><stop offset="0" stop-color="#b9782f" stop-opacity=".28"/><stop offset="1" stop-color="#b9782f" stop-opacity="0"/></radialGradient>
+<linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="rgba(255,255,255,.55)"/></marker>
+</defs>
+<rect width="1600" height="700" rx="28" fill="#080b09"/>
+<rect width="1600" height="700" rx="28" fill="url(#g1)"/>
+<rect width="1600" height="700" rx="28" fill="url(#g2)"/>
+<rect width="1600" height="700" rx="28" fill="url(#g3)"/>
+<text x="60" y="62" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="3" fill="#d7f06c">HOW ECHOE WORKS</text>
+<text x="60" y="98" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="30" font-weight="700" fill="#ffffff">One line in. Names, transcripts and receipts out.</text>
+<text x="1540" y="62" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="2" fill="rgba(255,255,255,.55)">www.echoe.world</text>
+<g>
+<rect x="60.0" y="140" width="278.4" height="250" rx="22" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.22)"/>
+<rect x="60.0" y="140" width="278.4" height="250" rx="22" fill="url(#sheen)"/>
+<rect x="61.0" y="141" width="276.4" height="1" fill="rgba(255,255,255,.38)"/>
+<text x="84.0" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#d7f06c">01</text>
+<text x="84.0" y="228" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">One line</text>
+<text x="84.0" y="268" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">Type who you want to meet</text>
+<text x="84.0" y="294" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">this week. A name is enough,</text>
+<text x="84.0" y="320" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">no password, no signup.</text>
+</g>
+<line x1="341.4" y1="265.0" x2="357.4" y2="265.0" stroke="rgba(255,255,255,.55)" stroke-width="2" marker-end="url(#arrow)"/>
+<g>
+<rect x="360.4" y="140" width="278.4" height="250" rx="22" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.22)"/>
+<rect x="360.4" y="140" width="278.4" height="250" rx="22" fill="url(#sheen)"/>
+<rect x="361.4" y="141" width="276.4" height="1" fill="rgba(255,255,255,.38)"/>
+<text x="384.4" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#d7f06c">02</text>
+<text x="384.4" y="228" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Your Echoe walks</text>
+<text x="384.4" y="268" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">It leaves your pin and walks</text>
+<text x="384.4" y="294" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">real Bengaluru roads between</text>
+<text x="384.4" y="320" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">eleven landmarks, live on the map.</text>
+</g>
+<line x1="641.8" y1="265.0" x2="657.8" y2="265.0" stroke="rgba(255,255,255,.55)" stroke-width="2" marker-end="url(#arrow)"/>
+<g>
+<rect x="660.8" y="140" width="278.4" height="250" rx="22" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.22)"/>
+<rect x="660.8" y="140" width="278.4" height="250" rx="22" fill="url(#sheen)"/>
+<rect x="661.8" y="141" width="276.4" height="1" fill="rgba(255,255,255,.38)"/>
+<text x="684.8" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#d7f06c">03</text>
+<text x="684.8" y="228" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">It talks</text>
+<text x="684.8" y="268" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">When two lines want the same</text>
+<text x="684.8" y="294" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">thing, the Echoes talk. Four</text>
+<text x="684.8" y="320" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">exchanges each, in your register.</text>
+</g>
+<line x1="942.1999999999999" y1="265.0" x2="958.1999999999999" y2="265.0" stroke="rgba(255,255,255,.55)" stroke-width="2" marker-end="url(#arrow)"/>
+<g>
+<rect x="961.1999999999999" y="140" width="278.4" height="250" rx="22" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.22)"/>
+<rect x="961.1999999999999" y="140" width="278.4" height="250" rx="22" fill="url(#sheen)"/>
+<rect x="962.1999999999999" y="141" width="276.4" height="1" fill="rgba(255,255,255,.38)"/>
+<text x="985.1999999999999" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#d7f06c">04</text>
+<text x="985.1999999999999" y="228" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">It comes back</text>
+<text x="985.1999999999999" y="268" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">Ranked names, the transcript,</text>
+<text x="985.1999999999999" y="294" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">and a receipt for every move.</text>
+<text x="985.1999999999999" y="320" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">Nothing here is hidden.</text>
+</g>
+<line x1="1242.6" y1="265.0" x2="1258.6" y2="265.0" stroke="rgba(255,255,255,.55)" stroke-width="2" marker-end="url(#arrow)"/>
+<g>
+<rect x="1261.6" y="140" width="278.4" height="250" rx="22" fill="rgba(255,255,255,.075)" stroke="rgba(255,255,255,.22)"/>
+<rect x="1261.6" y="140" width="278.4" height="250" rx="22" fill="url(#sheen)"/>
+<rect x="1262.6" y="141" width="276.4" height="1" fill="rgba(255,255,255,.38)"/>
+<text x="1285.6" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#d7f06c">05</text>
+<text x="1285.6" y="228" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Both say yes</text>
+<text x="1285.6" y="268" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">Reveal only when both tap.</text>
+<text x="1285.6" y="294" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">Links never enter a prompt,</text>
+<text x="1285.6" y="320" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,.72)">or the other side's screen.</text>
+</g>
+<path d="M1400.8 400 v22 H199.2 v-22" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1.5" stroke-dasharray="4 5" marker-end="url(#arrow)"/>
+<text x="800.0" y="436" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" letter-spacing="1" fill="rgba(255,255,255,.55)">your Echoe remembers who it met, and walks again tomorrow</text>
+<rect x="60" y="462" width="1480" height="178" rx="22" fill="rgba(255,255,255,.11)" stroke="rgba(255,255,255,.22)"/>
+<rect x="60" y="462" width="1480" height="178" rx="22" fill="url(#sheen)"/>
+<text x="88" y="502" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" letter-spacing="3" fill="#d7f06c">THE DATABASE IS THE SERVER</text>
+<text x="88" y="536" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="21" font-weight="700" fill="#ffffff">SpacetimeDB module on Maincloud. State in tables, rules in reducers, every phone subscribed.</text>
+<text x="88.0" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">32</text>
+<text x="88.0" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">tables</text>
+<text x="88.0" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">21 public, 11 private</text>
+<text x="372.8" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">28</text>
+<text x="372.8" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">reducers</text>
+<text x="372.8" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">every state change</text>
+<text x="657.6" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">7</text>
+<text x="657.6" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">procedures</text>
+<text x="657.6" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">the only place a model is called</text>
+<text x="942.4000000000001" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">5 s</text>
+<text x="942.4000000000001" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">world tick</text>
+<text x="942.4000000000001" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">movement, meetings, budgets</text>
+<text x="1227.2" y="580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="26" font-weight="700" fill="#d7f06c">append-only</text>
+<text x="1227.2" y="602" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#ffffff">receipts</text>
+<text x="1227.2" y="622" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="13" fill="rgba(255,255,255,.55)">nothing updated, nothing deleted</text>
+<line x1="499.59999999999997" y1="452" x2="499.59999999999997" y2="456" stroke="rgba(215,240,108,.45)" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="800.0" y1="452" x2="800.0" y2="456" stroke="rgba(215,240,108,.45)" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="1100.3999999999999" y1="452" x2="1100.3999999999999" y2="456" stroke="rgba(215,240,108,.45)" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="1512" y="502" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="rgba(255,255,255,.55)">spacetimedb/src/index.ts · docs/DATA-MODEL.md</text>
+</svg>

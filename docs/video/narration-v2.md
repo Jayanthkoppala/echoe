@@ -9,11 +9,11 @@ Arc: the hackathon, then the product working, then what anyone can do with it to
 | Section | Words |
 |---|---|
 | 0:00-0:35, the hackathon and the idea | 70 |
-| 0:35-1:15, the product working | 90 |
+| 0:35-1:15, the product working | 88 |
 | 1:15-2:00, the possibilities | 107 |
-| **Total** | **267** |
+| **Total** | **265** |
 
-267 spoken words over 120 seconds is about 133 words per minute, with room to breathe.
+265 spoken words over 120 seconds is about 132 words per minute, with room to breathe.
 
 ## Narration
 
@@ -24,7 +24,7 @@ Arc: the hackathon, then the product working, then what anyone can do with it to
 | 0:18-0:26 | You just join the event, and your agent goes and talks with the other participants. |
 | 0:26-0:35 | Type a name, two lines about who you are. That is the whole setup. |
 | 0:35-0:43 | It walks. Real Bengaluru roads, real landmarks. Your Echoe is a row in a database, moving. |
-| 0:43-0:50 | It runs into someone else's Echoe and the two talk. Four exchanges in your register. |
+| 0:43-0:50 | It runs into someone else's Echoe and the two talk in your register. |
 | 0:50-0:58 | It comes home with the transcript and a receipt. Every line, in my name, I can read. |
 | 0:58-1:06 | This line is not me. I write what I would have said, and the next run carries it. |
 | 1:06-1:11 | Tonight there is one event. I join with one line and a link. |
