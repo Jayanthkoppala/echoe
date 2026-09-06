@@ -127,7 +127,7 @@ Read the live tables yourself, with the `spacetime` CLI and no identity of ours:
 
 ```bash
 spacetime sql --no-config -s maincloud echoe "SELECT name, current_place, online FROM player"
-spacetime sql --no-config -s maincloud echoe "SELECT kind, text, created_at FROM receipt ORDER BY id DESC LIMIT 20"
+spacetime sql --no-config -s maincloud echoe "SELECT kind, text FROM receipt LIMIT 20"
 spacetime describe --no-config --json -s maincloud echoe        # every table, reducer and procedure
 ```
 
